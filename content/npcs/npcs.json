@@ -1,0 +1,33 @@
+{
+"_comment": "role: merchant | villager | quest. anchor names refer to anchors emitted by the village structure template.",
+"npcs": [
+{"id":"elder_mara","role":"quest","home":"house_0","work":"plaza","sprite":["humanoid","#e8c8a0","#d8d8e0","#6a4a8a","#4a3a5a"],
+ "schedule":[{"from":6,"to":20,"at":"work"},{"from":20,"to":6,"at":"home"}],
+ "lines":{"greet":{"en":"Welcome, traveler. Moonfall has been waiting for someone like you.","zh":"欢迎，旅行者。月落村一直在等待像你这样的人。"},
+          "chat":[{"en":"The ruins to the far side of the road glow at night. Nobody goes there anymore.","zh":"大路尽头的遗迹在夜里会发光，如今已经没人敢去了。"},{"en":"What you build here will stay. This land remembers.","zh":"你在这里建造的一切都会留下，这片土地会记住。"}],
+          "after_boss":{"en":"The lanterns are lit again! You have given us back the night.","zh":"月灯重新亮起来了！你把夜晚还给了我们。"}},
+ "name":{"en":"Elder Mara","zh":"长老玛拉"}},
+{"id":"merchant_tobin","role":"merchant","home":"house_1","work":"stall","sprite":["humanoid","#d8a878","#5a3a22","#3a7a5a","#4a3a2a"],
+ "schedule":[{"from":7,"to":19,"at":"work"},{"from":19,"to":7,"at":"home"}],
+ "trade":{"sells":[["bread",10,8],["arrow",2,60],["wheat_seeds",2,30],["rope",5,12]],"buy_mult":0.5},
+ "lines":{"greet":{"en":"Finest goods this side of the river!","zh":"河这边最好的货都在我这儿！"},"chat":[{"en":"I trade in coin. Bandits carry plenty, if you can take it from them.","zh":"我只收钱币。强盗身上有不少，前提是你抢得过来。"}],"after_boss":{"en":"Business is booming now that the roads are safe at night.","zh":"夜路安全之后，生意好多了。"}},
+ "name":{"en":"Tobin the Merchant","zh":"商人托宾"}},
+{"id":"smith_ida","role":"merchant","home":"house_2","work":"house_2","sprite":["humanoid","#c89878","#2a2a2a","#8a4a2a","#3a3a3a"],
+ "schedule":[{"from":8,"to":18,"at":"work"},{"from":18,"to":8,"at":"home"}],
+ "trade":{"sells":[["copper_ingot",16,10],["iron_ingot",28,6],["tool_stone",10,2],["sword_copper",70,1],["armor_leather",45,1]],"buy_mult":0.6},
+ "lines":{"greet":{"en":"Need steel? Or at least copper?","zh":"需要钢铁吗？至少来点铜？"},"chat":[{"en":"Iron veins hide in the mountains. You will want a copper tool first.","zh":"铁矿脉藏在山里，你得先有一把铜制工具。"}],"after_boss":{"en":"Bring me a Moon Core and iron sword and I'll tell you what to do at the anvil.","zh":"带上月核和铁剑，我告诉你在铁砧上该怎么做。"}},
+ "name":{"en":"Ida the Smith","zh":"铁匠伊达"}},
+{"id":"farmer_lu","role":"villager","home":"house_3","work":"farm","sprite":["humanoid","#e0b890","#8a5a30","#b8983a","#5a4a3a"],
+ "schedule":[{"from":6,"to":18,"at":"work"},{"from":18,"to":6,"at":"home"}],
+ "lines":{"greet":{"en":"Good soil here. Everything grows if you give it time.","zh":"这儿土好，只要给时间，什么都能长。"},"chat":[{"en":"Till the ground with a hoe, plant seeds, and wait. Crops keep growing while you are away.","zh":"用锄头翻地，播下种子，然后等待。你不在的时候作物也会生长。"}],"after_boss":{"en":"The wheat looks silver under the lanterns.","zh":"月灯下的麦子泛着银光。"}},
+ "name":{"en":"Farmer Lu","zh":"农夫老陆"}},
+{"id":"hunter_sol","role":"villager","home":"house_4","work":"gate","sprite":["humanoid","#c8a080","#4a3020","#4a6a3a","#3a3a2a"],
+ "schedule":[{"from":5,"to":21,"at":"work"},{"from":21,"to":5,"at":"home"}],
+ "lines":{"greet":{"en":"Quiet. You'll scare the deer.","zh":"小声点，你会吓跑鹿的。"},"chat":[{"en":"Wolves hunt in the snow up north. Scorpions own the canyon to the south.","zh":"北边雪地里有狼群，南边峡谷是蝎子的地盘。"}],"after_boss":{"en":"Even the wolves are calmer now.","zh":"现在连狼都安静多了。"}},
+ "name":{"en":"Sol the Hunter","zh":"猎人索尔"}},
+{"id":"child_nia","role":"villager","home":"house_5","work":"plaza","sprite":["humanoid","#f0c8a8","#c86a3a","#e86a8a","#6a8ac8"],
+ "schedule":[{"from":8,"to":17,"at":"work"},{"from":17,"to":8,"at":"home"}],
+ "lines":{"greet":{"en":"Did you see the falling star?!","zh":"你看到流星了吗？！"},"chat":[{"en":"Sometimes stars fall at night. If you find one, can I see it?","zh":"夜里有时会有星星掉下来。你要是找到了，能给我看看吗？"}],"after_boss":{"en":"The lanterns are so pretty!","zh":"月灯好漂亮！"}},
+ "name":{"en":"Nia","zh":"妮娅"}}
+]
+}
