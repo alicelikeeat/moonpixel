@@ -1,1 +1,74 @@
-# moonpixel
+# MoonPixel
+
+2D 像素开放世界 · 自主 NPC 社会 · 无限地图 · 离线优先 · MIT 开源
+*A 2D pixel open world where 100+ villagers live their own lives on a map that never ends.*
+
+> 世界由游戏生成，但世界的未来由居民和你决定。
+
+## 现在能做什么（已实现并有测试）
+
+| 模块 | 状态 |
+| --- | --- |
+| **自主 NPC 社会**：开局 120 名村民分布在 4 个村落，各自根据饥饿、精力、社交需求和职业做决定 | ✅ 可运行、有自动化测试 |
+| 采集 / 伐木 / 采石 / 种田 / 运回仓库，逐格建造房屋、农田、水井、路灯、道路 | ✅ |
+| 交友、争吵、结为伴侣、怀孕生育（特质与外貌遗传）、衰老、因年老 / 疾病 / 饥饿死亡并留下墓碑 | ✅ |
+| 村子拥挤后自发派出开拓队建立新村落；人口低于 100 时有流浪者加入 | ✅ |
+| 玩家互动：点击任意村民查看身份、心情、家庭、想法，交谈、赠送食物、跟随 | ✅ |
+| **无限地图**：任意坐标（含负坐标）按需确定性生成，不存在世界边界 | ✅ |
+| **内存容量查询**：启动时读取设备内存，自动推导区块缓存和 NPC 上限，也可手动指定预算 | ✅ |
+| 超出预算按最近最少使用回收区块；被修改的区块先落盘，不丢数据 | ✅ |
+| 地图自动生长：从每个村落和玩家向外勘测，地图界面实时显示 | ✅ |
+| 程序化像素美术（无任何二进制素材）、昼夜、中英双语界面 | ✅ |
+
+全部逻辑在本地运行，使用带种子的规则与效用决策，不依赖联网或云端大模型。
+
+## 运行
+
+需要 [Godot 4.3](https://godotengine.org/download)（标准版即可，无需 .NET）。
+
+```bash
+godot --path . --import      # 首次导入
+godot --path .               # 启动
+```
+
+启动界面会显示检测到的设备内存与自动预算，可在下拉框中改为手动值。
+
+| 操作 | 按键 |
+| --- | --- |
+| 移动 / 快跑 | WASD 或方向键 / Shift |
+| 选中村民并交谈 | 鼠标左键 |
+| 时间流速 暂停 / 1× / 4× / 16× / 64× | 空格、1–4 或界面按钮 |
+| 地图 / 下一个村落 / 保存 | M / N / F5 |
+| 缩放 | 鼠标滚轮 |
+
+一个游戏年 = 一个昼夜循环（1× 速度下 20 分钟）。想快速看到出生和死亡，把速度调到 16× 或 64×。
+
+## 测试与工具
+
+```bash
+export GODOT=/path/to/godot
+tools/gd.sh 600 tests/run_tests.gd                       # 全部测试
+tools/gd.sh 600 tests/run_tests.gd -- --filter=society   # 单个套件
+tools/gd.sh 600 tools/society_sim.gd -- --years=20       # 无界面快进并输出逐年人口普查
+```
+
+详见 [docs/testing/testing.md](docs/testing/testing.md)。
+
+## 文档
+
+- [架构总览](docs/architecture/overview.md)
+- [NPC 社会模拟](docs/gameplay/society.md)
+- [无限地图与内存预算](docs/architecture/open-world.md)
+- [存档格式](docs/formats/save.md)
+- [已知限制与路线图](docs/known-limitations.md)
+- [贡献指南](CONTRIBUTING.md) · [变更记录](CHANGELOG.md) · [第三方与素材授权](THIRD_PARTY.md)
+
+## 诚实的范围说明
+
+V1.0 总任务书中的其余模块（战斗、Boss、玩家建造工具、物品制作、任务、固定尺寸世界生成器等）
+的代码已在仓库中，其中固定尺寸世界生成有测试，其余**能编译但尚未接入可玩场景、也没有测试**，
+目前不应视为已交付。Windows / iOS 导出尚未验证。详见 [已知限制](docs/known-limitations.md)。
+
+## License
+
+代码采用 [MIT](LICENSE)。本仓库不包含第三方美术或音频素材。

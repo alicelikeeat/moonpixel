@@ -1,0 +1,23 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot 4.3
+        run: |
+          curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip -q godot.zip
+          echo "GODOT=$PWD/Godot_v4.3-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Import project
+        run: timeout 300 "$GODOT" --headless --path . --import
+      - name: Fail on script errors
+        run: |
+          timeout 300 "$GODOT" --headless --path . --import 2>&1 | tee import.log
+          ! grep -E "Parse Error|Compile Error" import.log
+      - name: Run tests
+        run: tools/gd.sh 900 tests/run_tests.gd

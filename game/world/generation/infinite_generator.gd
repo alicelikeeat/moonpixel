@@ -39,8 +39,8 @@ func _init(p_seed: int, p_content: ContentRegistry) -> void:
 	seed = p_seed
 	content = p_content
 	n_elev = _mk(seed + 1, 0.0035, 4)
-	n_temp = _mk(seed + 2, 0.0012, 2)
-	n_moist = _mk(seed + 3, 0.004, 3)
+	n_temp = _mk(seed + 2, 0.0005, 2)
+	n_moist = _mk(seed + 3, 0.002, 3)
 	n_river = _mk(seed + 4, 0.005, 2)
 	n_forest = _mk(seed + 5, 0.035, 2)
 	n_detail = _mk(seed + 6, 0.09, 1)
