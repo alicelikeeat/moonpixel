@@ -1,0 +1,56 @@
+name: iOS unsigned IPA
+# Builds an UNSIGNED .ipa on a macOS runner. It cannot be installed directly:
+# sign it yourself (Xcode, AltStore, Sideloadly, ...) before putting it on a device.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/moonpixel-v1-full-spec-fze5jp", "main"]
+    paths: ["game/**", "content/**", "project.godot", "export_presets.cfg", ".github/workflows/ios.yml"]
+jobs:
+  ipa:
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      GODOT_VERSION: 4.3-stable
+      TEMPLATE_DIR: 4.3.stable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot and export templates
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_macos.universal.zip"
+          unzip -q godot.zip
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          mkdir -p "$HOME/Library/Application Support/Godot/export_templates/${TEMPLATE_DIR}"
+          unzip -q templates.tpz
+          mv templates/* "$HOME/Library/Application Support/Godot/export_templates/${TEMPLATE_DIR}/"
+          echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+      - name: Import project
+        run: |
+          "$GODOT" --headless --path . --import || true
+          "$GODOT" --headless --path . --import 2>&1 | tee import.log
+          ! grep -E "Parse Error|Compile Error" import.log
+      - name: Export Xcode project
+        run: |
+          mkdir -p build/ios
+          "$GODOT" --headless --path . --export-release "iOS" build/ios/MoonPixel.ipa 2>&1 | tee export.log
+          ls -la build/ios
+          test -d build/ios/MoonPixel.xcodeproj
+      - name: Build without code signing
+        run: |
+          xcodebuild -project build/ios/MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_ENTITLEMENTS="" \
+            build | tail -40
+      - name: Package unsigned IPA
+        run: |
+          APP=$(find build/dd/Build/Products -maxdepth 2 -name "*.app" | head -1)
+          test -n "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry MoonPixel-unsigned.ipa Payload
+          ls -la MoonPixel-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoonPixel-unsigned-ipa
+          path: MoonPixel-unsigned.ipa
+          if-no-files-found: error

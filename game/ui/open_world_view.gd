@@ -45,6 +45,10 @@ var placing := ""                       # asset id being placed with the mouse
 var file_dialog: FileDialog
 var _dialog_mode := ""
 var demo_attack := false
+var joy_id := -1                        # touch index driving the virtual stick
+var joy_origin := Vector2.ZERO
+var joy_vec := Vector2.ZERO
+var joy_ctl: Control
 
 const PLAYER_HELD := ["", "sword", "bow", "staff"]
 const JOB_TOOL := {"woodcutter": "axe", "miner": "pick", "farmer": "hoe", "builder": "hammer", "forager": "basket"}
@@ -206,6 +210,12 @@ func _build_nodes() -> void:
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(def[1])
 		hb.add_child(b)
+	for z in [["＋", 1.0], ["－", -1.0]]:
+		var zb := Button.new()
+		zb.text = z[0]
+		zb.focus_mode = Control.FOCUS_NONE
+		zb.pressed.connect(func(): cam.zoom = Vector2.ONE * clampf(cam.zoom.x + z[1], 1.0, 6.0))
+		hb.add_child(zb)
 	var hb2 := HBoxContainer.new()
 	vb.add_child(hb2)
 	for def in [["照片生成角色 Photo → me", func(): _open_dialog("photo_me")], ["导入素材 Import picture", func(): _open_dialog("asset")], ["武器 Weapon (Q)", _cycle_held]]:
@@ -250,6 +260,11 @@ func _build_nodes() -> void:
 		b.pressed.connect(def[1])
 		ph.add_child(b)
 	panel.visible = false
+	joy_ctl = Control.new()
+	joy_ctl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	joy_ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	joy_ctl.draw.connect(_draw_joystick)
+	hud.add_child(joy_ctl)
 	map_rect = Control.new()
 	map_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	map_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -280,6 +295,22 @@ func _talk() -> void:
 	var info := society.talk(selected)
 	if not info.is_empty():
 		_last_line = str(info["line"])
+
+
+# --- touch: virtual stick in the lower-left part of the screen ----------------------
+func _in_joy_zone(p: Vector2) -> bool:
+	var vs := get_viewport_rect().size
+	return p.x < vs.x * 0.38 and p.y > vs.y * 0.42 and p.y < vs.y - 180.0
+
+
+func _draw_joystick() -> void:
+	if joy_id < 0 and not DisplayServer.is_touchscreen_available():
+		return
+	var vs := get_viewport_rect().size
+	var base := joy_origin if joy_id >= 0 else Vector2(150, vs.y - 300)
+	joy_ctl.draw_circle(base, 62.0, Color(1, 1, 1, 0.10))
+	joy_ctl.draw_arc(base, 62.0, 0.0, TAU, 40, Color(1, 1, 1, 0.35), 2.0)
+	joy_ctl.draw_circle(base + joy_vec * 44.0, 26.0, Color(1, 1, 1, 0.35))
 
 
 func _cycle_held() -> void:
@@ -397,6 +428,23 @@ func _next_village() -> void:
 
 
 func _unhandled_input(ev: InputEvent) -> void:
+	if ev is InputEventScreenTouch:
+		if ev.pressed and joy_id < 0 and _in_joy_zone(ev.position):
+			joy_id = ev.index
+			joy_origin = ev.position
+			joy_vec = Vector2.ZERO
+		elif not ev.pressed and ev.index == joy_id:
+			joy_id = -1
+			joy_vec = Vector2.ZERO
+		joy_ctl.queue_redraw()
+		return
+	if ev is InputEventScreenDrag:
+		if ev.index == joy_id:
+			joy_vec = ((ev.position - joy_origin) / 56.0).limit_length(1.0)
+			joy_ctl.queue_redraw()
+		return
+	if ev is InputEventMouseButton and ev.device == InputEvent.DEVICE_ID_EMULATION and (joy_id >= 0 or _in_joy_zone(ev.position)):
+		return      # the emulated click of a stick touch must not attack or select
 	if ev is InputEventKey and ev.pressed and not ev.echo:
 		match ev.keycode:
 			KEY_M:
@@ -453,6 +501,8 @@ func _process(delta: float) -> void:
 	if Input.is_physical_key_pressed(KEY_D): mv.x += 1.0
 	if Input.is_physical_key_pressed(KEY_W): mv.y -= 1.0
 	if Input.is_physical_key_pressed(KEY_S): mv.y += 1.0
+	if joy_vec.length() > 0.15:
+		mv += joy_vec
 	player_moving = mv != Vector2.ZERO
 	attack_t = maxf(0.0, attack_t - delta)
 	_update_fx(delta)
@@ -461,7 +511,7 @@ func _process(delta: float) -> void:
 		if attack_t <= 0.0:
 			player_facing = mv.normalized()
 		var sp := 90.0 * (2.4 if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0)
-		var d := mv.normalized() * sp * delta
+		var d := mv.limit_length(1.0) * sp * (1.8 if joy_vec.length() > 0.92 else 1.0) * delta
 		for axis in [Vector2(d.x, 0), Vector2(0, d.y)]:
 			var np: Vector2 = player_pos + axis
 			var t := MP.tile_of(np)
