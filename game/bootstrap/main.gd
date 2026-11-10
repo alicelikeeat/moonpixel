@@ -21,10 +21,27 @@ func _ready() -> void:
 		if a.begins_with("--after="): after = float(a.substr(8))
 		if a.begins_with("--speed="): speed = int(a.substr(8))
 		if a == "--map": with_map = true
+	var photo := ""
+	var asset := ""
+	var zoom := 3
+	var demo := false
+	for a in args:
+		if a.begins_with("--photo="): photo = a.substr(8)
+		if a.begins_with("--asset="): asset = a.substr(8)
+		if a.begins_with("--zoom="): zoom = int(a.substr(7))
+		if a == "--demo-attack": demo = true
 	for a in args:
 		if a.begins_with("--autostart"):
 			var view := _start(int(a.get_slice("=", 1)) if a.contains("=") else 7, 0, false)
 			view.speed_i = speed
+			view.cam.zoom = Vector2(zoom, zoom)
+			view.demo_attack = demo
+			if photo != "":
+				print("photo: ", view.apply_photo(photo, 0))
+			if asset != "":
+				var id := view.import_asset(asset, 40)
+				if id != "":
+					view.world.add_prop("asset:" + id, view.player_pos + Vector2(-40, 30))
 			if shot != "":
 				view.capture_after(after, shot, with_map, not with_map)
 			return

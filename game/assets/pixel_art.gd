@@ -226,33 +226,166 @@ static func bake_chunk(c: ChunkData, content: ContentRegistry) -> Image:
 	return img
 
 
-## 16x20 villager sprite. frame 0 = stand, 1/2 = walk; child = smaller body.
-static func person(skin: String, hair: String, shirt: String, child: bool, frame: int, female: bool) -> ImageTexture:
-	var key := "%s%s%s%d%d%d" % [skin, hair, shirt, int(child), frame, int(female)]
-	if _people.has(key):
-		return _people[key]
-	var img := Image.create(16, 20, false, Image.FORMAT_RGBA8)
-	var sk := Color(skin)
-	var hr := Color(hair)
-	var sh := Color(shirt)
-	var top := 6 if child else 1
-	_rect(img, 5, top, 6, 6, sk)                       # head
-	_rect(img, 5, top, 6, 2, hr)
-	_rect(img, 4, top + 1, 1, 4 if female else 2, hr)
-	_rect(img, 11, top + 1, 1, 4 if female else 2, hr)
-	_px(img, 6, top + 3, Color("#2a2a2a")); _px(img, 9, top + 3, Color("#2a2a2a"))
-	var body_h := 5 if child else 7
-	_rect(img, 4, top + 6, 8, body_h, sh)              # torso
-	_rect(img, 3, top + 6, 1, body_h - 2, sh.darkened(0.15))
-	_rect(img, 12, top + 6, 1, body_h - 2, sh.darkened(0.15))
-	var ly := top + 6 + body_h
-	var legs := Color("#4a4a5a")
-	var l1 := 0
-	var l2 := 0
-	if frame == 1: l1 = -1
-	if frame == 2: l2 = -1
-	_rect(img, 5, ly, 2, 20 - ly + l1, legs)
-	_rect(img, 9, ly, 2, 20 - ly + l2, legs)
-	var tex := ImageTexture.create_from_image(img)
-	_people[key] = tex
+# ---------------------------------------------------------------- characters
+## Characters are drawn on a 32x40 canvas (feet at y 38, centred on x 16) so
+## that every part reads clearly at game zoom: head with hair and eyes, two
+## arms ending in skin-coloured hands, torso, legs, shoes, and whatever is
+## held (weapon, tool, magic staff). A dark outline separates them from terrain.
+const CHAR_W := 32
+const CHAR_H := 40
+const CHAR_ANCHOR := Vector2(16, 38)
+const OUTLINE := Color("#1a1a26")
+const HELD := ["", "sword", "bow", "staff", "axe", "pick", "hoe", "hammer", "basket", "cane"]
+
+static var _chars: Dictionary = {}
+static var _faces: Dictionary = {}     # face id -> Image (10x8), from imported photos
+
+
+static func register_face(id: String, img: Image) -> void:
+	_faces[id] = img
+	for k in _chars.keys():
+		if str(k).contains(id):
+			_chars.erase(k)
+
+
+static func _held(img: Image, kind: String, hx: int, hy: int) -> void:
+	var wood := Color("#8a5a30")
+	var steel := Color("#d0d4e0")
+	var dark := Color("#8f93a6")
+	match kind:
+		"sword":
+			for i in 13:
+				_rect(img, hx + i / 4, hy - 3 - i, 2, 1, steel)
+				_px(img, hx + i / 4, hy - 3 - i, Color.WHITE)
+			_rect(img, hx - 2, hy - 2, 6, 1, Color("#e8c84a"))
+			_rect(img, hx, hy - 1, 2, 3, wood)
+		"axe", "hammer", "pick", "hoe":
+			_rect(img, hx, hy - 12, 2, 15, wood)
+			if kind == "axe":
+				_rect(img, hx + 2, hy - 13, 4, 6, steel); _rect(img, hx + 5, hy - 12, 1, 4, Color.WHITE)
+			elif kind == "hammer":
+				_rect(img, hx - 2, hy - 15, 6, 4, dark); _rect(img, hx - 2, hy - 15, 6, 1, steel)
+			elif kind == "pick":
+				_rect(img, hx - 4, hy - 13, 10, 2, steel); _px(img, hx - 5, hy - 12, steel); _px(img, hx + 6, hy - 12, steel)
+			else:
+				_rect(img, hx + 2, hy - 13, 4, 2, steel); _rect(img, hx + 5, hy - 12, 1, 3, steel)
+		"bow":
+			for i in 15:
+				var bend := int(round(4.0 * sin(PI * i / 14.0)))
+				_rect(img, hx + bend, hy - 9 + i, 2, 1, wood)
+				_px(img, hx - 1, hy - 9 + i, Color("#f0ece0"))
+		"staff":
+			_rect(img, hx, hy - 20, 2, 26, wood)
+			_rect(img, hx - 1, hy - 25, 4, 5, Color("#59d8ff"))
+			_rect(img, hx, hy - 24, 2, 3, Color.WHITE)
+			for p in [[-3, -27], [4, -26], [-3, -21], [5, -22]]:
+				_px(img, hx + p[0], hy + p[1], Color("#bff2ff"))
+		"cane":
+			_rect(img, hx, hy - 2, 1, 12, wood); _rect(img, hx, hy - 3, 3, 1, wood)
+		"basket":
+			_rect(img, hx - 2, hy + 2, 7, 5, Color("#b08050")); _rect(img, hx - 2, hy + 2, 7, 1, Color("#80582f"))
+			_rect(img, hx - 1, hy + 1, 2, 1, Color("#c8324a")); _rect(img, hx + 2, hy + 1, 2, 1, Color("#c8324a"))
+
+
+static func _outline(img: Image) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	var marks: Array = []
+	for y in h:
+		for x in w:
+			if img.get_pixel(x, y).a > 0.0:
+				continue
+			if (x > 0 and img.get_pixel(x - 1, y).a > 0.0) or (x < w - 1 and img.get_pixel(x + 1, y).a > 0.0) \
+					or (y > 0 and img.get_pixel(x, y - 1).a > 0.0) or (y < h - 1 and img.get_pixel(x, y + 1).a > 0.0):
+				marks.append(Vector2i(x, y))
+	for m in marks:
+		img.set_pixel(m.x, m.y, OUTLINE)
+
+
+## look: {skin, hair, shirt, pants?, shoes?, face?}; dir: "down" | "up" | "side";
+## frame: 0 stand, 1/2 walk, 3 = acting (arm and tool raised); held: see HELD.
+static func character_image(look: Dictionary, dir: String, frame: int, held: String, child: bool, female: bool) -> Image:
+	var img := Image.create(CHAR_W, CHAR_H, false, Image.FORMAT_RGBA8)
+	var sk := Color(str(look.get("skin", "#e8b890")))
+	var hr := Color(str(look.get("hair", "#5a3a22")))
+	var sh := Color(str(look.get("shirt", "#3a6ac8")))
+	var pa := Color(str(look.get("pants", "#4a4a5a")))
+	var so := Color(str(look.get("shoes", "#3a2a20")))
+	var eye := Color("#20202a")
+	var l_up := 2 if frame == 1 else 0       # left leg lifted
+	var r_up := 2 if frame == 2 else 0
+	var act := frame == 3
+	if dir == "side":
+		# legs + shoes (stride)
+		var spread := 2 if frame == 1 else (-2 if frame == 2 else 0)
+		_rect(img, 12 - spread, 29, 4, 7, pa.darkened(0.15)); _rect(img, 12 - spread, 36, 5, 3, so)
+		_rect(img, 16 + spread, 29, 4, 7, pa); _rect(img, 16 + spread, 36, 5, 3, so)
+		# torso
+		_rect(img, 12, 19, 8, 10, sh); _rect(img, 12, 19, 2, 10, sh.darkened(0.18)); _rect(img, 12, 28, 8, 1, sh.darkened(0.3))
+		# head
+		_rect(img, 11, 8, 10, 11, sk)
+		_rect(img, 11, 8, 10, 3, hr); _rect(img, 11, 11, 4, 5 if not female else 9, hr)
+		_rect(img, 18, 13, 1, 2, eye); _px(img, 21, 15, sk); _px(img, 19, 17, sk.darkened(0.25))
+		# front arm + hand
+		if act:
+			_rect(img, 16, 16, 6, 3, sh.lightened(0.08)); _rect(img, 22, 15, 3, 3, sk)
+			_held(img, held, 23, 15)
+		else:
+			var sw := 1 if frame == 1 else (-1 if frame == 2 else 0)
+			_rect(img, 15 + sw, 19, 3, 7, sh.lightened(0.08)); _rect(img, 15 + sw, 26, 3, 3, sk)
+			_held(img, held, 17 + sw, 26)
+	else:
+		var back := dir == "up"
+		# legs + shoes
+		_rect(img, 11, 29, 5, 7 - l_up, pa); _rect(img, 10, 36 - l_up, 6, 3, so)
+		_rect(img, 16, 29, 5, 7 - r_up, pa.darkened(0.12)); _rect(img, 16, 36 - r_up, 6, 3, so)
+		# torso
+		_rect(img, 11, 19, 10, 10, sh); _rect(img, 19, 19, 2, 10, sh.darkened(0.18)); _rect(img, 11, 28, 10, 1, sh.darkened(0.3))
+		if not back:
+			_rect(img, 15, 19, 2, 2, sk)
+		# head
+		_rect(img, 10, 9, 12, 10, sk); _rect(img, 11, 8, 10, 1, sk)
+		if back:
+			_rect(img, 10, 8, 12, 9 if not female else 13, hr)
+		else:
+			_rect(img, 10, 8, 12, 3, hr); _rect(img, 11, 7, 10, 1, hr)
+			_rect(img, 10, 11, 1, 3 if not female else 9, hr); _rect(img, 21, 11, 1, 3 if not female else 9, hr)
+			var fid := str(look.get("face", ""))
+			if fid != "" and _faces.has(fid):
+				img.blit_rect(_faces[fid], Rect2i(0, 0, 10, 8), Vector2i(11, 11))
+			else:
+				_rect(img, 13, 13, 1, 2, eye); _rect(img, 18, 13, 1, 2, eye)
+				_rect(img, 15, 17, 2, 1, sk.darkened(0.3))
+		# arms + hands (left arm always down, right arm holds)
+		var a1 := 1 if frame == 2 else 0
+		_rect(img, 8, 19, 3, 7 - a1, sh.darkened(0.1)); _rect(img, 8, 26 - a1, 3, 3, sk)
+		if act:
+			_rect(img, 21, 17, 3, 5, sh.darkened(0.1)); _rect(img, 21, 14, 3, 3, sk)
+			_held(img, held, 22, 14)
+		else:
+			var a2 := 1 if frame == 1 else 0
+			_rect(img, 21, 19, 3, 7 - a2, sh.darkened(0.1)); _rect(img, 21, 26 - a2, 3, 3, sk)
+			_held(img, held, 22, 26 - a2)
+	if child:
+		var small := img.duplicate()
+		small.resize(24, 30, Image.INTERPOLATE_NEAREST)
+		img.fill(Color(0, 0, 0, 0))
+		img.blit_rect(small, Rect2i(0, 0, 24, 30), Vector2i(4, 10))
+	_outline(img)
+	return img
+
+
+static func character(look: Dictionary, dir: String, frame: int, held: String, child: bool, female: bool) -> ImageTexture:
+	var key := "%s|%s|%s|%s|%s|%s|%s|%d|%s|%d|%d" % [look.get("skin", ""), look.get("hair", ""), look.get("shirt", ""), look.get("pants", ""),
+		look.get("shoes", ""), look.get("face", ""), dir, frame, held, int(child), int(female)]
+	var tex = _chars.get(key)
+	if tex == null:
+		tex = ImageTexture.create_from_image(character_image(look, dir, frame, held, child, female))
+		_chars[key] = tex
 	return tex
+
+
+static func facing_dir(f: Vector2) -> String:
+	if absf(f.x) > absf(f.y):
+		return "side"
+	return "up" if f.y < 0.0 else "down"

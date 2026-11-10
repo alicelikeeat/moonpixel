@@ -13,6 +13,7 @@ extends RefCounted
 
 signal tile_changed(x: int, y: int, layer: int, old_id: int, new_id: int)
 signal chunk_changed(cx: int, cy: int)
+signal props_changed()
 
 const REGION := 64                      # survey regions are 64x64 chunks
 const YEAR := MP.DAY_SECONDS            # one in-game year = one day/night cycle
@@ -30,6 +31,7 @@ var evicted := 0
 var time := 0.3 * MP.DAY_SECONDS
 var dir := ""                           # save directory ("" = memory only)
 var saved: Dictionary = {}              # chunk key -> true
+var next_prop_id := 1
 var _clock := 0
 var _ring: Dictionary = {}              # survey cursor per centre
 var _timer_acc := 0.0
@@ -306,6 +308,31 @@ func process_timers(c: ChunkData) -> void:
 		chunk_changed.emit(c.cx, c.cy)
 
 
+# --- free-positioned objects (imported assets, decorations) ------------------------
+func add_prop(key: String, pos: Vector2) -> int:
+	var c := get_chunk(floori(pos.x / MP.CHUNK_PX), floori(pos.y / MP.CHUNK_PX))
+	var id := next_prop_id
+	next_prop_id += 1
+	c.props.append({"id": id, "key": key, "x": pos.x, "y": pos.y, "rot": 0, "z": 0})
+	c.touch()
+	props_changed.emit()
+	return id
+
+
+func remove_prop_near(pos: Vector2, radius: float = 14.0) -> bool:
+	var cc := Vector2i(floori(pos.x / MP.CHUNK_PX), floori(pos.y / MP.CHUNK_PX))
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var c := get_chunk(cc.x + dx, cc.y + dy)
+			for i in c.props.size():
+				if Vector2(c.props[i]["x"], c.props[i]["y"]).distance_to(pos) <= radius:
+					c.props.remove_at(i)
+					c.touch()
+					props_changed.emit()
+					return true
+	return false
+
+
 func find_free_near(t: Vector2i, max_r: int = 12) -> Vector2i:
 	for r in range(0, max_r + 1):
 		for dy in range(-r, r + 1):
@@ -348,11 +375,12 @@ func to_dict() -> Dictionary:
 	var reg := {}
 	for rk in regions:
 		reg["%d,%d" % [rk.x, rk.y]] = Marshalls.raw_to_base64(regions[rk].compress(FileAccess.COMPRESSION_DEFLATE))
-	return {"seed": seed, "time": time, "regions": reg, "surveyed": surveyed}
+	return {"seed": seed, "time": time, "regions": reg, "surveyed": surveyed, "next_prop_id": next_prop_id}
 
 
 func from_dict(d: Dictionary) -> void:
 	time = float(d.get("time", time))
+	next_prop_id = int(d.get("next_prop_id", 1))
 	regions.clear()
 	surveyed = 0
 	var reg = d.get("regions", {})
