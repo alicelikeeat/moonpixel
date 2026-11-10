@@ -41,16 +41,17 @@ static func hash_str(s: String) -> int:
 	return h
 
 
+## Chunk coordinates may be negative (infinite worlds): 32 bits per axis.
 static func chunk_key(cx: int, cy: int) -> int:
-	return (cy << 16) | (cx & 0xffff)
+	return ((cy + 0x40000000) << 32) | (cx + 0x40000000)
 
 
 static func key_cx(k: int) -> int:
-	return k & 0xffff
+	return (k & 0xffffffff) - 0x40000000
 
 
 static func key_cy(k: int) -> int:
-	return k >> 16
+	return (k >> 32) - 0x40000000
 
 
 static func tile_of(pos: Vector2) -> Vector2i:

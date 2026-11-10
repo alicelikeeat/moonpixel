@@ -51,6 +51,9 @@ var _sat := PackedInt32Array()
 var _sat_water := PackedInt32Array()
 var _comp := PackedByteArray()
 var _content: ContentRegistry
+## Test hook: simulates a changed world generator (different terrain for the
+## same seed) to prove that saved player edits are never overwritten.
+static var test_salt := 0
 
 
 static func classify(e: float, t: float, m: float) -> int:
@@ -81,7 +84,7 @@ func _noise(s: int, freq: float, octaves: int) -> FastNoiseLite:
 
 func build(p_seed: int, p_size: int, content: ContentRegistry) -> WorldPlan:
 	var t0 := Time.get_ticks_msec()
-	seed = p_seed
+	seed = p_seed + test_salt
 	size = p_size
 	cell = float(size) / N
 	_content = content

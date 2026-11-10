@@ -47,7 +47,7 @@
  "effects":[{"type":"reveal","site":"dungeon","radius":2},{"type":"flag","key":"knows_altar","value":true}],
  "name":{"en":"Moonfall Ruins","zh":"月落遗迹"},"desc":{"en":"Find the ruins at the end of the road and open one of its chests.","zh":"找到道路尽头的遗迹，并打开其中一个宝箱。"}},
 {"id":"q_boss","category":"combat","giver":"elder_mara","site":"dungeon","prereq":["q_ruins"],
- "objectives":[{"type":"kill","def":"moon_warden","count":1}],
+ "objectives":[{"type":"kill","def":"moon_warden","count":1,"or_flag":"boss_defeated"}],
  "rewards":{"xp":400,"items":[["coin",150],["charm_lantern",1]]},
  "effects":[{"type":"flag","key":"boss_defeated","value":true},{"type":"set_tiles","site":"dungeon","from":"altar","to":"altar_pure"},{"type":"relationship","npc":"elder_mara","delta":5}],
  "name":{"en":"The Moon Warden","zh":"月之守望者"},"desc":{"en":"Touch the altar at the heart of the ruins and defeat the Moon Warden. The village lanterns will light again.","zh":"触碰遗迹中心的祭坛并击败月之守望者。村庄的月灯将重新亮起。"}},

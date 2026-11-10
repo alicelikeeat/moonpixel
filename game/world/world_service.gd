@@ -14,6 +14,7 @@ var plan: WorldPlan
 var chunks: ChunkService
 var bus: EventBus
 var time: float = MP.DAY_SECONDS * 0.30
+var time_real := 0.0                 # unscaled session clock (cooldowns, AI timers); not saved
 var flags: Dictionary = {}
 var discovered: Dictionary = {}
 var explored := PackedByteArray()
@@ -73,6 +74,7 @@ func daylight() -> float:
 
 func advance(dt: float) -> void:
 	time += dt * float(rule("time_scale"))
+	time_real += dt
 	_timer_acc += dt
 	if _timer_acc >= 1.0:
 		_timer_acc = 0.0

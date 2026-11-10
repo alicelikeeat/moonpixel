@@ -80,6 +80,7 @@
 {"id":92,"key":"tent","layer":2,"solid":1,"tall":1,"built":1,"hard":2,"art":["tent","#b0a070","#8a7a50"],"name":{"en":"Tent","zh":"帐篷"}},
 {"id":93,"key":"altar_pure","layer":2,"solid":1,"hard":99,"tier":9,"light":8,"art":["altar","#c9d6ee","#fff7cf"],"name":{"en":"Purified Altar","zh":"净化的祭坛"}},
 
+{"id":94,"key":"grave","layer":2,"solid":1,"hard":4,"art":["grave","#9a9ca6","#6e7079"],"name":{"en":"Grave","zh":"墓碑"}},
 {"id":95,"key":"wheat_0","layer":2,"hard":1,"crop":1,"grow":{"to":"wheat_1","time":120},"drops":[["wheat_seeds",1,1]],"art":["crop","#8fc060","#6b4a2f",0],"name":{"en":"Wheat (sprout)","zh":"小麦（幼苗）"}},
 {"id":96,"key":"wheat_1","layer":2,"hard":1,"crop":1,"grow":{"to":"wheat_2","time":120},"drops":[["wheat_seeds",1,1]],"art":["crop","#a8c858","#6b4a2f",1],"name":{"en":"Wheat (growing)","zh":"小麦（生长中）"}},
 {"id":97,"key":"wheat_2","layer":2,"hard":1,"crop":1,"sway":1,"harvest":{"drops":[["wheat",1,2],["wheat_seeds",1,2]],"to":""},"drops":[["wheat",1,2],["wheat_seeds",1,2]],"art":["crop","#e8c84a","#6b4a2f",2],"name":{"en":"Wheat (ripe)","zh":"小麦（成熟）"}},
