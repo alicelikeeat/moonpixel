@@ -6,6 +6,11 @@ on:
   push:
     branches: ["claude/moonpixel-v1-full-spec-fze5jp", "main"]
     paths: ["game/**", "content/**", "project.godot", "export_presets.cfg", ".github/workflows/ios.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   ipa:
     runs-on: macos-latest
@@ -54,3 +59,11 @@ jobs:
           name: MoonPixel-unsigned-ipa
           path: MoonPixel-unsigned.ipa
           if-no-files-found: error
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ios-unsigned-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" MoonPixel-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "MoonPixel iOS (unsigned) build ${GITHUB_RUN_NUMBER}" \
+            --notes "未签名 ipa，需自行签名后安装（Xcode / AltStore / Sideloadly 等）。尚未在真机上验证。 Unsigned IPA: sign it yourself before installing. Not verified on a real device yet. Commit ${GITHUB_SHA}."
