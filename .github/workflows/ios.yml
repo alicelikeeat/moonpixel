@@ -8,7 +8,7 @@ on:
     paths: ["game/**", "content/**", "project.godot", "export_presets.cfg", ".github/workflows/ios.yml"]
 jobs:
   ipa:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 45
     env:
       GODOT_VERSION: 4.3-stable
