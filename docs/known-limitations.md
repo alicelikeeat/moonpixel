@@ -2,7 +2,7 @@
 
 ## 当前版本
 
-- **平台**：只在 Linux + Godot 4.3（OpenGL 兼容渲染）下运行过。Windows / macOS / iOS / Android 导出均未验证，没有导出预设。
+- **平台**：只在 Linux + Godot 4.3（OpenGL 兼容渲染）下运行过。iOS 有未签名 ipa 的自动构建（移动端使用 Mobile 渲染器），但没有真机验证；首个构建在真机上黑屏，原因未确认。启动信息写在 `user://boot.log` 和 `user://logs/godot.log`（iOS 上可通过“文件”App 查看）。Windows / macOS / Android 导出未验证。
 - **输入**：仅键鼠。没有触屏虚拟摇杆和手柄支持。
 - **性能**：全部模拟在主线程。120–150 名村民在 64× 速度下每帧约 6 ms（开发机）；未在低端设备或移动设备上测量，也没有 30 分钟稳定性记录。
 - **内存查询**：`OS.get_memory_info()` 在个别平台返回 −1，此时退回 256 MB 默认值，需要手动选择预算。

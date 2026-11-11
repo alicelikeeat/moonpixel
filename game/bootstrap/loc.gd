@@ -157,6 +157,22 @@ static func t(key: String) -> String:
 	return str(e.get(lang, e.get("en", key)))
 
 
+static var _font: Font = null
+
+
+## UI font: the engine's built-in font first (always available), system CJK
+## fonts as fallbacks. Text can never disappear because a system font is missing.
+static func ui_font() -> Font:
+	if _font == null:
+		var sys := SystemFont.new()
+		sys.font_names = PackedStringArray(["PingFang SC", "Heiti SC", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", "WenQuanYi Micro Hei", "sans-serif"])
+		var fv := FontVariation.new()
+		fv.base_font = ThemeDB.fallback_font
+		fv.fallbacks = [sys]
+		_font = fv
+	return _font
+
+
 static func detect() -> void:
 	var l := OS.get_locale_language()
 	lang = "zh" if l == "zh" else "en"

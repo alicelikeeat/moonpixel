@@ -14,6 +14,11 @@ config/icon="res://icon.svg"
 
 Game="*res://game/bootstrap/game.gd"
 
+[debug]
+
+file_logging/enable_file_logging=true
+file_logging/enable_file_logging.pc=true
+
 [display]
 
 window/size/viewport_width=1280
@@ -36,6 +41,6 @@ common/physics_ticks_per_second=30
 textures/canvas_textures/default_texture_filter=0
 textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method.mobile="mobile"
 2d/snap/snap_2d_transforms_to_pixel=true
 environment/defaults/default_clear_color=Color(0.05, 0.06, 0.1, 1)

@@ -181,8 +181,7 @@ func _build_nodes() -> void:
 	file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	file_dialog.filters = PackedStringArray(["*.png, *.jpg, *.jpeg, *.webp, *.bmp ; Images"])
 	file_dialog.file_selected.connect(_on_file)
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "WenQuanYi Micro Hei", "sans-serif"])
+	font = Loc.ui_font()
 	hud = CanvasLayer.new()
 	add_child(hud)
 	var theme := Theme.new()
