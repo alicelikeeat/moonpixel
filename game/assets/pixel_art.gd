@@ -234,7 +234,7 @@ static func bake_chunk(c: ChunkData, content: ContentRegistry) -> Image:
 const CHAR_W := 32
 const CHAR_H := 40
 const CHAR_ANCHOR := Vector2(16, 38)
-const OUTLINE := Color("#1a1a26")
+const OUTLINE := Color("#2a1e24")
 const HELD := ["", "sword", "bow", "staff", "axe", "pick", "hoe", "hammer", "basket", "cane"]
 
 static var _chars: Dictionary = {}
@@ -249,42 +249,43 @@ static func register_face(id: String, img: Image) -> void:
 
 
 static func _held(img: Image, kind: String, hx: int, hy: int) -> void:
-	var wood := Color("#8a5a30")
-	var steel := Color("#d0d4e0")
+	## Draws the held item; (hx, hy) is where the handle meets the hand.
+	var wood := Color("#9a6a3a")
+	var steel := Color("#d8dce8")
 	var dark := Color("#8f93a6")
 	match kind:
 		"sword":
-			for i in 13:
-				_rect(img, hx + i / 4, hy - 3 - i, 2, 1, steel)
-				_px(img, hx + i / 4, hy - 3 - i, Color.WHITE)
-			_rect(img, hx - 2, hy - 2, 6, 1, Color("#e8c84a"))
+			for i in 10:
+				_rect(img, hx + i / 5, hy - 3 - i, 2, 1, steel)
+				_px(img, hx + i / 5, hy - 3 - i, Color.WHITE)
+			_rect(img, hx - 2, hy - 2, 6, 1, Color("#f0c84a"))
 			_rect(img, hx, hy - 1, 2, 3, wood)
 		"axe", "hammer", "pick", "hoe":
-			_rect(img, hx, hy - 12, 2, 15, wood)
+			_rect(img, hx, hy - 8, 2, 11, wood)
 			if kind == "axe":
-				_rect(img, hx + 2, hy - 13, 4, 6, steel); _rect(img, hx + 5, hy - 12, 1, 4, Color.WHITE)
+				_rect(img, hx + 2, hy - 9, 4, 5, steel); _rect(img, hx + 5, hy - 8, 1, 3, Color.WHITE)
 			elif kind == "hammer":
-				_rect(img, hx - 2, hy - 15, 6, 4, dark); _rect(img, hx - 2, hy - 15, 6, 1, steel)
+				_rect(img, hx - 1, hy - 11, 6, 4, dark); _rect(img, hx - 1, hy - 11, 6, 1, steel)
 			elif kind == "pick":
-				_rect(img, hx - 4, hy - 13, 10, 2, steel); _px(img, hx - 5, hy - 12, steel); _px(img, hx + 6, hy - 12, steel)
+				_rect(img, hx - 1, hy - 9, 7, 2, steel); _px(img, hx + 6, hy - 8, steel); _px(img, hx - 2, hy - 8, steel)
 			else:
-				_rect(img, hx + 2, hy - 13, 4, 2, steel); _rect(img, hx + 5, hy - 12, 1, 3, steel)
+				_rect(img, hx + 2, hy - 9, 4, 2, steel); _rect(img, hx + 5, hy - 8, 1, 3, steel)
 		"bow":
-			for i in 15:
-				var bend := int(round(4.0 * sin(PI * i / 14.0)))
-				_rect(img, hx + bend, hy - 9 + i, 2, 1, wood)
-				_px(img, hx - 1, hy - 9 + i, Color("#f0ece0"))
+			for i in 13:
+				var bend := int(round(3.0 * sin(PI * i / 12.0)))
+				_rect(img, hx + bend, hy - 8 + i, 2, 1, wood)
+				_px(img, hx - 1, hy - 8 + i, Color("#f6f2e6"))
 		"staff":
-			_rect(img, hx, hy - 20, 2, 26, wood)
-			_rect(img, hx - 1, hy - 25, 4, 5, Color("#59d8ff"))
-			_rect(img, hx, hy - 24, 2, 3, Color.WHITE)
-			for p in [[-3, -27], [4, -26], [-3, -21], [5, -22]]:
+			_rect(img, hx, hy - 18, 2, 24, wood)
+			_rect(img, hx - 1, hy - 23, 4, 5, Color("#59d8ff"))
+			_rect(img, hx, hy - 22, 2, 3, Color.WHITE)
+			for p in [[-3, -25], [4, -24], [-3, -19], [5, -20]]:
 				_px(img, hx + p[0], hy + p[1], Color("#bff2ff"))
 		"cane":
-			_rect(img, hx, hy - 2, 1, 12, wood); _rect(img, hx, hy - 3, 3, 1, wood)
+			_rect(img, hx, hy - 1, 1, 8, wood); _rect(img, hx, hy - 2, 3, 1, wood)
 		"basket":
-			_rect(img, hx - 2, hy + 2, 7, 5, Color("#b08050")); _rect(img, hx - 2, hy + 2, 7, 1, Color("#80582f"))
-			_rect(img, hx - 1, hy + 1, 2, 1, Color("#c8324a")); _rect(img, hx + 2, hy + 1, 2, 1, Color("#c8324a"))
+			_rect(img, hx - 1, hy + 2, 7, 4, Color("#c89050")); _rect(img, hx - 1, hy + 2, 7, 1, Color("#8f6030"))
+			_rect(img, hx, hy + 1, 2, 1, Color("#e84a5a")); _rect(img, hx + 3, hy + 1, 2, 1, Color("#e84a5a"))
 
 
 static func _outline(img: Image) -> void:
@@ -302,82 +303,145 @@ static func _outline(img: Image) -> void:
 		img.set_pixel(m.x, m.y, OUTLINE)
 
 
-## look: {skin, hair, shirt, pants?, shoes?, face?}; dir: "down" | "up" | "side";
-## frame: 0 stand, 1/2 walk, 3 = acting (arm and tool raised); held: see HELD.
+static func _head_shape(img: Image, y0: int, y1: int, c: Color, x0: int = 7, x1: int = 24) -> void:
+	## Rows y0..y1 of the big rounded chibi head (spans x0..x1, y 8..23).
+	for y in range(y0, y1 + 1):
+		var inset := 0
+		if y <= 8 or y >= 23:
+			inset = 2
+		elif y <= 9 or y >= 22:
+			inset = 1
+		_rect(img, x0 + inset, y, x1 - x0 + 1 - inset * 2, 1, c)
+
+
+static func _eye(img: Image, x: int, y: int) -> void:
+	_rect(img, x, y, 3, 4, Color("#2a2233"))
+	_rect(img, x, y + 2, 3, 2, Color("#4a3a5a"))
+	_px(img, x, y, Color.WHITE)
+	_px(img, x + 2, y + 3, Color("#8a7aa0"))
+
+
+## Chibi (Q版) character: head about half the body height, big shiny eyes,
+## blush, tiny limbs. look: {skin, hair, shirt, pants?, shoes?, face?, style?};
+## dir: "down" | "up" | "side"; frame: 0 stand, 1/2 walk, 3 = acting (arm and
+## tool raised); held: see HELD. style 0..3 picks the hairstyle.
 static func character_image(look: Dictionary, dir: String, frame: int, held: String, child: bool, female: bool) -> Image:
 	var img := Image.create(CHAR_W, CHAR_H, false, Image.FORMAT_RGBA8)
-	var sk := Color(str(look.get("skin", "#e8b890")))
+	var sk := Color(str(look.get("skin", "#f2c8a4")))
 	var hr := Color(str(look.get("hair", "#5a3a22")))
+	var hr2 := hr.lightened(0.22)
 	var sh := Color(str(look.get("shirt", "#3a6ac8")))
 	var pa := Color(str(look.get("pants", "#4a4a5a")))
-	var so := Color(str(look.get("shoes", "#3a2a20")))
-	var eye := Color("#20202a")
-	var l_up := 2 if frame == 1 else 0       # left leg lifted
-	var r_up := 2 if frame == 2 else 0
+	var so := Color(str(look.get("shoes", "#5a3a2a")))
+	var blush := sk.lerp(Color("#ff7f96"), 0.55)
+	var style := int(look.get("style", 0)) % 4
+	var l_up := 1 if frame == 1 else 0
+	var r_up := 1 if frame == 2 else 0
 	var act := frame == 3
+	var bob := 1 if (frame == 1 or frame == 2) else 0      # little hop while walking
 	if dir == "side":
-		# legs + shoes (stride)
-		var spread := 2 if frame == 1 else (-2 if frame == 2 else 0)
-		_rect(img, 12 - spread, 29, 4, 7, pa.darkened(0.15)); _rect(img, 12 - spread, 36, 5, 3, so)
-		_rect(img, 16 + spread, 29, 4, 7, pa); _rect(img, 16 + spread, 36, 5, 3, so)
-		# torso
-		_rect(img, 12, 19, 8, 10, sh); _rect(img, 12, 19, 2, 10, sh.darkened(0.18)); _rect(img, 12, 28, 8, 1, sh.darkened(0.3))
-		# head
-		_rect(img, 11, 8, 10, 11, sk)
-		_rect(img, 11, 8, 10, 3, hr); _rect(img, 11, 11, 4, 5 if not female else 9, hr)
-		_rect(img, 18, 13, 1, 2, eye); _px(img, 21, 15, sk); _px(img, 19, 17, sk.darkened(0.25))
-		# front arm + hand
+		var spread := 1 if frame == 1 else (-1 if frame == 2 else 0)
+		_rect(img, 12 - spread, 33, 3, 3, pa.darkened(0.15)); _rect(img, 12 - spread, 36, 4, 2, so.darkened(0.1))
+		_rect(img, 16 + spread, 33, 3, 3, pa); _rect(img, 16 + spread, 36, 4, 2, so)
+		_rect(img, 12, 24, 8, 9, sh); _rect(img, 12, 24, 2, 9, sh.darkened(0.15)); _rect(img, 12, 32, 8, 1, sh.darkened(0.25))
+		_head_shape(img, 8, 23, sk, 8, 23)
+		_head_shape(img, 7, 12, hr, 8, 23)
+		_rect(img, 10, 7, 12, 1, hr)
+		_rect(img, 8, 10, 7, 9 if not female else 13, hr)
+		_rect(img, 11, 8, 6, 1, hr2)
+		for x in [16, 17, 20]:
+			_px(img, x, 13, hr)
+		if style == 1 and female:
+			_disc(img, 7.5, 15.0, 3.0, hr)
+		if style == 3:
+			_px(img, 15, 5, hr); _px(img, 16, 4, hr); _px(img, 17, 5, hr); _px(img, 16, 6, hr)
+		_eye(img, 19, 15)
+		_rect(img, 20, 20, 2, 1, blush)
+		_px(img, 22, 21, Color("#b05a5a"))
 		if act:
-			_rect(img, 16, 16, 6, 3, sh.lightened(0.08)); _rect(img, 22, 15, 3, 3, sk)
-			_held(img, held, 23, 15)
+			_rect(img, 17, 25, 5, 2, sh.lightened(0.1)); _rect(img, 22, 24, 2, 2, sk)
+			_held(img, held, 24, 24)
+		elif held != "":
+			# carry things out in front so they never cover the face
+			_rect(img, 17, 27, 5, 2, sh.lightened(0.1)); _rect(img, 22, 27, 2, 2, sk)
+			_held(img, held, 24, 28)
 		else:
 			var sw := 1 if frame == 1 else (-1 if frame == 2 else 0)
-			_rect(img, 15 + sw, 19, 3, 7, sh.lightened(0.08)); _rect(img, 15 + sw, 26, 3, 3, sk)
-			_held(img, held, 17 + sw, 26)
+			_rect(img, 15 + sw, 25, 2, 5, sh.lightened(0.1)); _rect(img, 15 + sw, 30, 2, 2, sk)
 	else:
 		var back := dir == "up"
-		# legs + shoes
-		_rect(img, 11, 29, 5, 7 - l_up, pa); _rect(img, 10, 36 - l_up, 6, 3, so)
-		_rect(img, 16, 29, 5, 7 - r_up, pa.darkened(0.12)); _rect(img, 16, 36 - r_up, 6, 3, so)
-		# torso
-		_rect(img, 11, 19, 10, 10, sh); _rect(img, 19, 19, 2, 10, sh.darkened(0.18)); _rect(img, 11, 28, 10, 1, sh.darkened(0.3))
-		if not back:
-			_rect(img, 15, 19, 2, 2, sk)
+		_rect(img, 12, 33, 3, 3 - l_up, pa); _rect(img, 11, 36 - l_up, 4, 2, so)
+		_rect(img, 17, 33, 3, 3 - r_up, pa.darkened(0.1)); _rect(img, 17, 36 - r_up, 4, 2, so)
+		_rect(img, 11, 24, 10, 9, sh); _rect(img, 19, 24, 2, 9, sh.darkened(0.15)); _rect(img, 11, 32, 10, 1, sh.darkened(0.25))
+		_rect(img, 12, 25, 2, 1, sh.lightened(0.2))
+		# left arm + hand
+		var a1 := 1 if frame == 2 else 0
+		_rect(img, 9, 25, 2, 5 - a1, sh.darkened(0.08)); _rect(img, 9, 30 - a1, 2, 2, sk)
 		# head
-		_rect(img, 10, 9, 12, 10, sk); _rect(img, 11, 8, 10, 1, sk)
+		_head_shape(img, 8, 23, sk)
 		if back:
-			_rect(img, 10, 8, 12, 9 if not female else 13, hr)
+			_head_shape(img, 8, 19 if not female else 23, hr)
+			_rect(img, 9, 7, 14, 1, hr)
+			_rect(img, 10, 9, 6, 1, hr2)
+			if female and style != 2:
+				_rect(img, 7, 20, 3, 5, hr); _rect(img, 22, 20, 3, 5, hr)
 		else:
-			_rect(img, 10, 8, 12, 3, hr); _rect(img, 11, 7, 10, 1, hr)
-			_rect(img, 10, 11, 1, 3 if not female else 9, hr); _rect(img, 21, 11, 1, 3 if not female else 9, hr)
+			_head_shape(img, 8, 12, hr)
+			_rect(img, 9, 7, 14, 1, hr)
+			_rect(img, 10, 9, 6, 1, hr2)
+			for x in [8, 9, 12, 13, 14, 18, 19, 22, 23]:      # bangs
+				_px(img, x, 13, hr)
+			_px(img, 13, 14, hr); _px(img, 18, 14, hr)
+			var side_len := 4 if not female else 10
+			if style == 2:
+				side_len = 8
+			_rect(img, 7, 13, 2, side_len, hr); _rect(img, 23, 13, 2, side_len, hr)
 			var fid := str(look.get("face", ""))
 			if fid != "" and _faces.has(fid):
-				img.blit_rect(_faces[fid], Rect2i(0, 0, 10, 8), Vector2i(11, 11))
+				img.blit_rect(_faces[fid], Rect2i(0, 0, 10, 8), Vector2i(11, 14))
 			else:
-				_rect(img, 13, 13, 1, 2, eye); _rect(img, 18, 13, 1, 2, eye)
-				_rect(img, 15, 17, 2, 1, sk.darkened(0.3))
-		# arms + hands (left arm always down, right arm holds)
-		var a1 := 1 if frame == 2 else 0
-		_rect(img, 8, 19, 3, 7 - a1, sh.darkened(0.1)); _rect(img, 8, 26 - a1, 3, 3, sk)
+				_eye(img, 11, 15); _eye(img, 18, 15)
+				_rect(img, 9, 20, 2, 1, blush); _rect(img, 21, 20, 2, 1, blush)
+				_rect(img, 15, 21, 2, 1, Color("#b05a5a"))
+				_px(img, 14, 20, Color("#b05a5a")); _px(img, 17, 20, Color("#b05a5a"))
+		# hairstyles
+		if style == 1:
+			if female:
+				_disc(img, 6.0, 11.0, 3.2, hr); _disc(img, 26.0, 11.0, 3.2, hr)      # twin buns
+				_px(img, 5, 10, hr2); _px(img, 25, 10, hr2)
+			else:
+				for p in [[12, 6], [13, 5], [15, 6], [16, 4], [17, 5], [19, 6], [20, 5]]:   # spiky
+					_px(img, p[0], p[1], hr)
+		elif style == 3:
+			_px(img, 15, 5, hr); _px(img, 16, 4, hr); _px(img, 17, 4, hr); _px(img, 18, 5, hr); _px(img, 16, 6, hr)   # ahoge
+			if female and not back:
+				_rect(img, 19, 7, 2, 3, Color("#ff5a7a")); _rect(img, 22, 7, 2, 3, Color("#ff5a7a")); _px(img, 21, 8, Color("#ffd24a"))
+		# right arm + hand (holds things)
 		if act:
-			_rect(img, 21, 17, 3, 5, sh.darkened(0.1)); _rect(img, 21, 14, 3, 3, sk)
-			_held(img, held, 22, 14)
+			_rect(img, 21, 24, 3, 2, sh.darkened(0.08)); _rect(img, 24, 21, 2, 4, sh.darkened(0.08)); _rect(img, 24, 19, 2, 2, sk)
+			_held(img, held, 26, 20)
 		else:
 			var a2 := 1 if frame == 1 else 0
-			_rect(img, 21, 19, 3, 7 - a2, sh.darkened(0.1)); _rect(img, 21, 26 - a2, 3, 3, sk)
-			_held(img, held, 22, 26 - a2)
+			_rect(img, 21, 25, 2, 5 - a2, sh.darkened(0.08)); _rect(img, 21, 30 - a2, 2, 2, sk)
+			_held(img, held, 23 if held != "sword" and held != "staff" else 24, 30 - a2)
+	if bob == 1:
+		# shift everything above the legs up by one pixel for a bouncy walk
+		var top := img.get_region(Rect2i(0, 0, CHAR_W, 33))
+		img.fill_rect(Rect2i(0, 0, CHAR_W, 33), Color(0, 0, 0, 0))
+		img.blit_rect(top, Rect2i(0, 1, CHAR_W, 32), Vector2i(0, 0))
+		_rect(img, 11, 32, 10, 1, sh.darkened(0.25))
 	if child:
 		var small := img.duplicate()
-		small.resize(24, 30, Image.INTERPOLATE_NEAREST)
+		small.resize(26, 32, Image.INTERPOLATE_NEAREST)
 		img.fill(Color(0, 0, 0, 0))
-		img.blit_rect(small, Rect2i(0, 0, 24, 30), Vector2i(4, 10))
+		img.blit_rect(small, Rect2i(0, 0, 26, 32), Vector2i(3, 7))
 	_outline(img)
 	return img
 
 
 static func character(look: Dictionary, dir: String, frame: int, held: String, child: bool, female: bool) -> ImageTexture:
-	var key := "%s|%s|%s|%s|%s|%s|%s|%d|%s|%d|%d" % [look.get("skin", ""), look.get("hair", ""), look.get("shirt", ""), look.get("pants", ""),
-		look.get("shoes", ""), look.get("face", ""), dir, frame, held, int(child), int(female)]
+	var key := "%s|%s|%s|%s|%s|%s|%s|%s|%d|%s|%d|%d" % [look.get("skin", ""), look.get("hair", ""), look.get("shirt", ""), look.get("pants", ""),
+		look.get("shoes", ""), look.get("face", ""), str(look.get("style", 0)), dir, frame, held, int(child), int(female)]
 	var tex = _chars.get(key)
 	if tex == null:
 		tex = ImageTexture.create_from_image(character_image(look, dir, frame, held, child, female))

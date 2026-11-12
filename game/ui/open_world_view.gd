@@ -34,7 +34,7 @@ var font: Font
 var _autosave := 0.0
 var _walk_t := 0.0
 var _maint := 0.0
-var player_look := {"skin": "#e8b890", "hair": "#f0e8d0", "shirt": "#f4f0e0", "pants": "#5a5a78", "shoes": "#3a2a20"}
+var player_look := {"skin": "#f2c8a4", "hair": "#f0e8d0", "shirt": "#f4f0e0", "pants": "#5a5a78", "shoes": "#5a3a2a", "style": 3}
 var player_facing := Vector2.DOWN
 var player_moving := false
 var held_i := 1                         # index into PLAYER_HELD
@@ -730,10 +730,13 @@ func _draw_agents() -> void:
 			continue
 		var a: Agent = item[2]
 		var st := a.stage(now)
-		var look: Dictionary = a.look
+		var look: Dictionary = a.look.duplicate()
+		if not look.has("style"):
+			look["style"] = a.id % 4
+		if not look.has("pants"):
+			look["pants"] = ["#4a4a5a", "#6a5a48", "#3a4a6a", "#5a3a4a"][a.id % 4]
 		if a.age(now) >= 58.0 and not look.has("face"):
-			look = look.duplicate()
-			look["hair"] = "#d8d8e0"
+			look["hair"] = "#e0e0e8"
 		var working: bool = not a.task.is_empty() and int(a.task["stage"]) == 1 and ["chop", "mine", "build", "forage", "reap", "sow"].has(a.task["act"])
 		var held: String = "cane" if st == "elder" else str(JOB_TOOL.get(a.job, ""))
 		if working and a.task["act"] == "build":

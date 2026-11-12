@@ -8,17 +8,33 @@ func _close(a: Color, b: Color, eps: float = 0.12) -> bool:
 
 
 func test_character_sprite_shows_every_body_part() -> void:
-	var look := {"skin": "#e8b890", "hair": "#5a3a22", "shirt": "#3a6ac8", "pants": "#4a4a5a", "shoes": "#3a2a20"}
+	var look := {"skin": "#f2c8a4", "hair": "#5a3a22", "shirt": "#3a6ac8", "pants": "#4a4a5a", "shoes": "#5a3a2a"}
 	var img := PixelArt.character_image(look, "down", 0, "", false, false)
 	eq(img.get_size(), Vector2i(32, 40))
-	ok(_close(img.get_pixel(15, 9), Color("#5a3a22")), "hair on top of the head")
-	ok(_close(img.get_pixel(16, 15), Color("#e8b890")), "face skin")
-	ok(_close(img.get_pixel(13, 13), Color("#20202a")), "eyes")
-	ok(_close(img.get_pixel(14, 23), Color("#3a6ac8")), "torso")
-	ok(_close(img.get_pixel(9, 27), Color("#e8b890")) and _close(img.get_pixel(22, 27), Color("#e8b890")), "two skin-coloured hands")
-	ok(_close(img.get_pixel(13, 32), Color("#4a4a5a")), "legs")
-	ok(_close(img.get_pixel(12, 37), Color("#3a2a20")) and _close(img.get_pixel(19, 37), Color("#3a2a20")), "two feet")
-	ok(_close(img.get_pixel(9, 20), PixelArt.OUTLINE) or _close(img.get_pixel(7, 22), PixelArt.OUTLINE), "dark outline")
+	ok(_close(img.get_pixel(15, 10), Color("#5a3a22")), "hair on top of the head")
+	ok(_close(img.get_pixel(15, 18), Color("#f2c8a4")), "face skin")
+	ok(_close(img.get_pixel(12, 16), Color("#2a2233")) and _close(img.get_pixel(19, 16), Color("#2a2233")), "two big eyes")
+	ok(_close(img.get_pixel(11, 15), Color.WHITE) and _close(img.get_pixel(18, 15), Color.WHITE), "eye highlights")
+	ok(img.get_pixel(9, 20).r > img.get_pixel(9, 20).b + 0.2, "blush on the cheek")
+	ok(_close(img.get_pixel(14, 28), Color("#3a6ac8")), "torso")
+	ok(_close(img.get_pixel(9, 30), Color("#f2c8a4")) and _close(img.get_pixel(22, 30), Color("#f2c8a4")), "two skin-coloured hands")
+	ok(_close(img.get_pixel(13, 34), Color("#4a4a5a")), "legs")
+	ok(_close(img.get_pixel(12, 37), Color("#5a3a2a")) and _close(img.get_pixel(19, 37), Color("#5a3a2a")), "two feet")
+	ok(_close(img.get_pixel(6, 15), PixelArt.OUTLINE), "outline")
+	# chibi proportions: the head is about as tall as body and legs together
+	var head_rows := 0
+	var body_rows := 0
+	for y in 40:
+		var skin_or_hair := false
+		for x in 32:
+			var c := img.get_pixel(x, y)
+			if c.a > 0.0 and y <= 23 and y >= 7:
+				skin_or_hair = true
+		if skin_or_hair:
+			head_rows += 1
+		elif y > 23 and img.get_pixel(15, y).a > 0.0:
+			body_rows += 1
+	ok(head_rows >= 16 and body_rows <= head_rows, "big head (%d rows) vs body (%d rows)" % [head_rows, body_rows])
 
 
 func test_held_weapons_and_magic_are_visible() -> void:
@@ -63,7 +79,7 @@ func test_photo_becomes_character_look() -> void:
 	PixelArt.register_face("face_test", out["face"])
 	look["face"] = "face_test"
 	var img := PixelArt.character_image(look, "down", 0, "", false, false)
-	ok(_close(img.get_pixel(15, 14), out["face"].get_pixel(4, 3), 0.02), "face pixels on the head")
+	ok(_close(img.get_pixel(15, 17), out["face"].get_pixel(4, 3), 0.02), "face pixels on the head")
 
 
 func test_picture_becomes_pixel_asset() -> void:

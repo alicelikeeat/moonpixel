@@ -23,9 +23,9 @@ const CLANS_EN := ["Oakhand", "Riverun", "Stonefield", "Moonvale", "Ashgrove", "
 const CLANS_ZH := ["橡", "江", "石田", "月谷", "梣", "明川", "空井", "荆", "灰泽", "夏原", "风湖", "深林"]
 const TOWN_EN := ["Moonfall", "Reedmere", "Oakrest", "Stonebrook", "Ashford", "Brightmoor", "Fernhollow", "Willowend", "Frostgate", "Dunehaven", "Mistvale", "Larkfield", "Emberly", "Pinewatch", "Saltmarsh", "Goldlea"]
 const TOWN_ZH := ["月落", "苇湖", "橡息", "石溪", "梣渡", "明泽", "蕨谷", "柳尾", "霜门", "沙港", "雾谷", "雀田", "余烬", "松望", "盐沼", "金原"]
-const SKINS := ["#f0c8a8", "#e8b890", "#d8a878", "#c89060", "#a87048", "#8a5a3a"]
-const HAIRS := ["#2a2a2a", "#5a3a22", "#8a5a30", "#c8a060", "#b84a2a", "#d8d8e0"]
-const SHIRTS := ["#3a6ac8", "#c84a4a", "#3a8a5a", "#b8983a", "#8a4ab0", "#4a9ab0", "#c87a3a", "#6a6e86"]
+const SKINS := ["#fbe0cc", "#f6d2b4", "#f2c8a4", "#e6b088", "#c98a62", "#a06a46"]
+const HAIRS := ["#3a3038", "#5a3a22", "#8a5a30", "#d8b068", "#c85a3a", "#e8a0b8", "#7a8ad8"]
+const SHIRTS := ["#5a8ae8", "#ee6a7a", "#58b888", "#e8c050", "#a878e0", "#58bcd0", "#f09a58", "#8a90b0", "#f0a0c0", "#88c860"]
 
 const TXT := {
 	"born": {"en": "%s was born in %s", "zh": "%s 在%s出生了"},
