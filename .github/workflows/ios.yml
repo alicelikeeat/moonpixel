@@ -1,11 +1,11 @@
 name: iOS unsigned IPA
-# Builds an UNSIGNED .ipa on a macOS runner. It cannot be installed directly:
-# sign it yourself (Xcode, AltStore, Sideloadly, ...) before putting it on a device.
+# Native Swift app (SpriteKit + SwiftUI Liquid Glass). Builds an UNSIGNED .ipa:
+# sign it yourself (Xcode, AltStore, Sideloadly, ...) before installing.
 on:
   workflow_dispatch:
   push:
     branches: ["claude/moonpixel-v1-full-spec-fze5jp", "main"]
-    paths: ["game/**", "content/**", "project.godot", "export_presets.cfg", ".github/workflows/ios.yml"]
+    paths: ["ios/**", "content/**", "tools/gen_swift_content.py", ".github/workflows/ios.yml"]
 permissions:
   contents: write
 concurrency:
@@ -15,92 +15,75 @@ jobs:
   ipa:
     runs-on: macos-latest
     timeout-minutes: 45
-    env:
-      GODOT_VERSION: 4.5.1-stable
-      TEMPLATE_DIR: 4.5.1.stable
     steps:
       - uses: actions/checkout@v4
-      - name: Download Godot and export templates
+      - name: Toolchain
         run: |
-          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_macos.universal.zip"
-          unzip -q godot.zip
-          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
-          mkdir -p "$HOME/Library/Application Support/Godot/export_templates/${TEMPLATE_DIR}"
-          unzip -q templates.tpz
-          mv templates/* "$HOME/Library/Application Support/Godot/export_templates/${TEMPLATE_DIR}/"
-          echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
-      - name: Import project
+          xcodebuild -version
+          brew install xcodegen
+      - name: Core tests
+        working-directory: ios
+        run: swift test -c release -Xswiftc -enable-testing 2>&1 | grep -E "error|failed|Executed|passed" | tail -30; test ${PIPESTATUS[0]} -eq 0
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build for device without code signing
+        working-directory: ios
         run: |
-          "$GODOT" --headless --path . --import || true
-          "$GODOT" --headless --path . --import 2>&1 | tee import.log
-          ! grep -E "Parse Error|Compile Error" import.log
-      - name: Export Xcode project
-        run: |
-          mkdir -p build/ios
-          "$GODOT" --headless --path . --export-release "iOS" build/ios/MoonPixel.ipa 2>&1 | tee export.log
-          ls -la build/ios
-          test -d build/ios/MoonPixel.xcodeproj
-      - name: Build without code signing
-        run: |
-          xcodebuild -project build/ios/MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
+          set -o pipefail
+          xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/dd \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_ENTITLEMENTS="" \
-            build | tail -40
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build.log 2>&1 || { grep -E "error:|error " build.log | sort -u | head -60; tail -15 build.log; exit 1; }
+          grep -E "warning: .*deprecated" build.log | sort -u | head -5 || true
       - name: Package unsigned IPA
+        working-directory: ios
         run: |
-          APP=$(find build/dd/Build/Products -maxdepth 2 -name "*.app" | head -1)
+          APP=$(find build/dd/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           test -n "$APP"
-          mkdir -p Payload
-          cp -R "$APP" Payload/
-          ls -la "$APP" | head -20
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleExecutable" -c "Print :MinimumOSVersion" "$APP/Info.plist"
+          ls -la "$APP" | head -12
+          mkdir -p Payload && cp -R "$APP" Payload/
           zip -qry MoonPixel-unsigned.ipa Payload
           ls -la MoonPixel-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: MoonPixel-unsigned-ipa
-          path: MoonPixel-unsigned.ipa
+          path: ios/MoonPixel-unsigned.ipa
           if-no-files-found: error
       - name: Publish GitHub release
+        working-directory: ios
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="ios-unsigned-${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" MoonPixel-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "MoonPixel iOS (unsigned) build ${GITHUB_RUN_NUMBER}" \
-            --notes "未签名 ipa，需自行签名后安装（Xcode / AltStore / Sideloadly 等）。尚未在真机上验证。 Unsigned IPA: sign it yourself before installing. Not verified on a real device yet. Commit ${GITHUB_SHA}."
+            --title "MoonPixel iOS native (unsigned) build ${GITHUB_RUN_NUMBER}" \
+            --notes "原生 Swift 版（SpriteKit + SwiftUI Liquid Glass）。未签名 ipa，需自行签名后安装。 Native Swift build, unsigned: sign it yourself before installing. Commit ${GITHUB_SHA}."
       - name: Smoke test in the iOS Simulator
+        working-directory: ios
         continue-on-error: true
-        timeout-minutes: 15
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          xcodebuild -project build/ios/MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
+          xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
-            ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
-          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | sort -u | head -12
-          # note: Godot's official simulator library is x86_64 only, so this runs under Rosetta
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
+          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | sort -u | head -20
           APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
-          echo "simulator app: $APP"; ls -la "$APP" | head -20
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
-          echo "device: $UDID"
+          echo "device: $UDID app: $APP"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch "$UDID" org.moonpixel.game
-          sleep 25
-          xcrun simctl io "$UDID" screenshot sim-menu.png
+          shot() { xcrun simctl io "$UDID" screenshot "$1" > /dev/null 2>&1; }
+          xcrun simctl launch "$UDID" org.moonpixel.game; sleep 14; shot sim-menu.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart=7
-          sleep 40
-          xcrun simctl io "$UDID" screenshot sim-game.png
-          DATA=$(xcrun simctl get_app_container "$UDID" org.moonpixel.game data)
-          echo "===== app container ====="; find "$DATA/Documents" -maxdepth 3 | head -40
-          echo "===== boot.log ====="; cat "$DATA/Documents/boot.log"
-          echo "===== godot.log ====="; tail -60 "$DATA/Documents/logs/godot.log"
-          echo "===== system log ====="
-          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel"' | tail -60
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --select; sleep 30; shot sim-game.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --map; sleep 40; shot sim-map.png
+          echo "===== app log ====="
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
           TAG="ios-unsigned-${GITHUB_RUN_NUMBER}"
-          gh release upload "$TAG" sim-menu.png sim-game.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png
