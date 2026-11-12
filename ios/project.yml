@@ -30,3 +30,27 @@ targets:
         INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
+  MoonPixelUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: MoonPixel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.moonpixel.game.uitests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MoonPixel
+schemes:
+  MoonPixel:
+    build:
+      targets:
+        MoonPixel: all
+        MoonPixelUITests: [test]
+    run:
+      config: Release
+    test:
+      config: Debug
+      targets:
+        - MoonPixelUITests

@@ -82,8 +82,15 @@ jobs:
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --select; sleep 30; shot sim-game.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --map; sleep 40; shot sim-map.png
+          echo "===== UI test: tap the HUD buttons ====="
+          xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
+            -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
+          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | sort -u | head -40
+          mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
+          n=0; for f in $(ls -tr uishots/*.png 2>/dev/null); do n=$((n+1)); cp "$f" "ui-$n.png"; done; ls -la ui-*.png 2>/dev/null
+          cat uishots/manifest.json 2>/dev/null | python3 -c "import json,sys; [print(a.get('exportedFileName'), a.get('suggestedHumanReadableName')) for t in json.load(sys.stdin) for a in t.get('attachments', [])]" 2>/dev/null
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
           TAG="ios-unsigned-${GITHUB_RUN_NUMBER}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png
