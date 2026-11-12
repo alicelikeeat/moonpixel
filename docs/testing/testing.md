@@ -3,7 +3,7 @@
 测试不依赖任何第三方框架：`tests/run_tests.gd` 加载 `tests/test_*.gd` 并运行其中的 `test_*` 方法。
 
 ```bash
-export GODOT=/path/to/godot-4.3
+export GODOT=/path/to/godot-4.5
 $GODOT --headless --path . --import
 tools/gd.sh 600 tests/run_tests.gd
 tools/gd.sh 600 tests/run_tests.gd -- --filter=open_world
@@ -19,6 +19,6 @@ tools/gd.sh 600 tests/run_tests.gd -- --filter=open_world
 | `test_assets` | 角色精灵各部位（头发、脸、眼、双手、躯干、腿、双脚、描边）像素位置；9 种手持物都增加可见像素、法杖有发光球；合成人像 → 肤色 / 发色 / 衣色 / 人脸位置；图片 → 尺寸受限、去背景、降色；拒绝损坏文件和 GIF；摆件存读 |
 | `test_worldgen` | 固定尺寸世界：确定性、区块顺序无关、三种规模、四类生物群系、生成耗时 |
 
-最近一次本地结果：28 个测试全部通过，约 30 秒（Linux，Godot 4.3）。
+最近一次本地结果：28 个测试全部通过，约 30 秒（Linux，Godot 4.5）。
 
 尚未覆盖：渲染 / HUD（只做过截图人工检查）、长时间运行、真实移动设备。

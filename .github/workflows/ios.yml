@@ -16,8 +16,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     env:
-      GODOT_VERSION: 4.3-stable
-      TEMPLATE_DIR: 4.3.stable
+      GODOT_VERSION: 4.5.1-stable
+      TEMPLATE_DIR: 4.5.1.stable
     steps:
       - uses: actions/checkout@v4
       - name: Download Godot and export templates

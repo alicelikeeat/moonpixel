@@ -28,7 +28,7 @@
 
 ## 运行
 
-需要 [Godot 4.3](https://godotengine.org/download)（标准版即可，无需 .NET）。
+需要 [Godot 4.5](https://godotengine.org/download)（标准版即可，无需 .NET）。
 
 ```bash
 godot --path . --import      # 首次导入

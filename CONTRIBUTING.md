@@ -1,6 +1,6 @@
 # 贡献指南 / Contributing
 
-- 引擎：Godot 4.3，GDScript，Tab 缩进。
+- 引擎：Godot 4.5，GDScript，Tab 缩进。
 - 游戏逻辑写成不依赖场景节点的 `RefCounted` 类，并为它补充 `tests/test_*.gd`。
 - 修改世界只通过 `OpenWorld.set_tile()`；不要直接改 `ChunkData.layers`。
 - `content/tiles/tiles.json` 中的数值 id 是存档契约，只能新增，不能重编号或复用。
