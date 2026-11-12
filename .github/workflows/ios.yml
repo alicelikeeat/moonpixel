@@ -78,8 +78,9 @@ jobs:
           set +e
           xcodebuild -project build/ios/MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
-          echo "===== simulator build ====="; grep -E "error:|warning: .*simulator|BUILD (SUCCEEDED|FAILED)|ld: " simbuild.log | sort -u | head -30; tail -5 simbuild.log
+            ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
+          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | sort -u | head -12
+          # note: Godot's official simulator library is x86_64 only, so this runs under Rosetta
           APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
           echo "simulator app: $APP"; ls -la "$APP" | head -20
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")

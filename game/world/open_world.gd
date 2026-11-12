@@ -161,6 +161,22 @@ func maintain() -> int:
 	return removed
 
 
+## One-tap cleanup: drop every chunk that is neither pinned nor in `keep`.
+## Edited chunks are written to disk first; if that fails they stay in memory.
+func purge(keep: Dictionary = {}) -> int:
+	var removed := 0
+	for k in cache.keys():
+		if pins.has(k) or keep.has(k):
+			continue
+		var c: ChunkData = cache[k]
+		if c.dirty and not _write(c):
+			continue
+		cache.erase(k)
+		removed += 1
+	evicted += removed
+	return removed
+
+
 func _write(c: ChunkData) -> bool:
 	if dir == "":
 		return not c.modified       # memory-only worlds can only drop pristine chunks

@@ -122,3 +122,27 @@ func test_growth_catches_up_after_eviction() -> void:
 	w.maintain()
 	w.time += 1000.0
 	eq(w.tile(MP.L_OBJECT, 3, 3), c.tid("wheat_2"), "crop ripened while unloaded")
+
+
+func test_one_tap_purge_frees_chunks_but_keeps_edits_pins_and_view() -> void:
+	var root := fresh_root("purge")
+	var w := _world(21)
+	w.open_dir(root)
+	w.pin(0, 0)
+	w.set_tile(MP.L_OBJECT, 70, 70, c.tid("wall_wood"))      # chunk (2,2), edited
+	for i in 200:
+		w.get_chunk(50 + i % 20, 50 + i / 20)
+	var keep := {MP.chunk_key(50, 50): true}
+	var before := w.cache.size()
+	var dropped := w.purge(keep)
+	ok(dropped >= 199, "dropped %d of %d" % [dropped, before])
+	ok(w.loaded(0, 0), "pinned chunk kept")
+	ok(w.loaded(50, 50), "on-screen chunk kept")
+	ok(not w.loaded(2, 2), "edited chunk left memory")
+	eq(w.tile(MP.L_OBJECT, 70, 70), c.tid("wall_wood"), "and comes back from disk intact")
+	# memory-only world: edits can not be written, so they must stay
+	var m := _world(22)
+	m.set_tile(MP.L_OBJECT, 5, 5, c.tid("wall_wood"))
+	m.get_chunk(9, 9)
+	m.purge()
+	ok(m.loaded(0, 0) and not m.loaded(9, 9), "unsaved edits survive a purge")

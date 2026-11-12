@@ -27,7 +27,7 @@ var hud: CanvasLayer
 var lbl_stats: Label
 var lbl_mem: Label
 var lbl_log: Label
-var panel: PanelContainer
+var panel: Glass
 var lbl_agent: Label
 var map_rect: Control
 var font: Font
@@ -49,6 +49,22 @@ var joy_id := -1                        # touch index driving the virtual stick
 var joy_origin := Vector2.ZERO
 var joy_vec := Vector2.ZERO
 var joy_ctl: Control
+var safe: Control
+var status_btn: Button
+var details: Glass
+var speed_glass: Glass
+var speed_btns: Array = []
+var tab_glass: Glass
+var toast_glass: Glass
+var toast_lbl: Label
+var toast_t := 0.0
+var auto_btn: Button
+var auto_clean := true
+var _clean_cd := 0.0
+var _log_seen := 0
+var pinch: Dictionary = {}              # touch index -> position
+var pinch_d0 := 0.0
+var pinch_z0 := 3.0
 
 const PLAYER_HELD := ["", "sword", "bow", "staff"]
 const JOB_TOOL := {"woodcutter": "axe", "miner": "pick", "farmer": "hoe", "builder": "hammer", "forager": "basket"}
@@ -173,7 +189,8 @@ func _build_nodes() -> void:
 	tint = CanvasModulate.new()
 	add_child(tint)
 	cam = Camera2D.new()
-	cam.zoom = Vector2(3, 3)
+	# with the phone UI scale one unit is larger, so use a wider default view
+	cam.zoom = Vector2(2, 2) if get_window().content_scale_factor > 1.2 else Vector2(3, 3)
 	add_child(cam)
 	cam.make_current()
 	file_dialog = FileDialog.new()
@@ -184,107 +201,168 @@ func _build_nodes() -> void:
 	font = Loc.ui_font()
 	hud = CanvasLayer.new()
 	add_child(hud)
-	var theme := Theme.new()
-	theme.default_font = font
-	theme.default_font_size = 15
-	var top := _panel(Vector2(10, 10), theme)
-	var vb := VBoxContainer.new()
-	top.add_child(vb)
-	lbl_stats = Label.new()
-	vb.add_child(lbl_stats)
-	lbl_mem = Label.new()
-	lbl_mem.add_theme_color_override("font_color", Color(0.75, 0.9, 1.0))
-	vb.add_child(lbl_mem)
-	var hb := HBoxContainer.new()
-	vb.add_child(hb)
-	for i in SPEEDS.size():
-		var b := Button.new()
-		b.text = "❚❚" if i == 0 else "%d×" % int(SPEEDS[i])
-		b.focus_mode = Control.FOCUS_NONE
-		b.pressed.connect(func(): speed_i = i)
-		hb.add_child(b)
-	for def in [["map", _toggle_map], ["village", _next_village], ["save", save_game]]:
-		var b := Button.new()
-		b.text = {"map": "地图 Map (M)", "village": "下一村 Next (N)", "save": "保存 Save (F5)"}[def[0]]
-		b.focus_mode = Control.FOCUS_NONE
-		b.pressed.connect(def[1])
-		hb.add_child(b)
-	for z in [["＋", 1.0], ["－", -1.0]]:
-		var zb := Button.new()
-		zb.text = z[0]
-		zb.focus_mode = Control.FOCUS_NONE
-		zb.pressed.connect(func(): cam.zoom = Vector2.ONE * clampf(cam.zoom.x + z[1], 1.0, 6.0))
-		hb.add_child(zb)
-	var hb2 := HBoxContainer.new()
-	vb.add_child(hb2)
-	for def in [["照片生成角色 Photo → me", func(): _open_dialog("photo_me")], ["导入素材 Import picture", func(): _open_dialog("asset")], ["武器 Weapon (Q)", _cycle_held]]:
-		var b := Button.new()
-		b.text = def[0]
-		b.focus_mode = Control.FOCUS_NONE
-		b.pressed.connect(def[1])
-		hb2.add_child(b)
-	var note := Label.new()
-	note.text = "请只导入你有权使用的图片；素材只保存在本机。Only import pictures you may use; they stay on this device."
-	note.add_theme_font_size_override("font_size", 11)
-	note.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
-	vb.add_child(note)
+	file_dialog.use_native_dialog = true
 	hud.add_child(file_dialog)
-	var help := Label.new()
-	help.text = "WASD 移动 · Shift 快跑 · 左键 村民/攻击 Click villager or attack · Q 武器 · 滚轮 Zoom"
-	help.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
-	vb.add_child(help)
-	var logp := _panel(Vector2(10, 0), theme)
-	logp.anchor_top = 1.0; logp.anchor_bottom = 1.0
-	logp.offset_top = -170; logp.offset_bottom = -10
-	logp.custom_minimum_size = Vector2(430, 150)
-	lbl_log = Label.new()
-	lbl_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	logp.add_child(lbl_log)
-	panel = _panel(Vector2(0, 10), theme)
-	panel.anchor_left = 1.0; panel.anchor_right = 1.0
-	panel.offset_left = -450; panel.offset_right = -10
-	panel.custom_minimum_size = Vector2(440, 0)
-	var pv := VBoxContainer.new()
-	panel.add_child(pv)
-	lbl_agent = Label.new()
-	lbl_agent.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl_agent.custom_minimum_size = Vector2(420, 0)
-	pv.add_child(lbl_agent)
-	var ph := HBoxContainer.new()
-	pv.add_child(ph)
-	for def in [["交谈 Talk", func(): _talk()], ["送食物 Give food", func(): society.gift_food(selected); _talk()], ["跟随 Follow", func(): follow = not follow], ["照片 Photo", func(): _open_dialog("photo_npc")], ["✕", func(): selected = 0; follow = false]]:
-		var b := Button.new()
-		b.text = def[0]
-		b.focus_mode = Control.FOCUS_NONE
-		b.pressed.connect(def[1])
-		ph.add_child(b)
-	panel.visible = false
+	safe = Control.new()
+	safe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	safe.theme = Glass.ui_theme()
+	hud.add_child(safe)
 	joy_ctl = Control.new()
 	joy_ctl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	joy_ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	joy_ctl.draw.connect(_draw_joystick)
-	hud.add_child(joy_ctl)
+	safe.add_child(joy_ctl)
+	# --- status capsule (tap for details)
+	status_btn = Glass.button("", func(): details.visible = not details.visible, 150)
+	var status_glass := Glass.make(20, 4)
+	status_glass.position = Vector2(0, 0)
+	status_glass.add_child(status_btn)
+	safe.add_child(status_glass)
+	# --- details sheet
+	details = Glass.make(22, 12)
+	details.position = Vector2(0, 52)
+	details.custom_minimum_size = Vector2(360, 0)
+	var dv := VBoxContainer.new()
+	details.add_child(dv)
+	lbl_stats = Label.new()
+	dv.add_child(lbl_stats)
+	lbl_mem = Label.new()
+	lbl_mem.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
+	lbl_mem.add_theme_font_size_override("font_size", 11)
+	dv.add_child(lbl_mem)
+	var auto_row := HBoxContainer.new()
+	dv.add_child(auto_row)
+	auto_row.add_child(Glass.button(_L("立即清理内存", "Free memory now"), func(): clean_memory(true)))
+	auto_btn = Glass.button("", func(): auto_clean = not auto_clean)
+	auto_row.add_child(auto_btn)
+	lbl_log = Label.new()
+	lbl_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_log.custom_minimum_size = Vector2(340, 0)
+	lbl_log.add_theme_font_size_override("font_size", 11)
+	lbl_log.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
+	dv.add_child(lbl_log)
+	var note := Label.new()
+	note.text = _L("导入图片请确保你有权使用；素材只保存在本机。", "Only import pictures you may use; they stay on this device.")
+	note.add_theme_font_size_override("font_size", 9)
+	note.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
+	dv.add_child(note)
+	details.visible = false
+	safe.add_child(details)
+	# --- speed capsule
+	speed_glass = Glass.make(20, 4)
+	var sh := HBoxContainer.new()
+	sh.add_theme_constant_override("separation", 2)
+	speed_glass.add_child(sh)
+	for i in SPEEDS.size():
+		var b := Glass.button("❚❚" if i == 0 else "%d×" % int(SPEEDS[i]), func(): speed_i = i, 40)
+		sh.add_child(b)
+		speed_btns.append(b)
+	safe.add_child(speed_glass)
+	# --- toast (latest life event)
+	toast_glass = Glass.make(16, 8)
+	toast_lbl = Label.new()
+	toast_lbl.add_theme_font_size_override("font_size", 12)
+	toast_glass.add_child(toast_lbl)
+	toast_glass.visible = false
+	toast_glass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	safe.add_child(toast_glass)
+	# --- floating tab bar
+	tab_glass = Glass.make(26, 6)
+	var th := HBoxContainer.new()
+	th.add_theme_constant_override("separation", 4)
+	tab_glass.add_child(th)
+	for def in [[_L("地图", "Map"), _toggle_map], [_L("村落", "Village"), _next_village], [_L("武器", "Weapon"), _cycle_held],
+			[_L("照片", "Photo"), func(): _open_dialog("photo_me")], [_L("素材", "Import"), func(): _open_dialog("asset")],
+			[_L("清理", "Clean"), func(): clean_memory(true)], [_L("保存", "Save"), save_game],
+			["＋", func(): cam.zoom = Vector2.ONE * clampf(cam.zoom.x + 1.0, 1.0, 6.0)], ["－", func(): cam.zoom = Vector2.ONE * clampf(cam.zoom.x - 1.0, 1.0, 6.0)]]:
+		th.add_child(Glass.button(def[0], def[1], 44 if def[0].length() <= 1 else 54))
+	safe.add_child(tab_glass)
+	# --- villager sheet
+	panel = Glass.make(24, 12)
+	panel.custom_minimum_size = Vector2(280, 0)
+	var pv := VBoxContainer.new()
+	panel.add_child(pv)
+	lbl_agent = Label.new()
+	lbl_agent.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_agent.custom_minimum_size = Vector2(256, 0)
+	lbl_agent.add_theme_font_size_override("font_size", 12)
+	pv.add_child(lbl_agent)
+	var ph := HBoxContainer.new()
+	ph.add_theme_constant_override("separation", 4)
+	pv.add_child(ph)
+	for def in [[_L("交谈", "Talk"), func(): _talk()], [_L("送食物", "Feed"), func(): society.gift_food(selected); _talk()],
+			[_L("跟随", "Follow"), func(): follow = not follow], [_L("照片", "Photo"), func(): _open_dialog("photo_npc")],
+			["✕", func(): selected = 0; follow = false]]:
+		ph.add_child(Glass.button(def[0], def[1], 40))
+	panel.visible = false
+	safe.add_child(panel)
 	map_rect = Control.new()
 	map_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	map_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	map_rect.draw.connect(_draw_map)
 	map_rect.visible = false
 	hud.add_child(map_rect)
+	hud.move_child(map_rect, 1)
+	get_viewport().size_changed.connect(_layout)
+	_layout()
 
 
-func _panel(pos: Vector2, theme: Theme) -> PanelContainer:
-	var p := PanelContainer.new()
-	p.theme = theme
-	p.position = pos
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.08, 0.14, 0.72)
-	sb.border_color = Color(1, 1, 1, 0.18)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(10)
-	sb.set_content_margin_all(10)
-	p.add_theme_stylebox_override("panel", sb)
-	hud.add_child(p)
-	return p
+static func _L(zh: String, en: String) -> String:
+	return zh if Loc.lang == "zh" else en
+
+
+## Keeps the HUD inside the device safe area (notch, Dynamic Island, home bar).
+func _layout() -> void:
+	var vs := get_viewport_rect().size
+	var win := Vector2(DisplayServer.window_get_size())
+	var sa := DisplayServer.get_display_safe_area()
+	var m := Vector4(10, 8, 10, 8)        # left, top, right, bottom in UI units
+	if OS.has_feature("mobile") and win.x > 0.0 and sa.size.x > 0:
+		var k := vs.x / win.x
+		m.x = maxf(m.x, sa.position.x * k + 6.0)
+		m.y = maxf(m.y, sa.position.y * k + 4.0)
+		m.z = maxf(m.z, (win.x - sa.end.x) * k + 6.0)
+		m.w = maxf(m.w, (win.y - sa.end.y) * k + 4.0)
+	safe.position = Vector2(m.x, m.y)
+	safe.size = Vector2(vs.x - m.x - m.z, vs.y - m.y - m.w)
+	_place.call_deferred()
+
+
+func _place() -> void:
+	var s := safe.size
+	speed_glass.position = Vector2(s.x - speed_glass.size.x, 0)
+	tab_glass.position = Vector2((s.x - tab_glass.size.x) * 0.5, s.y - tab_glass.size.y)
+	panel.position = Vector2(s.x - panel.size.x, 52)
+	toast_glass.position = Vector2((s.x - toast_glass.size.x) * 0.5, 0)
+
+
+func toast(text: String) -> void:
+	toast_lbl.text = text
+	toast_glass.visible = true
+	toast_glass.modulate.a = 1.0
+	toast_t = 4.0
+	toast_glass.reset_size()
+	_place.call_deferred()
+
+
+## One-tap memory cleanup: saves, then drops every chunk and cached texture
+## that is not needed for what is on screen. Also runs automatically on an iOS
+## memory warning or when the budget is nearly used up.
+func clean_memory(announce: bool = false) -> Dictionary:
+	var before := budget.used_mb()
+	var keep := {}
+	for k in chunk_nodes:
+		keep[k] = true
+	var dropped := world.purge(keep)
+	var tex := PixelArt.clear_caches()
+	fx.clear()
+	if society.log.size() > 12:
+		society.log = society.log.slice(-12)
+	_clean_cd = 30.0
+	var res := {"chunks": dropped, "textures": tex, "freed_mb": maxi(0, before - budget.used_mb()), "used_mb": budget.used_mb()}
+	if announce:
+		toast(_L("已清理：%d 个区块、%d 张贴图，释放约 %d MB（当前 %d MB）", "Cleaned %d chunks, %d textures, freed ~%d MB (now %d MB)") % [dropped, tex, res["freed_mb"], res["used_mb"]])
+	return res
 
 
 var _last_line := ""
@@ -299,17 +377,17 @@ func _talk() -> void:
 # --- touch: virtual stick in the lower-left part of the screen ----------------------
 func _in_joy_zone(p: Vector2) -> bool:
 	var vs := get_viewport_rect().size
-	return p.x < vs.x * 0.38 and p.y > vs.y * 0.42 and p.y < vs.y - 180.0
+	return p.x < vs.x * 0.36 and p.y > vs.y * 0.34 and p.y < vs.y - 64.0
 
 
 func _draw_joystick() -> void:
 	if joy_id < 0 and not DisplayServer.is_touchscreen_available():
 		return
 	var vs := get_viewport_rect().size
-	var base := joy_origin if joy_id >= 0 else Vector2(150, vs.y - 300)
-	joy_ctl.draw_circle(base, 62.0, Color(1, 1, 1, 0.10))
-	joy_ctl.draw_arc(base, 62.0, 0.0, TAU, 40, Color(1, 1, 1, 0.35), 2.0)
-	joy_ctl.draw_circle(base + joy_vec * 44.0, 26.0, Color(1, 1, 1, 0.35))
+	var base := (joy_origin if joy_id >= 0 else Vector2(safe.position.x + 70, vs.y - 130)) - safe.position
+	joy_ctl.draw_circle(base, 46.0, Color(1, 1, 1, 0.10))
+	joy_ctl.draw_arc(base, 46.0, 0.0, TAU, 40, Color(1, 1, 1, 0.35), 1.5)
+	joy_ctl.draw_circle(base + joy_vec * 32.0, 20.0, Color(1, 1, 1, 0.35))
 
 
 func _cycle_held() -> void:
@@ -428,7 +506,17 @@ func _next_village() -> void:
 
 func _unhandled_input(ev: InputEvent) -> void:
 	if ev is InputEventScreenTouch:
-		if ev.pressed and joy_id < 0 and _in_joy_zone(ev.position):
+		if ev.pressed:
+			pinch[ev.index] = ev.position
+		else:
+			pinch.erase(ev.index)
+		if pinch.size() == 2:
+			var pts: Array = pinch.values()
+			pinch_d0 = maxf(1.0, pts[0].distance_to(pts[1]))
+			pinch_z0 = cam.zoom.x
+			joy_id = -1
+			joy_vec = Vector2.ZERO
+		if ev.pressed and joy_id < 0 and pinch.size() == 1 and _in_joy_zone(ev.position):
 			joy_id = ev.index
 			joy_origin = ev.position
 			joy_vec = Vector2.ZERO
@@ -438,8 +526,14 @@ func _unhandled_input(ev: InputEvent) -> void:
 		joy_ctl.queue_redraw()
 		return
 	if ev is InputEventScreenDrag:
+		if pinch.has(ev.index):
+			pinch[ev.index] = ev.position
+		if pinch.size() == 2:
+			var pts: Array = pinch.values()
+			cam.zoom = Vector2.ONE * clampf(snappedf(pinch_z0 * pts[0].distance_to(pts[1]) / pinch_d0, 0.5), 1.0, 6.0)
+			return
 		if ev.index == joy_id:
-			joy_vec = ((ev.position - joy_origin) / 56.0).limit_length(1.0)
+			joy_vec = ((ev.position - joy_origin) / 40.0).limit_length(1.0)
 			joy_ctl.queue_redraw()
 		return
 	if ev is InputEventMouseButton and ev.device == InputEvent.DEVICE_ID_EMULATION and (joy_id >= 0 or _in_joy_zone(ev.position)):
@@ -527,9 +621,17 @@ func _process(delta: float) -> void:
 	_update_hud()
 	if show_map:
 		map_rect.queue_redraw()
+	if toast_t > 0.0:
+		toast_t -= delta
+		toast_glass.modulate.a = clampf(toast_t, 0.0, 1.0)
+		if toast_t <= 0.0:
+			toast_glass.visible = false
+	_clean_cd = maxf(0.0, _clean_cd - delta)
 	_maint += delta
 	if _maint > 2.0:
 		_maint = 0.0
+		if auto_clean and _clean_cd <= 0.0 and budget.pressure() > 0.9:
+			clean_memory(true)
 		world.survey(Vector2i(floori(player_pos.x / MP.CHUNK_PX), floori(player_pos.y / MP.CHUNK_PX)), 16)
 		world.maintain()
 	_autosave += delta
@@ -674,15 +776,24 @@ func _update_hud() -> void:
 			villages += 1
 			houses += s.count_type("house", true)
 	var h := world.hour()
-	lbl_stats.text = "第 %d 年 Year %d · %02d:%02d\n人口 Pop %d · 出生 Births %d · 死亡 Deaths %d · 伴侣 Couples %d\n村落 Villages %d · 房屋 Houses %d · 建筑 Built %d" % [
-		world.year() + 1, world.year() + 1, int(h), int(fmod(h, 1.0) * 60.0), society.agents.size(), st["births"], st["deaths"], st["pairs"], villages, houses, st["buildings"]]
-	lbl_mem.text = "内存 Memory: 设备 device %d MB · 预算 budget %d MB%s · 已用 used %d MB\n区块 Chunks: 缓存 cached %d/%d · 生成 generated %d · 回收 evicted %d · 地图 mapped %d" % [
-		budget.physical_mb, budget.budget_mb, " (手动 manual)" if budget.override_mb > 0 else " (自动 auto)", budget.used_mb(),
-		world.cache.size(), budget.max_chunks, world.generated, world.evicted, world.surveyed]
-	var lines: Array = []
-	for e in society.log.slice(-6):
-		lines.append("· " + str(e["text"]))
-	lbl_log.text = "\n".join(lines)
+	status_btn.text = _L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people") % [world.year() + 1, int(h), int(fmod(h, 1.0) * 60.0), society.agents.size()]
+	for i in speed_btns.size():
+		speed_btns[i].modulate = Color(1, 1, 1, 1.0) if i == speed_i else Color(1, 1, 1, 0.55)
+	if society.log.size() > 0 and society.log[-1]["t"] != _log_seen:
+		_log_seen = society.log[-1]["t"]
+		toast(str(society.log[-1]["text"]))
+	if details.visible:
+		lbl_stats.text = _L("出生 %d · 死亡 %d · 伴侣 %d\n村落 %d · 房屋 %d · 建筑 %d", "Births %d · Deaths %d · Couples %d\nVillages %d · Houses %d · Built %d") % [
+			st["births"], st["deaths"], st["pairs"], villages, houses, st["buildings"]]
+		lbl_mem.text = _L("内存：设备 %d MB · 预算 %d MB%s · 已用 %d MB\n区块：缓存 %d/%d · 生成 %d · 回收 %d · 地图 %d",
+			"Memory: device %d MB · budget %d MB%s · used %d MB\nChunks: cached %d/%d · generated %d · evicted %d · mapped %d") % [
+			budget.physical_mb, budget.budget_mb, _L("（手动）", " (manual)") if budget.override_mb > 0 else _L("（自动）", " (auto)"), budget.used_mb(),
+			world.cache.size(), budget.max_chunks, world.generated, world.evicted, world.surveyed]
+		auto_btn.text = _L("自动清理：开", "Auto clean: on") if auto_clean else _L("自动清理：关", "Auto clean: off")
+		var lines: Array = []
+		for e in society.log.slice(-5):
+			lines.append("· " + str(e["text"]))
+		lbl_log.text = "\n".join(lines)
 	var a: Agent = society.agents.get(selected)
 	panel.visible = a != null
 	if a == null:
@@ -692,23 +803,26 @@ func _update_hud() -> void:
 	var s: Settlement = society.settlements[a.sid]
 	var now := world.time
 	var txt := "%s  %s %d\n%s · %s\n" % [a.full_name(), "♀" if a.female else "♂", int(a.age(now)), MP.loc(s.name), society.job_label(a)]
-	txt += "心情 Mood %d%% · 饥饿 Hunger %d%% · 精力 Energy %d%%\n" % [int(a.mood() * 100), int(a.hunger * 100), int(a.energy * 100)]
+	txt += _L("心情 %d%% · 饥饿 %d%% · 精力 %d%%\n", "Mood %d%% · Hunger %d%% · Energy %d%%\n") % [int(a.mood() * 100), int(a.hunger * 100), int(a.energy * 100)]
 	if a.partner != 0 and society.agents.has(a.partner):
 		txt += "♥ %s\n" % society.agents[a.partner].full_name()
 	if a.pregnant_due > 0.0:
-		txt += "怀孕中 Expecting\n"
+		txt += _L("怀孕中\n", "Expecting\n")
 	var kids := 0
 	for cid in a.children:
 		if society.agents.has(cid):
 			kids += 1
 	if kids > 0:
-		txt += "子女 Children: %d\n" % kids
+		txt += _L("子女 %d 人\n", "Children: %d\n") % kids
 	if _last_line != "":
 		txt += "\n「%s」\n" % _last_line
 	for th in a.thoughts.slice(-3):
 		txt += "\n· " + (Society.tx(str(th["k"])) % th["a"] if th["a"].size() > 0 else Society.tx(str(th["k"])))
-	txt += "\n\n%s: 粮 food %d · 木 wood %d · 石 stone %d" % [MP.loc(s.name), int(s.stock["food"]), int(s.stock["wood"]), int(s.stock["stone"])]
-	lbl_agent.text = txt
+	txt += _L("\n\n%s：粮 %d · 木 %d · 石 %d", "\n\n%s: food %d · wood %d · stone %d") % [MP.loc(s.name), int(s.stock["food"]), int(s.stock["wood"]), int(s.stock["stone"])]
+	if lbl_agent.text != txt:
+		lbl_agent.text = txt
+		panel.reset_size()
+		_place.call_deferred()
 
 
 func _draw_map() -> void:
@@ -752,12 +866,17 @@ func save_game() -> void:
 	var data := {"world": world.to_dict(), "society": society.to_dict(), "px": player_pos.x, "py": player_pos.y, "player_look": player_look}
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 	SaveService.atomic_write(SAVE_DIR.path_join("index.json"), JSON.stringify(data).to_utf8_buffer())
-	society.log.append({"t": world.time, "text": "已保存 Saved"})
+	toast(_L("已保存", "Saved"))
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and world != null:
-		save_game()
+	if world == null:
+		return
+	match what:
+		NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_GO_BACK_REQUEST:
+			save_game()          # iOS may kill a backgrounded app at any time
+		NOTIFICATION_OS_MEMORY_WARNING:
+			clean_memory(true)   # the system asked for memory back
 
 
 class TestCaseless:

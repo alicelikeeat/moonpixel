@@ -385,6 +385,14 @@ static func character(look: Dictionary, dir: String, frame: int, held: String, c
 	return tex
 
 
+## Frees cached character textures (they are rebuilt on demand).
+static func clear_caches() -> int:
+	var n := _chars.size() + _people.size()
+	_chars.clear()
+	_people.clear()
+	return n
+
+
 static func facing_dir(f: Vector2) -> String:
 	if absf(f.x) > absf(f.y):
 		return "side"
