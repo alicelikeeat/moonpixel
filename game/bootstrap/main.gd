@@ -36,7 +36,8 @@ func _boot_log() -> void:
 func _ready() -> void:
 	Loc.detect()
 	_boot_log()
-	var args := OS.get_cmdline_user_args()
+	# on iOS (simctl launch) arguments arrive as plain engine arguments
+	var args := OS.get_cmdline_user_args() + OS.get_cmdline_args()
 	var shot := ""
 	var after := 6.0
 	var speed := 1
