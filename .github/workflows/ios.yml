@@ -52,6 +52,8 @@ jobs:
           test -n "$APP"
           mkdir -p Payload
           cp -R "$APP" Payload/
+          ls -la "$APP" | head -20
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleExecutable" -c "Print :MinimumOSVersion" "$APP/Info.plist"
           zip -qry MoonPixel-unsigned.ipa Payload
           ls -la MoonPixel-unsigned.ipa
       - uses: actions/upload-artifact@v4
@@ -76,13 +78,14 @@ jobs:
           set +e
           xcodebuild -project build/ios/MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build | tail -15
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
+          echo "===== simulator build ====="; grep -E "error:|warning: .*simulator|BUILD (SUCCEEDED|FAILED)|ld: " simbuild.log | sort -u | head -30; tail -5 simbuild.log
           APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
-          echo "simulator app: $APP"
+          echo "simulator app: $APP"; ls -la "$APP" | head -20
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
           echo "device: $UDID"
           xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl launch "$UDID" org.moonpixel.game
           sleep 25
