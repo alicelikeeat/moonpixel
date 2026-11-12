@@ -202,9 +202,12 @@ final class GameModel: ObservableObject {
         guard let w = world, let sc = scene else { return }
         let R = OpenWorld.region
         let pc = TilePos(Int((sc.player.x / 512).rounded(.down)), Int((sc.player.y / 512).rounded(.down)))
-        var ext = 24
-        for k in w.regions.keys {
-            ext = max(ext, abs(k.x * R + R / 2 - pc.x) + R / 2, abs(k.y * R + R / 2 - pc.y) + R / 2)
+        // fit the map to what has actually been surveyed around the player
+        var ext = 10
+        for (k, r) in w.regions {
+            for i in 0..<r.count where r[i] != 0 {
+                ext = max(ext, abs(k.x * R + i % R - pc.x) + 2, abs(k.y * R + i / R - pc.y) + 2)
+            }
         }
         ext = min(ext, 160)
         let side = ext * 2 + 1

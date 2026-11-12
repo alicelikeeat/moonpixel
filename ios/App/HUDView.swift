@@ -16,7 +16,7 @@ struct HUDView: View {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 8) {
                         Button { withAnimation(.snappy) { model.showDetails.toggle(); model.refreshHUD() } } label: {
-                            Text(model.status).font(.system(size: 14, weight: .semibold, design: .rounded)).monospacedDigit()
+                            Text(model.status).font(.system(size: 14, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).fixedSize()
                                 .padding(.horizontal, 16).padding(.vertical, 10)
                         }
                         .buttonStyle(.plain).glass(Capsule())
@@ -103,7 +103,8 @@ struct HUDView: View {
     private func pill(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: icon).font(.system(size: 12, weight: .medium, design: .rounded))
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .lineLimit(1).fixedSize()
+                .padding(.horizontal, 11).padding(.vertical, 8)
                 .background(Color.white.opacity(0.14), in: Capsule())
         }
         .buttonStyle(.plain)
@@ -124,6 +125,7 @@ struct HUDView: View {
                 meter(L("精力", "Energy"), info.energy, .cyan)
             }
             Text("「\(info.line)」").font(.system(size: 13, weight: .medium, design: .rounded)).padding(.vertical, 2)
+                .fixedSize(horizontal: false, vertical: true)
             ForEach(info.family.prefix(3), id: \.self) { Text($0).font(.system(size: 11, design: .rounded)) }
             if info.pregnant { Text(L("怀孕中", "Expecting")).font(.system(size: 11, design: .rounded)).foregroundStyle(.pink) }
             ForEach(info.thoughts, id: \.self) { Text("· " + $0).font(.system(size: 11, design: .rounded)).opacity(0.8) }
@@ -131,11 +133,13 @@ struct HUDView: View {
             HStack(spacing: 6) {
                 pill(L("交谈", "Talk"), "bubble.left.fill") { model.talk() }
                 pill(L("送食物", "Feed"), "fork.knife") { model.feed() }
-                pill(L("跟随", "Follow"), "figure.walk") { model.following.toggle() }
-                pill(L("照片", "Photo"), "camera.fill") { model.photoTarget = model.selectedID }
+            }
+            HStack(spacing: 6) {
+                pill(model.following ? L("停止跟随", "Unfollow") : L("跟随", "Follow"), "figure.walk") { model.following.toggle() }
+                pill(L("用照片换装", "Photo look"), "camera.fill") { model.photoTarget = model.selectedID }
             }
         }
-        .padding(14).frame(width: 300, alignment: .leading)
+        .padding(14).frame(width: 310, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .transition(.move(edge: .trailing).combined(with: .opacity))
     }

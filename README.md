@@ -5,6 +5,21 @@
 
 > 世界由游戏生成，但世界的未来由居民和你决定。
 
+## iOS 原生版（当前主线）
+
+`ios/` 目录是用 Swift 重写的原生版本：`MoonPixelCore`（纯 Swift 逻辑包，可在 Linux / macOS 上 `swift test`）+ SpriteKit 渲染 + SwiftUI 界面，
+在 iOS 26 上使用系统原生 Liquid Glass，更低版本回退为毛玻璃材质。每次推送由 GitHub Actions 打出**未签名 ipa** 并发布到
+[Releases](https://github.com/alicelikeeat/moonpixel/releases)，同时在 iOS 模拟器里启动并截图（截图附在同一个 Release 下）。
+
+```bash
+cd ios
+swift test -c release -Xswiftc -enable-testing     # 核心逻辑测试（18 个）
+brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 macOS）
+```
+
+未签名 ipa 需要自行签名后才能安装；目前只在模拟器里验证过，没有真机验证。
+仓库根目录的 Godot 工程是此前的桌面原型，功能相同但不再是主线。
+
 ## 现在能做什么（已实现并有测试）
 
 | 模块 | 状态 |
