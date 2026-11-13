@@ -251,6 +251,8 @@ public final class OpenWorld {
     /// Hard cap for the saved map. Default 5 GB.
     public var diskLimitBytes = 5 * 1024 * 1024 * 1024
     public private(set) var prunedFiles = 0
+    /// Chunk files that could not be written (disk full, folder gone). A save that raises this has failed.
+    public private(set) var writeFailures = 0
     var natural: Chunk?
     var naturalKey: Int64 = .min
     var clock = 0
@@ -330,7 +332,7 @@ public final class OpenWorld {
     func write(_ c: Chunk) -> Bool {
         guard let url = path(c.cx, c.cy) else { return !c.modified }
         let data = c.encoded()
-        do { try data.write(to: url, options: .atomic) } catch { return false }
+        do { try data.write(to: url, options: .atomic) } catch { writeFailures += 1; return false }
         c.dirty = false
         saved.insert(c.key)
         diskBytes += data.count - (fileSizes[c.key] ?? 0)

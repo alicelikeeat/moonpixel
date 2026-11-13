@@ -1,102 +1,48 @@
 # MoonPixel
 
-2D 像素开放世界 · 自主 NPC 社会 · 无限地图 · 离线优先 · MIT 开源
-*A 2D pixel open world where 100+ villagers live their own lives on a map that never ends.*
+iOS 原生的 2D 像素开放世界：自主 NPC 社会、三国轮回、无限地图、离线运行，MIT 开源。
+*A native iOS pixel world where three nations of autonomous villagers rise, fight, unite and break apart again.*
 
-> 世界由游戏生成，但世界的未来由居民和你决定。
+技术栈只有一套：**Swift 核心逻辑（`MoonPixelCore`）+ SpriteKit 渲染 + SwiftUI 界面**。iOS 26 使用系统 Liquid Glass，更低版本回退为毛玻璃材质。
 
-## iOS 原生版（当前主线）
-
-`ios/` 目录是用 Swift 重写的原生版本：`MoonPixelCore`（纯 Swift 逻辑包，可在 Linux / macOS 上 `swift test`）+ SpriteKit 渲染 + SwiftUI 界面，
-在 iOS 26 上使用系统原生 Liquid Glass，更低版本回退为毛玻璃材质。每次推送由 GitHub Actions 打出**未签名 ipa** 并发布到
-[Releases](https://github.com/alicelikeeat/moonpixel/releases)，同时在 iOS 模拟器里启动并截图（截图附在同一个 Release 下）。
+## 构建与测试
 
 ```bash
 cd ios
-swift test -c release -Xswiftc -enable-testing     # 核心逻辑测试（27 个）
+swift test -c release -Xswiftc -enable-testing     # 核心逻辑测试，Linux / macOS 均可
 brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 macOS）
 ```
 
-未签名 ipa 需要自行签名后才能安装；目前只在模拟器里验证过，没有真机验证。
-仓库根目录的 Godot 工程是此前的桌面原型，功能相同但不再是主线。
+每次推送由 GitHub Actions（`.github/workflows/ios.yml`）运行核心测试、编译真机版本、打出**未签名 ipa** 并发布到
+[Releases](https://github.com/alicelikeeat/moonpixel/releases)，随后在 iOS 模拟器里启动、截图并运行界面测试，截图附在同一个 Release 下。
+未签名 ipa 需要自行签名后才能安装。
 
-## 现在能做什么（已实现并有测试）
+## 目录
 
-| 模块 | 状态 |
+| 路径 | 内容 |
 | --- | --- |
-| **自主 NPC 社会**：开局 120 名村民分布在 4 个村落，各自根据饥饿、精力、社交需求和职业做决定 | ✅ 可运行、有自动化测试 |
-| 采集 / 伐木 / 采石 / 种田 / 运回仓库，逐格建造房屋、农田、水井、路灯、道路 | ✅ |
-| 交友、争吵、结为伴侣、怀孕生育（特质与外貌遗传）、衰老、因年老 / 疾病 / 饥饿死亡并留下墓碑 | ✅ |
-| 村子拥挤后自发派出开拓队建立新村落；人口低于 100 时有流浪者加入 | ✅ |
-| 玩家互动：点击任意村民查看身份、心情、家庭、想法，交谈、赠送食物、跟随 | ✅ |
-| **无限地图**：任意坐标（含负坐标）按需确定性生成，不存在世界边界 | ✅ |
-| **内存容量查询**：启动时读取设备内存，自动推导区块缓存和 NPC 上限，也可手动指定预算 | ✅ |
-| 超出预算按最近最少使用回收区块；被修改的区块先落盘，不丢数据 | ✅ |
-| 地图自动生长：从每个村落和玩家向外勘测，地图界面实时显示 | ✅ |
-| **高辨识度角色**：32×40 像素，头发 / 五官 / 双手 / 躯干 / 腿 / 鞋 / 手持物分部位绘制并带描边；剑、弓、法杖、斧、镐、锄、锤等清晰可见 | ✅ |
-| 可见的武器与魔法：挥砍弧光、飞行的箭、法杖光球与环绕火花、魔法弹与爆裂光环（目前只有视觉效果，不造成伤害） | ✅ |
-| **照片生成角色**：导入一张人像，本地分析肤色 / 发色 / 衣着颜色并把像素化的脸画到角色头上；可用于玩家或任意村民 | ✅ |
-| **一句话创建世界**：输入“冰雪海岛，200 人，工业时代”这样的描述，本机分析出气候、村庄数、人口、起始时代、名称和种子后直接生成（iOS 原生版） | ✅ |
-| **GIF / 视频角色**：导入 GIF 或视频，逐帧抠像并像素化成动画角色，不使用骨骼（iOS 原生版，仅在模拟器验证） | ✅ |
-| **素材导入**：任意图片 → 自动去背景、降色、缩小为像素素材，可摆放到世界并随存档保存 | ✅ |
-| **iOS 风格玻璃界面**：着色器实现的毛玻璃胶囊 / 卡片（背景模糊、边缘折射、高光描边），悬浮底栏、状态胶囊、村民卡片；避开刘海 / 灵动岛安全区；手机上按 pt 缩放，触控目标约 44pt | ✅（桌面截图验证，真机未验证） |
-| **一键清理内存**：保存后释放屏幕外的区块和缓存贴图，显示释放量；系统内存警告或接近预算时自动执行 | ✅ |
-| 触屏：虚拟摇杆、双指捏合缩放、点按反馈震动；App 退到后台时自动保存 | ✅（真机未验证） |
-| 程序化像素美术（无任何二进制素材）、昼夜、中英双语界面（跟随系统语言） | ✅ |
+| `ios/Sources/MoonPixelCore` | 纯 Swift 逻辑：世界生成、NPC 社会、三国（`Realm.swift`）、玩家行动（`Player.swift`）、世界法则与容量策略（`Laws.swift`）、像素美术与照片处理 |
+| `ios/App` | SpriteKit 场景与 SwiftUI 界面 |
+| `ios/Tests`、`ios/UITests` | 核心测试与模拟器界面测试 |
+| `content/` + `tools/gen_swift_content.py` | 地块与群系数据（JSON），生成 `ContentData.swift` |
+| `docs/` | [迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)、[测试结果与未验证事项](docs/TESTING.md) |
 
-全部逻辑在本地运行，使用带种子的规则与效用决策，不依赖联网或云端大模型。
+## 功能
 
-## 运行
+- **自主 NPC 社会**：村民按饥饿、精力、社交和职业自己决定做什么；采集、建造、成家、生育、衰老、死亡；每户一栋房；自动研究科技直到人工智能。
+- **三国轮回**：世界始终有三个国家，各有领土、居民、城镇、资源、军队、科技、领袖和国家认同。
+  - 人口压力同时看粮食、住房、岗位和土地；压力推高扩张、征兵和宣战概率，超过硬上限并持续一段时间会触发战争周期。
+  - 伤亡、缺粮、损毁和战争时长累积疲劳；疲劳或全局烈度到达硬阈值强制休战。开战与休战阈值不同，并有最短持续时间和冷却期。
+  - 一国过强时另外两国结盟，强国承担补给、治理和占领区不满的成本。
+  - 可以通过占领和归附偶发统一；统一时代有贸易、科技交流收益，也有继承争议和地方独立；到期后按居民认同、地理和驻军重新划分为三个实际拥有领土的国家。
+  - 七种随机事件：丰收、歉收、将领崛起、领袖去世、技术突破、城镇倒戈、联盟破裂，均有触发条件、持续时间、冷却和可复现的随机种子。
+- **玩家**：默认是自由旅人，可加入或退出任一国家。可以捐赠物资、参战（命中、伤害、冷却、死亡、阵营判定）、修建或拆毁道路、桥梁和补给站、接纳难民，并在三国面板查看疆域、关系、人口、压力和疲劳。
+- **世界法则**（全屏玻璃面板，一键执行、永久删除）：灭霸、湮灭、创世纪、归墟。删除计划写入日志后分批执行，中断后下次启动会继续完成。
+- **存储**：区分缓存清理与永久删除；三种容量策略（缓存优先、自动湮灭、区域轮回）；按区块、人物、图片、头像、索引、历史统计占用。
+- **多世界**、**一句话创建世界**、**照片 / GIF / 视频生成像素角色**（Apple Vision 本机识别）、**素材导入**、**内存预算与一键清理**。
 
-需要 [Godot 4.5](https://godotengine.org/download)（标准版即可，无需 .NET）。
+哪些内容经过了验证、哪些没有，见 [docs/TESTING.md](docs/TESTING.md)。目前只在 CI 的 iOS 模拟器里运行过，没有真机验证。
 
-```bash
-godot --path . --import      # 首次导入
-godot --path .               # 启动
-```
+## 许可
 
-启动界面会显示检测到的设备内存与自动预算，可在下拉框中改为手动值。
-
-| 操作 | 按键 |
-| --- | --- |
-| 移动 / 快跑 | WASD 或方向键 / Shift |
-| 选中村民并交谈 | 鼠标左键 |
-| 时间流速 暂停 / 1× / 4× / 16× / 64× | 空格、1–4 或界面按钮 |
-| 攻击 / 施法（未选中村民时） | 鼠标左键点击地面 |
-| 切换手持：空手 / 剑 / 弓 / 法杖 | Q |
-| 照片生成角色、导入素材 | 界面按钮（放置素材：左键放下，右键取消或删除） |
-| 地图 / 下一个村落 / 保存 | M / N / F5 |
-| 缩放 | 鼠标滚轮 |
-
-一个游戏年 = 一个昼夜循环（1× 速度下 20 分钟）。想快速看到出生和死亡，把速度调到 16× 或 64×。
-
-## 测试与工具
-
-```bash
-export GODOT=/path/to/godot
-tools/gd.sh 600 tests/run_tests.gd                       # 全部测试
-tools/gd.sh 600 tests/run_tests.gd -- --filter=society   # 单个套件
-tools/gd.sh 600 tools/society_sim.gd -- --years=20       # 无界面快进并输出逐年人口普查
-```
-
-详见 [docs/testing/testing.md](docs/testing/testing.md)。
-
-## 文档
-
-- [架构总览](docs/architecture/overview.md)
-- [NPC 社会模拟](docs/gameplay/society.md)
-- [无限地图与内存预算](docs/architecture/open-world.md)
-- [角色美术与照片 / 素材导入](docs/gameplay/characters-and-assets.md)
-- [存档格式](docs/formats/save.md)
-- [已知限制与路线图](docs/known-limitations.md)
-- [贡献指南](CONTRIBUTING.md) · [变更记录](CHANGELOG.md) · [第三方与素材授权](THIRD_PARTY.md)
-
-## 诚实的范围说明
-
-V1.0 总任务书中的其余模块（战斗、Boss、玩家建造工具、物品制作、任务、固定尺寸世界生成器等）
-的代码已在仓库中，其中固定尺寸世界生成有测试，其余**能编译但尚未接入可玩场景、也没有测试**，
-目前不应视为已交付。Windows / iOS 导出尚未验证。详见 [已知限制](docs/known-limitations.md)。
-
-## License
-
-代码采用 [MIT](LICENSE)。本仓库不包含第三方美术或音频素材。
+MIT，见 [LICENSE](LICENSE)。第三方组件见 [THIRD_PARTY.md](THIRD_PARTY.md)。

@@ -36,7 +36,12 @@ final class GameScene: SKScene {
     private var pinching = false
     static let maxCharacters = 50
 
-    static let jobTool = ["woodcutter": "axe", "miner": "pick", "farmer": "hoe", "builder": "hammer", "forager": "basket"]
+    static let jobTool = ["woodcutter": "axe", "miner": "pick", "farmer": "hoe", "builder": "hammer", "forager": "basket", "soldier": "sword"]
+    var flashOnAppear = false
+    private var townLabels: [Int: SKLabelNode] = [:]
+    private var nationColors: [Int: UIColor] = [:]
+    private var effects = 0
+    static let maxEffects = 120
 
     override func didMove(to view: SKView) {
         backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.10, alpha: 1)
@@ -82,8 +87,17 @@ final class GameScene: SKScene {
         guard let model = model, let world = model.world, let society = model.society else { return }
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
-        var sim = dt * GameModel.speeds[model.speedIndex]
-        while sim > 0 { let step = min(sim, 1.0); society.tick(step); sim -= step }
+        if model.lawBusy {
+            model.stepLaw()                      // a world law is being carried out: the simulation waits for it
+        } else {
+            var sim = dt * GameModel.speeds[model.speedIndex]
+            while sim > 0 { let step = min(sim, 1.0); society.tick(step); sim -= step }
+            let threat = society.playerThreat(at: player, dt: dt)
+            playerNode.color = .red
+            playerNode.colorBlendFactor = threat.attackers > 0 ? 0.35 : 0
+            if threat.died { model.playerDied() }
+        }
+        if flashOnAppear { flashOnAppear = false; genesisFX() }
 
         // traveller
         attackT = max(0, attackT - dt)
@@ -110,7 +124,7 @@ final class GameScene: SKScene {
         updateActors(world, society, model)
 
         hudAcc += dt
-        if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD() }
+        if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }
         maintAcc += dt
         if maintAcc > 2 {
             maintAcc = 0
@@ -198,7 +212,9 @@ final class GameScene: SKScene {
                 bar.name = "bar"; bar.anchorPoint = CGPoint(x: 0, y: 0.5); bar.position = CGPoint(x: -7, y: 42); bar.zPosition = 1
                 let carry = SKSpriteNode(color: .white, size: CGSize(width: 5, height: 5))
                 carry.name = "carry"; carry.position = CGPoint(x: -11, y: 14); carry.zPosition = 1
-                n.addChild(bar); n.addChild(carry)
+                let flag = SKSpriteNode(color: .white, size: CGSize(width: 5, height: 4))
+                flag.name = "flag"; flag.position = CGPoint(x: 9, y: 40); flag.zPosition = 1; flag.isHidden = true
+                n.addChild(bar); n.addChild(carry); n.addChild(flag)
                 addChild(n)
                 agentNodes[a.id] = n
                 return n
@@ -225,6 +241,10 @@ final class GameScene: SKScene {
             if let bar = node.childNode(withName: "bar") as? SKSpriteNode {
                 bar.isHidden = !working
                 if working, let t = a.task { bar.xScale = CGFloat(min(1, max(0.05, t.t / t.dur))) * node.xScale; bar.position.x = -7 * node.xScale }
+            }
+            if let flag = node.childNode(withName: "flag") as? SKSpriteNode {
+                flag.isHidden = a.legion == nil
+                if a.legion != nil { flag.color = nationColor(society.side(of: a), society) }
             }
             if let carry = node.childNode(withName: "carry") as? SKSpriteNode {
                 carry.isHidden = a.carryN <= 0
@@ -283,9 +303,14 @@ final class GameScene: SKScene {
 
     // MARK: weapons and magic (visual)
     func attack(toward target: Vec2) {
-        guard attackT <= 0, let model = model else { return }
+        guard attackT <= 0, let model = model, !model.lawBusy else { return }
         var dir = (target - player).normalized
         if dir == .zero { dir = facing }
+        // the core decides hits, damage, cooldown, deaths and whose side everyone is on
+        let strike = model.society.playerStrike(from: player, dir: dir, weapon: GameModel.weapons[model.weaponIndex], clock: CACurrentMediaTime())
+        if strike.onCooldown { return }
+        model.struck(strike)
+        for h in strike.hits.prefix(6) { hitFX(at: CGPoint(x: h.pos.x, y: -(h.pos.y - 20)), damage: h.damage, dead: h.dead) }
         facing = dir
         attackT = 0.3
         let origin = CGPoint(x: player.x, y: -(player.y - 14))
@@ -328,6 +353,98 @@ final class GameScene: SKScene {
             let a = CGFloat(n) * .pi / 4
             s.run(.sequence([.group([.moveBy(x: cos(a) * 30, y: sin(a) * 30, duration: 0.5), .fadeOut(withDuration: 0.5)]), .removeFromParent()]))
         }
+    }
+
+    // MARK: nations and world-law effects
+    private func nationColor(_ id: Int, _ society: Society) -> UIColor {
+        if let c = nationColors[id] { return c }
+        let c = society.realm.nation(id).map { UIColor(hex: $0.color) } ?? .white
+        nationColors[id] = c
+        return c
+    }
+
+    private func updateTownLabels(_ society: Society) {
+        var seen = Set<Int>()
+        for s in society.settlements.values where !s.abandoned {
+            let c = s.center.center
+            if abs(c.x - player.x) > 900 || abs(c.y - player.y) > 600 { continue }
+            seen.insert(s.id)
+            let label = townLabels[s.id] ?? {
+                let l = SKLabelNode(fontNamed: "AvenirNext-Bold")
+                l.fontSize = 9; l.zPosition = 690; l.verticalAlignmentMode = .center
+                addChild(l)
+                townLabels[s.id] = l
+                return l
+            }()
+            let nation = society.realm.nation(s.nation ?? 0)
+            label.text = s.name(zh: GameModel.zh) + " · " + (nation?.name(zh: GameModel.zh) ?? "")
+            label.fontColor = nationColor(s.nation ?? 0, society)
+            label.position = CGPoint(x: c.x, y: -(c.y - 44))
+        }
+        for (id, l) in townLabels where !seen.contains(id) { l.removeFromParent(); townLabels[id] = nil }
+    }
+
+    func markAllDirty() { for k in chunkNodes.keys { dirty.insert(k) } }
+
+    /// A few pixels that drift up and fade. Capped, so mass deletions never flood the scene.
+    private func dust(at p: CGPoint, color: UIColor, count: Int = 9) {
+        for n in 0..<count {
+            if effects >= GameScene.maxEffects { return }
+            effects += 1
+            let s = SKSpriteNode(color: color, size: CGSize(width: 2, height: 2))
+            s.position = CGPoint(x: p.x + CGFloat(n % 3) * 4 - 4, y: p.y + CGFloat(n / 3) * 6)
+            s.zPosition = 810
+            addChild(s)
+            let dx = CGFloat((n * 37) % 23) - 11, dy = CGFloat(14 + (n * 53) % 19)
+            s.run(.sequence([.group([.moveBy(x: dx, y: dy, duration: 0.9), .fadeOut(withDuration: 0.9)]), .run { [weak self] in self?.effects -= 1 }, .removeFromParent()]))
+        }
+    }
+
+    private func hitFX(at p: CGPoint, damage: Double, dead: Bool) {
+        if effects < GameScene.maxEffects {
+            effects += 1
+            let l = SKLabelNode(fontNamed: "AvenirNext-Bold")
+            l.text = "-\(Int(damage))"; l.fontSize = 9; l.fontColor = UIColor(red: 1, green: 0.35, blue: 0.3, alpha: 1); l.position = p; l.zPosition = 820
+            addChild(l)
+            l.run(.sequence([.group([.moveBy(x: 0, y: 16, duration: 0.6), .fadeOut(withDuration: 0.6)]), .run { [weak self] in self?.effects -= 1 }, .removeFromParent()]))
+        }
+        if dead { dust(at: p, color: UIColor(white: 0.85, alpha: 1)) }
+    }
+
+    /// Effects only for what is on screen: pixel dust for people, a dissolving veil for a region.
+    func lawFX(_ plan: LawPlan) {
+        var shown = 0
+        for id in plan.agents {
+            guard shown < 60, let node = agentNodes[id] else { continue }
+            shown += 1
+            dust(at: CGPoint(x: node.position.x, y: node.position.y + 16), color: UIColor(red: 0.75, green: 0.6, blue: 0.9, alpha: 1), count: 12)
+        }
+        if plan.region.count == 4 {
+            let x0 = CGFloat(plan.region[0] * 512), y0 = CGFloat(plan.region[1] * 512)
+            let w = CGFloat((plan.region[2] - plan.region[0] + 1) * 512), h = CGFloat((plan.region[3] - plan.region[1] + 1) * 512)
+            let veil = SKSpriteNode(color: UIColor(red: 0.7, green: 0.95, blue: 1, alpha: 1), size: CGSize(width: w, height: h))
+            veil.anchorPoint = CGPoint(x: 0, y: 1)
+            veil.position = CGPoint(x: x0, y: -y0)
+            veil.zPosition = 805; veil.alpha = 0.75
+            addChild(veil)
+            veil.run(.sequence([.fadeOut(withDuration: 1.6), .removeFromParent()]))
+            if abs(Double(x0 + w / 2) - player.x) < 1200 && abs(Double(y0 + h / 2) - player.y) < 1200 {
+                for n in 0..<10 { dust(at: CGPoint(x: x0 + w * CGFloat(n) / 10, y: -y0 - h / 2), color: UIColor(red: 0.6, green: 0.9, blue: 1, alpha: 1), count: 6) }
+            }
+        }
+    }
+
+    /// A new world: white light that clears, and a ring spreading from the traveller.
+    func genesisFX() {
+        let flash = SKSpriteNode(color: .white, size: CGSize(width: 4000, height: 4000))
+        flash.zPosition = 950
+        cam.addChild(flash)
+        flash.run(.sequence([.fadeOut(withDuration: 1.4), .removeFromParent()]))
+        let ring = SKShapeNode(circleOfRadius: 40)
+        ring.strokeColor = UIColor(red: 1, green: 0.85, blue: 0.5, alpha: 1); ring.lineWidth = 3; ring.fillColor = .clear
+        ring.position = pt(player); ring.zPosition = 940; ring.setScale(0.1)
+        addChild(ring)
+        ring.run(.sequence([.group([.scale(to: 8, duration: 1.6), .fadeOut(withDuration: 1.6)]), .removeFromParent()]))
     }
 
     // MARK: touches
@@ -380,6 +497,7 @@ final class GameScene: SKScene {
             if hypot(p.x - start.x, p.y - start.y) > 14 { continue }
             let sp = t.location(in: self)
             let wp = Vec2(Double(sp.x), Double(-sp.y))
+            if !model.buildMode.isEmpty { model.build(at: wp.tile); continue }
             if let id = model.placingAsset {
                 model.world.addProp(key: "asset:" + id, at: wp)
                 model.placingAsset = nil

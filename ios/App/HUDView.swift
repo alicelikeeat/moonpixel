@@ -21,6 +21,8 @@ struct HUDView: View {
                                 .padding(.horizontal, 16).padding(.vertical, 10)
                         }
                         .buttonStyle(PressStyle()).glass(Capsule())
+                        Text(model.playerLine).font(.system(size: 10, weight: .medium, design: .rounded)).lineLimit(1).fixedSize()
+                            .padding(.horizontal, 10).padding(.vertical, 5).glass(Capsule()).allowsHitTesting(false)
                         if model.showDetails { details }
                     }
                     Spacer(minLength: 0)
@@ -42,6 +44,8 @@ struct HUDView: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
         }
         .foregroundStyle(.white)
+        .overlay { if model.showRealm { RealmPanel() } }
+        .overlay { if model.showLaws { LawsPanel() } }
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .any(of: [.images, .videos]))
         .onChange(of: model.pick) { _, v in
             guard v != .none else { return }
@@ -193,6 +197,8 @@ struct HUDView: View {
     private var tabBar: some View {
         HStack(spacing: 2) {
             tab(L("地图", "Map"), "map.fill") { model.toggleMap() }
+            tab(L("三国", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
+            tab(L("法则", "Laws"), "flame.fill") { model.showLaws = true }
             tab(L("村落", "Village"), "house.fill") { model.nextVillage() }
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
             tab(L("形象", "Photo"), "person.crop.circle.badge.plus") { model.pick = .player }
@@ -212,6 +218,8 @@ struct HUDView: View {
         case "sword": return L("剑", "Sword")
         case "bow": return L("弓", "Bow")
         case "staff": return L("法杖", "Staff")
+        case "axe": return L("斧", "Axe")
+        case "pick": return L("镐", "Pick")
         default: return L("空手", "Hands")
         }
     }
@@ -221,6 +229,8 @@ struct HUDView: View {
         case "bow": return "scope"
         case "staff": return "wand.and.stars"
         case "sword": return "shield.lefthalf.filled"
+        case "axe": return "hammer.fill"
+        case "pick": return "wrench.adjustable.fill"
         default: return "hand.raised.fill"
         }
     }

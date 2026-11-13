@@ -23,7 +23,7 @@ jobs:
           brew install xcodegen
       - name: Core tests
         working-directory: ios
-        run: swift test -c release -Xswiftc -enable-testing 2>&1 | grep -E "error|failed|Executed|passed" | tail -30; test ${PIPESTATUS[0]} -eq 0
+        run: swift test -c release -Xswiftc -enable-testing 2>&1 | grep -E "error|failed|Executed|CYCLE|REPEAT|BENCH" | cut -c1-300 | tail -40; test ${PIPESTATUS[0]} -eq 0
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
@@ -33,7 +33,7 @@ jobs:
           set -o pipefail
           xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/dd \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" build > build.log 2>&1 || { grep -E "error:|error " build.log | sort -u | head -60; tail -15 build.log; exit 1; }
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" build > build.log 2>&1 || { grep -E "error:" build.log | cut -c1-400 | sort -u | head -60; exit 1; }
           grep -E "warning: .*deprecated" build.log | sort -u | head -5 || true
       - name: Package unsigned IPA
         working-directory: ios
@@ -69,7 +69,7 @@ jobs:
           xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
-          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | sort -u | head -20
+          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | cut -c1-300 | sort -u | head -20
           APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
           echo "device: $UDID app: $APP"
@@ -87,10 +87,14 @@ jobs:
           xcrun simctl terminate "$UDID" org.moonpixel.game
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --test-anim; sleep 26; shot sim-anim.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --realm; sleep 24; shot sim-realm.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --laws; sleep 24; shot sim-laws.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
           echo "===== UI test: tap the HUD buttons ====="
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
             -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
-          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | sort -u | head -40
+          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -60
           mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
           python3 -c "
           import json,shutil
@@ -102,5 +106,5 @@ jobs:
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
           TAG="v1.0-build.${GITHUB_RUN_NUMBER}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png

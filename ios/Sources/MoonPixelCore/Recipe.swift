@@ -80,6 +80,8 @@ public struct WorldRecipe: Codable, Equatable {
             r.villages = min(10, max(1, v))
         }
         if vill != nil { r.tags.append("villages") }
+        // three nations need three towns to stand on
+        if r.villages < 3 { let total = r.villages * r.perVillage; r.villages = 3; r.perVillage = min(80, max(2, Int((Double(total) / 3).rounded()))) }
         r.minPopulation = max(10, min(600, r.villages * r.perVillage * 5 / 6))
         if !r.tags.contains("seed") { r.seed = defaultSeed ?? stableSeed(raw) }
         r.name = quotedName(raw) ?? ""

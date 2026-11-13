@@ -21,7 +21,7 @@ enum PhotoPick: Equatable { case none, player, villager(Int), asset }
 final class GameModel: ObservableObject {
     static let zh: Bool = (Locale.preferredLanguages.first ?? "en").hasPrefix("zh")
     static let speeds: [Double] = [0, 1, 4, 16, 64]
-    static let weapons = ["", "sword", "bow", "staff"]
+    static let weapons = ["", "sword", "bow", "staff", "axe", "pick"]
     static let mapLimitBytes = 5 * 1024 * 1024 * 1024       // 5 GB per world
 
     @Published var scene: GameScene?
@@ -50,6 +50,30 @@ final class GameModel: ObservableObject {
     @Published var placingAsset: String? = nil
     @Published var selectedPortrait: UIImage?
     @Published var playerPortrait: UIImage?
+    // three nations, world laws, storage
+    @Published var nationCards: [NationCard] = []
+    @Published var relationLines: [String] = []
+    @Published var eraLine = ""
+    @Published var playerLine = ""
+    @Published var showRealm = false
+    @Published var showLaws = false
+    @Published var lawBusy = false
+    @Published var lawProgress = 0.0
+    @Published var lawReport = ""
+    @Published var storageLines: [String] = []
+    @Published var policy = StoragePolicy()
+    @Published var limitMB = 5 * 1024
+    @Published var buildMode = ""
+    @Published var lawRatio = 0.3
+    @Published var lawSpaceMB = 0
+    @Published var lawNewSeed = true
+    @Published var lawRadius = 2
+    var lawRun: LawRun?
+    var lawBefore = 0
+    /// Bumped whenever the world is replaced, so late photo jobs cannot land in the wrong world.
+    var epoch = 0
+    var limitBytes: Int { limitMB * 1024 * 1024 }
+    var limitText: String { limitMB >= 1024 ? "\(limitMB / 1024) GB" : "\(limitMB) MB" }
 
     var world: OpenWorld!
     var society: Society!
@@ -61,8 +85,8 @@ final class GameModel: ObservableObject {
     /// Animated sprites made from GIFs and videos (asset id -> frames).
     var anims: [String: [SKTexture]] = [:]
     var recipe: WorldRecipe?
-    private var lastLogCount = 0
-    private var cleanCooldown = 0.0
+    var lastLogCount = 0
+    var cleanCooldown = 0.0
     private var memObserver: NSObjectProtocol?
 
     static var defaultLook: Look { var l = Look(); l.hair = "#f0e8d0"; l.shirt = "#f4f0e0"; l.pants = "#5a5a78"; l.style = 3; return l }
@@ -133,6 +157,11 @@ final class GameModel: ObservableObject {
         }
         if args.contains("--map") { DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.toggleMap() } }
         if args.contains("--details") { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.showDetails = true; self?.refreshHUD() } }
+        if args.contains("--realm") { DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.showRealm = true; self?.refreshRealm() } }
+        if args.contains("--laws") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.showLaws = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.runLaw(.thanos) }
+        }
         if args.contains("--test-anim") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self else { return }
@@ -172,13 +201,22 @@ final class GameModel: ObservableObject {
         worldName = name
         let budget = MemoryBudget(overrideMB: overrideMB)
         var index: Index?
-        if load, let data = try? Data(contentsOf: saveDir.appendingPathComponent("index.json")) {
+        epoch += 1
+        var corrupt = false
+        let indexURL = saveDir.appendingPathComponent("index.json")
+        if load, let data = try? Data(contentsOf: indexURL) {
             index = try? JSONDecoder().decode(Index.self, from: data)
-            if index == nil { showToast(L("存档无法读取，已重新生成世界", "Save could not be read; the world was regenerated")) }
+            if index == nil {
+                // never overwrite a save we could not read: keep it beside the new one
+                corrupt = true
+                let keep = saveDir.appendingPathComponent("index.corrupt-\(Int(Date().timeIntervalSince1970)).json")
+                try? FileManager.default.copyItem(at: indexURL, to: keep)
+            }
         }
         if !load { try? FileManager.default.removeItem(at: saveDir) }
         let w = OpenWorld(seed: index?.world.seed ?? seed, budget: budget)
-        w.diskLimitBytes = GameModel.mapLimitBytes
+        loadSettings()
+        w.diskLimitBytes = limitBytes
         recipe = index?.recipe ?? (load ? nil : newRecipe)
         if let r = recipe { w.gen.tempBias = r.tempBias; w.gen.moistBias = r.moistBias; w.gen.elevBias = r.elevBias }
         w.open(directory: saveDir)
@@ -216,18 +254,29 @@ final class GameModel: ObservableObject {
         }
         refreshHUD()
         if !load { save(announce: false) }
+        if corrupt { showToast(L("存档已损坏，原文件已另存为 index.corrupt，未被覆盖；世界已重新生成", "The save was damaged. It was kept as index.corrupt and not overwritten; the world was regenerated")) }
+        // a world law that was interrupted (app killed, power lost) is finished now
+        if load, index != nil, let j = LawJournal.read(saveDir) { recoverLaw(j.plan) }
     }
 
-    func save(announce: Bool) {
-        guard let w = world, let s = society, let sc = scene else { return }
+    /// Writes the world to disk. Returns false (and says so) when anything could not be written;
+    /// the previous save file is left intact in that case because writes are atomic.
+    @discardableResult func save(announce: Bool) -> Bool {
+        guard let w = world, let s = society, let sc = scene else { return false }
+        let failures = w.writeFailures
         w.saveAll()
+        var ok = w.writeFailures == failures
         let ix = Index(world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook, recipe: recipe)
-        try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(ix) { try? data.write(to: saveDir.appendingPathComponent("index.json"), options: .atomic) }
-        let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count,
-                             diskBytes: mapBytes(), tech: s.techCount > 0 ? s.techName(s.techCount - 1) : "")
-        if let data = try? JSONEncoder().encode(meta) { try? data.write(to: saveDir.appendingPathComponent("meta.json"), options: .atomic) }
-        if announce { showToast(L("已保存", "Saved")) }
+        let tech = s.techCount > 0 ? s.techName(s.techCount - 1) : ""
+        let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count, diskBytes: totalBytes(), tech: tech)
+        do {
+            try FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
+            try JSONEncoder().encode(ix).write(to: saveDir.appendingPathComponent("index.json"), options: .atomic)
+            try JSONEncoder().encode(meta).write(to: saveDir.appendingPathComponent("meta.json"), options: .atomic)
+        } catch { ok = false }
+        if !ok { showToast(L("保存失败：存储空间不足或文件不可写。上一次的存档仍然完好。", "Save failed: no space left or the file cannot be written. The previous save is intact.")) }
+        else if announce { showToast(L("已保存", "Saved")) }
+        return ok
     }
 
     /// Save and go back to the world list.
@@ -244,7 +293,9 @@ final class GameModel: ObservableObject {
     func showToast(_ text: String) { toast = text; toastID += 1 }
 
     /// Bytes this world occupies on disk (chunks + index + assets).
-    func mapBytes() -> Int {
+    func mapBytes() -> Int { totalBytes() }
+
+    func chunkAndIndexBytes() -> Int {
         guard let w = world else { return 0 }
         var n = w.diskBytes
         for f in ["index.json", "meta.json"] {
@@ -280,9 +331,9 @@ final class GameModel: ObservableObject {
             }
             techProgress = s.researchProgress
             let bytes = mapBytes()
-            mapSizeFraction = min(1, Double(bytes) / Double(GameModel.mapLimitBytes))
-            mapSizeText = String(format: L("地图存档 %@ / 5 GB · 内存中 %@ · 已探明 %d 区块%@", "Map on disk %@ / 5 GB · in memory %@ · %d chunks mapped%@"),
-                                 GameModel.sizeText(bytes), GameModel.sizeText(w.memoryBytes), w.surveyed,
+            mapSizeFraction = min(1, Double(bytes) / Double(max(1, limitBytes)))
+            mapSizeText = String(format: L("地图存档 %@ / %@ · 内存中 %@ · 已探明 %d 区块%@", "Map on disk %@ / %@ · in memory %@ · %d chunks mapped%@"),
+                                 GameModel.sizeText(bytes), limitText, GameModel.sizeText(w.memoryBytes), w.surveyed,
                                  w.prunedFiles > 0 ? String(format: L(" · 已回收 %d 个旧区块", " · %d old chunks pruned"), w.prunedFiles) : "")
             let b = w.budget
             memoryText = String(format: L("内存：设备 %d MB · 预算 %d MB%@ · 已用 %d MB · 区块缓存 %d/%d",
@@ -290,6 +341,7 @@ final class GameModel: ObservableObject {
                                 b.physicalMB, b.budgetMB, b.overrideMB > 0 ? L("（手动）", " (manual)") : L("（自动）", " (auto)"), MemoryBudget.usedMB(), w.cache.count, b.maxChunks)
             logLines = s.log.suffix(4).map { "· " + $0.text }
         }
+        refreshRealm()
         if selectedID != 0 {
             if let info = s.talk(selectedID, speak: false) {
                 var i = info
@@ -303,6 +355,7 @@ final class GameModel: ObservableObject {
         cleanCooldown = max(0, cleanCooldown - dt)
         if autoClean && cleanCooldown <= 0 && world.budget.pressure() > 0.9 { cleanMemory(announce: true) }
         if world.diskBytes > world.diskLimitBytes { world.enforceDiskLimit() }
+        checkPolicy()
     }
 
     func select(_ id: Int) {
@@ -370,11 +423,18 @@ final class GameModel: ObservableObject {
         } }
         for s in society.settlements.values {
             let x = (s.center.x >> 5) - pc.x + ext, y = (s.center.y >> 5) - pc.y + ext
-            bmp.rect(x - 1, y - 1, 3, 3, s.abandoned ? RGBA(90, 90, 90) : RGBA(255, 216, 77))
+            // towns in their nation's colour: the map shows who holds what
+            let col = society.realm.nation(s.nation ?? 0).map { RGBA(hex: $0.color) } ?? RGBA(255, 216, 77)
+            bmp.rect(x - 2, y - 2, 5, 5, RGBA(20, 20, 28))
+            bmp.rect(x - 1, y - 1, 3, 3, s.abandoned ? RGBA(90, 90, 90) : col)
+        }
+        for lg in society.realm.legions where lg.state != 0 {
+            let x = Int((lg.pos.x / 512).rounded(.down)) - pc.x + ext, y = Int((lg.pos.y / 512).rounded(.down)) - pc.y + ext
+            bmp.rect(x, y, 2, 2, .white)
         }
         bmp.rect(ext - 1, ext - 1, 3, 3, RGBA(128, 230, 255))
         mapImage = bmp.uiImage
-        mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / 5 GB", "%d chunks mapped · %@ of 5 GB on disk"), w.surveyed, GameModel.sizeText(mapBytes()))
+        mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / %@ · 城镇按国家着色", "%d chunks mapped · %@ of %@ on disk · towns in their nation's colour"), w.surveyed, GameModel.sizeText(mapBytes()), limitText)
     }
 
     // MARK: photos and assets
@@ -397,7 +457,7 @@ final class GameModel: ObservableObject {
         }
     }
 
-    private func store(_ bmp: Bitmap, id: String) {
+    func store(_ bmp: Bitmap, id: String) {
         try? FileManager.default.createDirectory(at: assetsDir, withIntermediateDirectories: true)
         if let data = bmp.uiImage?.pngData() { try? data.write(to: assetsDir.appendingPathComponent(id + ".png")) }
     }
@@ -408,10 +468,15 @@ final class GameModel: ObservableObject {
     func applyPhoto(_ image: UIImage, target: Int) {
         guard let bmp = Bitmap(image: image, maxSide: 512) else { showToast(L("无法读取图片", "Could not read the picture")); return }
         showToast(L("AI 正在生成像素角色…", "AI is generating the pixel character…"))
+        let token = epoch
+        // pixel work happens off the main thread; only the finished result comes back to it
         DispatchQueue.global(qos: .userInitiated).async {
             let analysis = PhotoAI.analyze(bmp)
             let result = AssetImporter.photoToCharacter(analysis.bitmap, face: analysis.face)
-            DispatchQueue.main.async { [weak self] in self?.finishPhoto(result, analysis: analysis, target: target) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, self.photoJobStillValid(token, target) else { return }
+                self.finishPhoto(result, analysis: analysis, target: target)
+            }
         }
     }
 
@@ -448,6 +513,7 @@ final class GameModel: ObservableObject {
     func applyMotion(_ frames: [Bitmap], target: Int) {
         guard frames.count > 1 else { return }
         showToast(L("AI 正在把动画逐帧像素化…", "AI is pixelising the animation frame by frame…"))
+        let token = epoch
         DispatchQueue.global(qos: .userInitiated).async {
             let analyses = frames.map { PhotoAI.analyze($0) }
             // use the AI cut-outs only when the person was found in every frame
@@ -455,7 +521,10 @@ final class GameModel: ObservableObject {
             let sprites = AssetImporter.spriteFrames(cut ? analyses.map { $0.bitmap } : frames, maxFrames: 12)
             let first = analyses[0]
             let still = AssetImporter.photoToCharacter(first.bitmap, face: first.face)
-            DispatchQueue.main.async { [weak self] in self?.finishMotion(sprites, still: still, foundFace: first.face != nil, cut: cut, target: target) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, self.photoJobStillValid(token, target) else { return }
+                self.finishMotion(sprites, still: still, foundFace: first.face != nil, cut: cut, target: target)
+            }
         }
     }
 

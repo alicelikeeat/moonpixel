@@ -1,7 +1,7 @@
-# 第三方依赖与素材 / Third-party
+# 第三方组件
 
-| 项目 | 用途 | 授权 |
+应用本身不包含第三方代码或素材，只使用 Apple 系统框架（SwiftUI、SpriteKit、Vision、PhotosUI、AVFoundation）。
+
+| 组件 | 用途 | 许可 |
 | --- | --- | --- |
-| [Godot Engine 4.5](https://godotengine.org) | 游戏引擎（运行时依赖，未包含在仓库中） | MIT |
-
-本仓库不包含任何第三方美术、字体或音频文件。界面文字使用操作系统自带字体（通过 `SystemFont`）。
+| [XcodeGen](https://github.com/yonaskolb/XcodeGen) | 仅在构建时生成 Xcode 工程，不随应用分发 | MIT |
