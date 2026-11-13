@@ -251,6 +251,8 @@ public final class OpenWorld {
     /// Hard cap for the saved map. Default 5 GB.
     public var diskLimitBytes = 5 * 1024 * 1024 * 1024
     public private(set) var prunedFiles = 0
+    var natural: Chunk?
+    var naturalKey: Int64 = .min
     var clock = 0
     var ring: [TilePos: Int] = [:]
     var timerAcc = 0.0
@@ -511,6 +513,69 @@ public final class OpenWorld {
             for f in onTileChanged { f(c.cx * 32 + tm.i % 32, c.cy * 32 + tm.i / 32, tm.l, old, tm.to) }
         }
         if changed { for f in onChunkChanged { f(c.cx, c.cy) } }
+    }
+
+    // MARK: permanent deletion (world laws) - unlike cache cleaning, this destroys saved data
+    /// Chunks that exist as files, sorted.
+    public var storedChunks: [Int64] { saved.sorted() }
+    public func storedSize(_ key: Int64) -> Int { fileSizes[key] ?? 0 }
+    /// Decode a stored chunk without putting it in the cache.
+    public func peekStored(_ key: Int64) -> Chunk? {
+        if let c = cache[key] { return c }
+        guard saved.contains(key), let url = path(MP.keyCX(key), MP.keyCY(key)), let data = try? Data(contentsOf: url) else { return nil }
+        return Chunk.decode(data)
+    }
+
+    /// Forget every change ever made to a chunk: its file is deleted and, if it
+    /// is in use, it is regenerated in place. Returns the bytes freed on disk.
+    @discardableResult public func revertChunk(_ cx: Int, _ cy: Int) -> Int {
+        let k = MP.chunkKey(cx, cy)
+        var freed = 0
+        if saved.contains(k) {
+            if let url = path(cx, cy) { try? FileManager.default.removeItem(at: url) }
+            freed = fileSizes[k] ?? 0
+            diskBytes -= freed
+            fileSizes[k] = nil
+            saved.remove(k)
+        }
+        if cache[k] != nil {
+            if pins[k] != nil {
+                let fresh = gen.generate(cx, cy)
+                fresh.lastUsed = clock
+                cache[k] = fresh
+            } else { cache[k] = nil }
+            for f in onChunkChanged { f(cx, cy) }
+        }
+        return freed
+    }
+
+    /// Put one tile back to what the generator made there (all four layers).
+    public func restoreNatural(_ wx: Int, _ wy: Int) {
+        let cx = wx >> 5, cy = wy >> 5
+        let k = MP.chunkKey(cx, cy)
+        if naturalKey != k { natural = gen.generate(cx, cy); naturalKey = k }
+        guard let n = natural else { return }
+        let i = OpenWorld.idx(wx, wy)
+        for l in 0..<4 { setTile(l, wx, wy, n.layers[l][i]) }
+    }
+
+    /// Delete every chunk file and forget the whole map (used by Genesis).
+    @discardableResult public func wipe() -> Int {
+        let freed = diskBytes
+        for k in saved { if let url = path(MP.keyCX(k), MP.keyCY(k)) { try? FileManager.default.removeItem(at: url) } }
+        saved.removeAll(); fileSizes.removeAll(); diskBytes = 0
+        cache.removeAll(); pins.removeAll(); regions.removeAll(); ring.removeAll()
+        surveyed = 0
+        return freed
+    }
+
+    @discardableResult public func removeProp(id: Int, cx: Int, cy: Int) -> Bool {
+        let c = chunk(cx, cy)
+        guard let i = c.props.firstIndex(where: { $0.id == id }) else { return false }
+        c.props.remove(at: i)
+        c.touch()
+        for f in onChunkChanged { f(cx, cy) }
+        return true
     }
 
     // MARK: props

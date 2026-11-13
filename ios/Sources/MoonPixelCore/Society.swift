@@ -140,6 +140,13 @@ public final class Agent: Codable {
     public var travelTo = Vec2.zero
     public var carryKind = ""
     public var carryN = 0.0
+    /// National identity (1...3). Survives occupation, exile and unification. Optional so old saves load.
+    public var nation: Int?
+    public var hp: Double?
+    /// Legion this soldier serves in.
+    public var legion: Int?
+    /// Refugee until this time (integrates afterwards, or earlier when the player takes them in).
+    public var refugee: Double?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
@@ -151,7 +158,8 @@ public final class Agent: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
-             health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN
+             health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
+             nation, hp, legion, refugee
     }
 
     public init() {}
@@ -196,6 +204,10 @@ public final class Settlement: Codable {
     public var usedSlots: Set<String> = []
     public var graves = 0
     public var abandoned = false
+    /// Nation that controls this place right now (0 while unassigned).
+    public var nation: Int?
+    /// 0...1+: how close the residents are to throwing the rulers out.
+    public var unrest: Double?
     // transient
     public var nav: PathGrid?
     public var origin = TilePos(0, 0)
@@ -205,7 +217,7 @@ public final class Settlement: Codable {
     var unreachT = 0.0
     var resT = 0.0, planT = 0.0, aiAcc = 0.0
 
-    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned }
+    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest }
     public init() {}
     public func inArea(_ t: TilePos) -> Bool { t.x >= origin.x && t.y >= origin.y && t.x < origin.x + Settlement.span && t.y < origin.y + Settlement.span }
     public func building(_ id: Int) -> Building? { buildings.first { $0.id == id } }
@@ -217,6 +229,7 @@ public final class Settlement: Codable {
 }
 
 public struct SocietyStats: Codable {
+    public var battle: Int?
     public var births = 0, deaths = 0, old = 0, hunger = 0, ill = 0, pairs = 0, buildings = 0, founded = 0, immigrants = 0, tilesPlaced = 0
 }
 
@@ -277,38 +290,53 @@ public final class Society {
     static let techBuildings: [(String, String, Int)] = [
         ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
     ]
-    /// Number of technologies discovered so far, and progress towards the next.
-    public private(set) var techCount = 0
-    public private(set) var research = 0.0
+    /// Technology belongs to nations. `techCount` is the most advanced nation's level
+    /// (what the HUD shows); inside settlement logic `has` asks the nation in charge.
+    public var techCount: Int { realm.nations.map { $0.techCount }.max() ?? legacyTech }
+    public var research: Double { realm.nations.max(by: { $0.techCount < $1.techCount })?.research ?? 0 }
+    var legacyTech = 0
+    var techCtx = 0
     /// Start a world in a later era: the first `n` technologies are already known.
-    public func grantTech(_ n: Int) { techCount = max(techCount, min(Society.techs.count, n)) }
+    public func grantTech(_ n: Int) {
+        legacyTech = max(legacyTech, min(Society.techs.count, n))
+        for k in realm.nations.indices { realm.nations[k].techCount = max(realm.nations[k].techCount, legacyTech) }
+    }
 
     public func has(_ tech: String) -> Bool {
         guard let i = Society.techs.firstIndex(where: { $0.0 == tech }) else { return false }
+        if techCtx > 0, let n = realm.nation(techCtx) { return i < n.techCount }
         return i < techCount
     }
     public func techName(_ i: Int) -> String { i < 0 || i >= Society.techs.count ? "" : (zh ? Society.techs[i].2 : Society.techs[i].1) }
     /// 0...1 progress towards the next technology (1 when everything is known).
     public var researchProgress: Double { techCount >= Society.techs.count ? 1 : research / Society.techs[techCount].3 }
-    /// Research points per second produced by the whole civilisation right now.
-    public var researchRate: Double {
-        var rate = 0.0
-        for s in settlements.values where !s.abandoned {
-            let adults = Double(s.members.count) * 0.7
-            let boost = 1.0 + 0.6 * Double(s.count("school", done: true)) + 1.2 * Double(s.count("lab", done: true)) + 2.5 * Double(s.count("ai_center", done: true))
-            rate += adults * 0.003 * boost
-        }
-        return rate
+    func researchRate(of s: Settlement) -> Double {
+        let adults = Double(s.members.count) * 0.7
+        let boost = 1.0 + 0.6 * Double(s.count("school", done: true)) + 1.2 * Double(s.count("lab", done: true)) + 2.5 * Double(s.count("ai_center", done: true))
+        return adults * 0.003 * boost
     }
+    /// Research points per second produced by the whole world right now.
+    public var researchRate: Double { settlements.values.filter { !$0.abandoned }.reduce(0) { $0 + researchRate(of: $1) } }
 
     func advanceResearch(_ dt: Double) {
-        guard techCount < Society.techs.count else { return }
-        research += researchRate * dt
-        while techCount < Society.techs.count && research >= Society.techs[techCount].3 {
-            research -= Society.techs[techCount].3
-            techCount += 1
-            emit("tech", [techName(techCount - 1)], settlements.values.first { !$0.abandoned }?.center.center ?? .zero)
-            for s in settlements.values { s.planT = 0 }
+        let cfg = realm.cfg
+        for k in realm.nations.indices {
+            let id = realm.nations[k].id
+            if realm.nations[k].techCount >= Society.techs.count { continue }
+            var rate = 0.0
+            for s in settlements.values where !s.abandoned && s.nation == id { rate += researchRate(of: s) }
+            // knowledge spreads: nations behind the leader catch up faster; a unified era shares everything
+            rate *= cfg.researchScale * (realm.nations[k].techCount < techCount ? cfg.catchUp : 1) * (realm.era == 1 ? cfg.unityResearch : 1)
+            if realm.active("breakthrough", id, world.time) { rate *= cfg.breakthroughBoost }
+            realm.nations[k].research += rate * dt
+            while realm.nations[k].techCount < Society.techs.count && realm.nations[k].research >= Society.techs[realm.nations[k].techCount].3 {
+                realm.nations[k].research -= Society.techs[realm.nations[k].techCount].3
+                realm.nations[k].techCount += 1
+                let first = realm.nations[k].techCount > legacyTech
+                legacyTech = max(legacyTech, realm.nations[k].techCount)
+                if first { emit("tech", [techName(realm.nations[k].techCount - 1)], settlements.values.first { !$0.abandoned && $0.nation == id }?.center.center ?? .zero) }
+                for s in settlements.values { s.planT = 0 }
+            }
         }
     }
 
@@ -335,12 +363,14 @@ public final class Society {
     let content = Content.shared
     public var zh = false
     public var rng: RNG
-    public private(set) var agents: [Int: Agent] = [:]
-    public private(set) var settlements: [Int: Settlement] = [:]
+    public internal(set) var agents: [Int: Agent] = [:]
+    public internal(set) var settlements: [Int: Settlement] = [:]
     var nextID = 1, nextSID = 1, nextBID = 1
     public var minPopulation = 100
+    /// Three nations, their wars and the player's standing (see Realm.swift).
+    public var realm = Realm()
     public var stats = SocietyStats()
-    public private(set) var log: [(t: Double, text: String)] = []
+    public internal(set) var log: [(t: Double, text: String)] = []
     public var onEvent: ((String, String, Vec2) -> Void)?
     var hourAcc = 0.0, migrAcc = 0.0
     var T: [String: UInt8] = [:]
@@ -360,7 +390,7 @@ public final class Society {
     }
 
     public func tx(_ key: String, _ args: [String] = []) -> String {
-        guard let p = Society.text[key] else { return key }
+        guard let p = Society.text[key] ?? Society.realmText[key] else { return key }
         var s = zh ? p.1 : p.0
         for a in args { if let r = s.range(of: "%@") { s.replaceSubrange(r, with: a) } }
         return s
@@ -369,7 +399,7 @@ public final class Society {
     func emit(_ key: String, _ args: [String], _ pos: Vec2) {
         let t = tx(key, args)
         log.append((world.time, t))
-        if log.count > 60 { log.removeFirst() }
+        if log.count > realm.cfg.maxLog { log.removeFirst(log.count - realm.cfg.maxLog) }
         onEvent?(key, t, pos)
     }
 
@@ -458,21 +488,26 @@ public final class Society {
             }
             for i2 in 0..<(min(men.count, women.count) / 2) { pair(men[i2], women[i2], announce: false) }
         }
+        foundNations()
     }
 
     // MARK: tick
     public func tick(_ dt: Double) {
         world.advance(dt)
         for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            techCtx = s.nation ?? 0
             s.planT -= dt
             if s.planT <= 0 { s.planT = 6; plan(s) }
             if world.time >= s.resT { s.resT = world.time + 25; scan(s) }
             automation(s, dt)
         }
+        techCtx = 0
         advanceResearch(dt)
         for id in agents.keys.sorted() { if let a = agents[id], a.alive { update(a, dt) } }
+        techCtx = 0
+        realmTick(dt)
         hourAcc += dt
-        while hourAcc >= Society.hour { hourAcc -= Society.hour; hourly() }
+        while hourAcc >= Society.hour { hourAcc -= Society.hour; hourly(); realmHourly() }
         migrAcc += dt
         if migrAcc >= MP.year * 0.1 {
             migrAcc = 0
@@ -628,7 +663,7 @@ public final class Society {
         let pop = living.count
         let now = world.time
         s.food = min(s.food, 40 + Double(pop) * 14)
-        var workers = living.filter { $0.stage(now) == "adult" && !$0.travelling }
+        var workers = living.filter { $0.stage(now) == "adult" && !$0.travelling && $0.legion == nil && $0.refugee == nil }
         // households: every family gets a house of its own
         var households: [Int: [Agent]] = [:]
         for a in living { households[household(a, now), default: []].append(a) }
@@ -679,7 +714,9 @@ public final class Society {
             for j in ["builder", "farmer", "woodcutter", "miner"] where quota[j]! > 0 { quota[j]! -= 1; a.job = j; break }
         }
         for a in living where a.stage(now) != "adult" { a.job = "" }
-        if pop >= 34 && now - s.lastFound > 1.5 * MP.year && livingSettlements < world.budget.maxSettlements && agents.count < world.budget.maxAgents {
+        // crowded nations send settlers out sooner
+        let crowded = (realm.nation(s.nation ?? 0)?.pressure ?? 0) > realm.cfg.expansionPressure
+        if pop >= (crowded ? 24 : 34) && now - s.lastFound > 1.5 * MP.year && livingSettlements < world.budget.maxSettlements && agents.count < world.budget.maxAgents {
             expedition(s, living)
         }
     }
@@ -694,13 +731,14 @@ public final class Society {
         for a in living {
             if group.count >= 9 { break }
             let age = a.age(now)
-            if age < 17 || age > 42 || a.travelling || group.contains(where: { $0 === a }) { continue }
+            if age < 17 || age > 42 || a.travelling || a.legion != nil || group.contains(where: { $0 === a }) { continue }
             add(a)
             if let p = agents[a.partner] { add(p) }
             for cid in a.children { if let c = agents[cid], c.age(now) < 14 { add(c) } }
         }
         if group.count < 5 { return }
         let ns = foundSettlement(site)
+        ns.nation = expeditionNation(group, s)
         let food = min(s.food * 0.3, Double(group.count) * 8), wood = min(s.wood * 0.3, 30)
         s.food -= food; s.wood -= wood
         ns.food = food + Double(group.count) * 3; ns.wood = wood + 10
@@ -724,10 +762,10 @@ public final class Society {
     }
 
     func immigration() {
-        if agents.count >= minPopulation { return }
+        if agents.count >= minPopulation || world.time < realm.immigrationHold { return }
         guard let best = settlements.values.filter({ !$0.abandoned }).min(by: { $0.members.count != $1.members.count ? $0.members.count < $1.members.count : $0.id < $1.id }) else { return }
         let n = rng.int(3, 6)
-        for i in 0..<n { newAgent(best, age: rng.range(17, 34), female: i % 2 == 0) }
+        for i in 0..<n { newAgent(best, age: rng.range(17, 34), female: i % 2 == 0).nation = best.nation }
         best.food += Double(n) * 6
         stats.immigrants += n
         emit("arrived", ["\(n)", best.name(zh: zh)], best.center.center)
@@ -738,6 +776,8 @@ public final class Society {
         a.prevPos = a.pos
         a.moving = false
         guard let s = settlements[a.sid] else { return }
+        techCtx = s.nation ?? 0
+        if let lid = a.legion, let lg = realm.legion(lid), lg.state != 0 { follow(a, lg, dt); return }
         a.hunger = min(1, a.hunger + dt / (0.45 * MP.daySeconds))
         a.social = min(1, a.social + dt / (0.6 * MP.daySeconds))
         a.grief = max(0, a.grief - dt / (1.5 * MP.year))
@@ -814,6 +854,8 @@ public final class Society {
             if go(a, s, spot, "sleep", 9999) { return }
         }
         if st == "child" { wander(a, s, 7, "play"); return }
+        if a.legion != nil { wander(a, s, 9, "patrol"); return }
+        if a.refugee != nil { wander(a, s, 12, "idle"); return }
         let h = world.hour
         if a.social > 0.7 || (h > 17 && a.social > 0.35) || (st == "elder" && rng.unit() < 0.5) {
             if go(a, s, s.center + TilePos(rng.int(-4, 4), rng.int(-4, 4)), "social", 3) { return }
@@ -1146,6 +1188,7 @@ public final class Society {
         let c = newAgent(s, age: 0, female: rng.unit() < 0.5)
         let f = agents[m.birthFather]
         c.mother = m.id
+        c.nation = m.nation ?? s.nation
         c.father = f?.id ?? 0
         c.clanEn = f?.clanEn ?? m.clanEn; c.clanZh = f?.clanZh ?? m.clanZh
         c.pos = m.pos; c.prevPos = m.pos
@@ -1173,19 +1216,22 @@ public final class Society {
         s.members.removeAll { $0 == a.id }
         agents[a.id] = nil
         stats.deaths += 1
-        if cause == "old" { stats.old += 1 } else if cause == "hunger" { stats.hunger += 1 } else { stats.ill += 1 }
+        if cause == "old" { stats.old += 1 } else if cause == "hunger" { stats.hunger += 1 } else if cause == "battle" { stats.battle = (stats.battle ?? 0) + 1 } else { stats.ill += 1 }
+        realmDeath(a, s, cause)
         for rid in [a.partner, a.mother, a.father] + a.children where rid != 0 {
             if let r = agents[rid] {
                 r.grief = 1
                 r.think(world.time, "t_grief", [zh ? a.nameZh : a.nameEn])
                 if r.partner == a.id { r.partner = 0 }
+                r.children.removeAll { $0 == a.id }
             }
         }
-        if s.nav != nil && s.graves < 24 {
+        if s.nav != nil && s.graves < realm.cfg.maxGraves {
             let g = s.center + TilePos(-8 - s.graves % 6, 6 + s.graves / 6)
             if s.inArea(g) && world.isLand(g.x, g.y) && world.tile(2, g.x, g.y) == 0 && !occupied(g, except: a) { world.setTile(2, g.x, g.y, T["grave"]!) }
             s.graves += 1
         }
+        if cause == "battle" { return }      // battles are reported as a whole, not soldier by soldier
         emit(cause == "old" ? "died_old" : (cause == "hunger" ? "died_hunger" : "died_ill"), [a.name(zh: zh), "\(Int(a.age(world.time)))"], a.pos)
     }
 
@@ -1280,11 +1326,13 @@ public final class Society {
     public struct Snapshot: Codable {
         var agents: [Agent], settlements: [Settlement], nextID: Int, nextSID: Int, nextBID: Int, stats: SocietyStats, rng: RNG
         var techCount: Int?, research: Double?
+        var realm: Realm?, log: [LogLine]?
     }
 
     public func snapshot() -> Snapshot {
         Snapshot(agents: agents.values.sorted { $0.id < $1.id }, settlements: settlements.values.sorted { $0.id < $1.id },
-                 nextID: nextID, nextSID: nextSID, nextBID: nextBID, stats: stats, rng: rng, techCount: techCount, research: research)
+                 nextID: nextID, nextSID: nextSID, nextBID: nextBID, stats: stats, rng: rng, techCount: techCount, research: research,
+                 realm: realm, log: log.map { LogLine(t: $0.t, text: $0.text) })
     }
 
     public func restore(_ s: Snapshot) {
@@ -1292,6 +1340,12 @@ public final class Society {
         for st in s.settlements { settlements[st.id] = st; if !st.abandoned { attach(st) } }
         for a in s.agents where settlements[a.sid] != nil { a.prevPos = a.pos; agents[a.id] = a }
         nextID = s.nextID; nextSID = s.nextSID; nextBID = s.nextBID; stats = s.stats; rng = s.rng
-        techCount = min(Society.techs.count, s.techCount ?? 0); research = s.research ?? 0
+        legacyTech = min(Society.techs.count, s.techCount ?? 0)
+        realm = s.realm ?? Realm()
+        log = (s.log ?? []).map { ($0.t, $0.text) }
+        // saves from before the three nations: divide the existing villages between them
+        if realm.nations.isEmpty { foundNations() }
+        for a in agents.values where a.nation == nil { a.nation = settlements[a.sid]?.nation }
+        repairReferences()
     }
 }
