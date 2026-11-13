@@ -98,12 +98,12 @@ jobs:
           xcrun simctl terminate "$UDID" org.moonpixel.game
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --powers; sleep 22; shot sim-powers.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --storm; sleep 16; shot sim-storm1.png; sleep 1; shot sim-storm2.png; sleep 1; shot sim-storm3.png
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --storm; sleep 13; shot sim-storm1.png; sleep 2; shot sim-storm2.png; sleep 2; shot sim-storm3.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
           echo "===== UI test: tap the HUD buttons ====="
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
             -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
-          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -60
+          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -60 | tee ui-result.txt
           mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
           python3 -c "
           import json,shutil
@@ -115,5 +115,5 @@ jobs:
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
           TAG="v${MP_VERSION}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png ui-result.txt ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png

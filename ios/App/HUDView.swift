@@ -254,7 +254,7 @@ struct HUDView: View {
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: icon).font(.system(size: 17, weight: .medium))
-                if !title.isEmpty { Text(title).font(.system(size: 10, weight: .medium, design: .rounded)) }
+                if !title.isEmpty { Text(title).font(.system(size: 10, weight: .medium, design: .rounded)).lineLimit(1).minimumScaleFactor(0.6).frame(maxWidth: 62) }
             }
             .frame(minWidth: title.isEmpty ? 40 : 52, minHeight: 44)
         }

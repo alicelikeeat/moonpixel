@@ -179,11 +179,14 @@ final class GameModel: ObservableObject {
                 guard let self = self else { return }
                 self.cheat("powers"); self.cheat("god"); self.cheat("weather:3"); self.cheat("animals")
             }
-            for (i, key) in ["mg", "thunder", "judgment", "perish", "meteor", "fireball", "storm"].enumerated() {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 8 + Double(i) * 0.5) { [weak self] in
+            // keep casting for a while so a screenshot at any moment catches something
+            let keys = ["mg", "thunder", "judgment", "perish", "meteor", "fireball", "storm", "railgun", "rocket", "sun_spear", "blackhole", "orbital"]
+            for i in 0..<40 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8 + Double(i) * 0.35) { [weak self] in
                     guard let self = self, let sc = self.scene else { return }
-                    self.activePower = key
-                    sc.attack(toward: sc.player + Vec2(Double(i * 50 - 150), -70))
+                    self.activePower = keys[i % keys.count]
+                    self.society.realm.player.cooldowns = [:]
+                    sc.attack(toward: sc.player + Vec2(Double((i * 67) % 300 - 150), Double((i * 41) % 160 - 110)))
                 }
             }
         }
@@ -466,7 +469,7 @@ final class GameModel: ObservableObject {
         }
         // old mazes in country that has been surveyed
         for y in 0..<side { for x in 0..<side where w.known(pc.x - ext + x, pc.y - ext + y) != 0 && w.gen.isMaze(pc.x - ext + x, pc.y - ext + y) {
-            bmp.rect(x - 1, y - 1, 3, 3, RGBA(200, 110, 255))
+            bmp.set(x, y, RGBA(200, 110, 255))
         } }
         bmp.rect(ext - 1, ext - 1, 3, 3, RGBA(128, 230, 255))
         if let p = mapPick {
