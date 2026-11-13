@@ -8,7 +8,7 @@ final class CivTests: XCTestCase {
         s.bootstrap(origin: TilePos(0, 0), villages: villages, per: per)
         return s
     }
-    func run(_ s: Society, years: Double) { for _ in 0..<Int(years * MP.year) { s.tick(1.0) } }
+    func run(_ s: Society, years: Double, dt: Double = 1.0) { for _ in 0..<Int(years * MP.year / dt) { s.tick(dt) } }
 
     func testTechnologyDevelopsByItselfUpToAI() {
         let s = make(7)
@@ -19,7 +19,7 @@ final class CivTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(s.techCount, 3, "early technologies discovered without the player")
         XCTAssertTrue(s.has("farming") && s.has("masonry"))
         XCTAssertTrue(s.log.contains { $0.text.contains(s.techName(0)) } || s.techCount > 0)
-        run(s, years: 24)
+        run(s, years: 24, dt: 2.0)
         let types = Set(s.settlements.values.flatMap { $0.buildings.filter { $0.done }.map { $0.type } })
         print("CIV after 30y: techs=\(s.techCount) pop=\(s.agents.count) buildings=\(types.sorted())")
         XCTAssertTrue(s.has("manufacturing"), "advanced manufacturing reached")

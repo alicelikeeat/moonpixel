@@ -68,6 +68,39 @@ final class ArtTests: XCTestCase {
         XCTAssertEqual(img.get(15, 17), out.face.get(4, 3))
     }
 
+    func testPhotoToPixelCharacterWithDetectorAndCutOut() {
+        let skin = RGBA(hex: "#c98a62"), hair = RGBA(hex: "#2b1d16"), shirt = RGBA(hex: "#2f9e6a")
+        var photo = portrait(skin: skin, hair: hair, shirt: shirt)
+        // long hair down both sides of the face
+        for y in 100..<230 { for x in 0..<240 where (x > 44 && x < 60) || (x > 180 && x < 196) { photo.set(x, y, hair) } }
+        // what person segmentation does: the background becomes transparent
+        let bg = RGBA(hex: "#8fb4d8")
+        for y in 0..<320 { for x in 0..<240 where photo.get(x, y) == bg { photo.set(x, y, .clear) } }
+        let r = AssetImporter.photoToCharacter(photo, face: (x: 58, y: 70, w: 124, h: 128))
+        XCTAssertTrue(r.usedDetector)
+        XCTAssertTrue(close(RGBA(hex: r.look.skin), skin, 0.12), r.look.skin)
+        XCTAssertTrue(close(RGBA(hex: r.look.hair), hair, 0.15), r.look.hair)
+        XCTAssertTrue(close(RGBA(hex: r.look.shirt), shirt, 0.15), r.look.shirt)
+        XCTAssertTrue(r.longHair, "long hair detected")
+        XCTAssertEqual(r.look.style, 2)
+        XCTAssertLessThanOrEqual(max(r.portrait.w, r.portrait.h), 34)
+        XCTAssertGreaterThanOrEqual(min(r.portrait.w, r.portrait.h), 12)
+        XCTAssertEqual(r.portrait.get(0, 0).a, 0, "portrait background is transparent")
+        var skinPx = 0, hairPx = 0, outline = 0
+        for y in 0..<r.portrait.h { for x in 0..<r.portrait.w {
+            let c = r.portrait.get(x, y)
+            if c.a == 0 { continue }
+            if c == PixelArt.outline { outline += 1 } else if c.dist(skin) < 0.15 { skinPx += 1 } else if c.dist(hair) < 0.15 { hairPx += 1 }
+        } }
+        XCTAssertGreaterThan(skinPx, 40, "the pixel portrait shows the face")
+        XCTAssertGreaterThan(hairPx, 20, "and the hair")
+        XCTAssertGreaterThan(outline, 30, "with a pixel-art outline")
+        // short hair without the side strands
+        let short = AssetImporter.photoToCharacter(portrait(skin: skin, hair: hair, shirt: shirt))
+        XCTAssertFalse(short.longHair)
+        XCTAssertFalse(short.usedDetector)
+    }
+
     func testPixelize() {
         var pic = Bitmap(200, 160, fill: RGBA(hex: "#eeeee6"))
         for y in 0..<160 { for x in 0..<200 {

@@ -48,6 +48,8 @@ final class GameModel: ObservableObject {
     @Published var weaponIndex = 1
     @Published var pick: PhotoPick = .none
     @Published var placingAsset: String? = nil
+    @Published var selectedPortrait: UIImage?
+    @Published var playerPortrait: UIImage?
 
     var world: OpenWorld!
     var society: Society!
@@ -55,6 +57,7 @@ final class GameModel: ObservableObject {
     var worldName = ""
     var playerLook = GameModel.defaultLook
     var assets: [String: SKTexture] = [:]
+    var portraits: [String: UIImage] = [:]
     private var lastLogCount = 0
     private var cleanCooldown = 0.0
     private var memObserver: NSObjectProtocol?
@@ -130,7 +133,10 @@ final class GameModel: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self, let img = GameModel.syntheticPortrait() else { return }
                 self.applyPhoto(img, target: 0)
-                if let sc = self.scene, let a = self.society.agent(near: sc.player, radius: 600) { self.applyPhoto(img, target: a.id); self.select(a.id) }
+                if let sc = self.scene, let a = self.society.agent(near: sc.player, radius: 600) {
+                    self.applyPhoto(img, target: a.id)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.select(a.id) }
+                }
             }
         }
     }
@@ -174,6 +180,7 @@ final class GameModel: ObservableObject {
         world = w
         society = s
         loadAssets()
+        playerPortrait = playerLook.portrait.flatMap { portraits[$0] }
         deselect()
         showMap = false
         let sc = GameScene(size: CGSize(width: 874, height: 402))
@@ -282,9 +289,10 @@ final class GameModel: ObservableObject {
         selectedID = id
         following = false
         selected = society.talk(id, speak: true)
+        selectedPortrait = society.agents[id]?.look.portrait.flatMap { portraits[$0] }
     }
 
-    func deselect() { selectedID = 0; selected = nil; following = false }
+    func deselect() { selectedID = 0; selected = nil; following = false; selectedPortrait = nil }
     func talk() { if selectedID != 0 { selected = society.talk(selectedID, speak: true) } }
     func feed() { if selectedID != 0 { society.giftFood(selectedID); talk() } }
     func cycleWeapon() { weaponIndex = (weaponIndex + 1) % GameModel.weapons.count }
@@ -352,10 +360,13 @@ final class GameModel: ObservableObject {
     // MARK: photos and assets
     func loadAssets() {
         assets.removeAll()
+        portraits.removeAll()
         for f in (try? FileManager.default.contentsOfDirectory(atPath: assetsDir.path)) ?? [] where f.hasSuffix(".png") {
             guard let img = UIImage(contentsOfFile: assetsDir.appendingPathComponent(f).path), let bmp = Bitmap(image: img, maxSide: 128) else { continue }
             let id = String(f.dropLast(4))
-            if id.hasPrefix("face_") { PixelArt.faces[id] = bmp } else { assets[id] = bmp.texture }
+            if id.hasPrefix("face_") { PixelArt.faces[id] = bmp }
+            else if id.hasPrefix("portrait_") { portraits[id] = bmp.uiImage }
+            else { assets[id] = bmp.texture }
         }
     }
 
@@ -364,24 +375,42 @@ final class GameModel: ObservableObject {
         if let data = bmp.uiImage?.pngData() { try? data.write(to: assetsDir.appendingPathComponent(id + ".png")) }
     }
 
-    /// Photo -> character look (target 0 = the player, otherwise a villager).
+    /// Photo -> pixel character (target 0 = the player, otherwise a villager).
+    /// Apple's on-device Vision models find the face and cut the person out; the
+    /// pixel face, pixel portrait, colours and hairstyle are generated from that.
     func applyPhoto(_ image: UIImage, target: Int) {
         guard let bmp = Bitmap(image: image, maxSide: 512) else { showToast(L("无法读取图片", "Could not read the picture")); return }
-        let out = AssetImporter.photoToLook(bmp)
-        let id = "face_\(Int(Date().timeIntervalSince1970))_\(Int.random(in: 0..<100000))"
-        PixelArt.faces[id] = out.face
-        store(out.face, id: id)
-        var look = out.look
-        look.face = id
+        showToast(L("AI 正在生成像素角色…", "AI is generating the pixel character…"))
+        DispatchQueue.global(qos: .userInitiated).async {
+            let analysis = PhotoAI.analyze(bmp)
+            let result = AssetImporter.photoToCharacter(analysis.bitmap, face: analysis.face)
+            DispatchQueue.main.async { [weak self] in self?.finishPhoto(result, analysis: analysis, target: target) }
+        }
+    }
+
+    private func finishPhoto(_ r: AssetImporter.PhotoResult, analysis: PhotoAI.Analysis, target: Int) {
+        guard society != nil else { return }
+        let stamp = "\(Int(Date().timeIntervalSince1970))_\(Int.random(in: 0..<100000))"
+        let faceID = "face_" + stamp, portraitID = "portrait_" + stamp
+        PixelArt.faces[faceID] = r.face
+        store(r.face, id: faceID)
+        store(r.portrait, id: portraitID)
+        portraits[portraitID] = r.portrait.uiImage
+        var look = r.look
+        look.face = faceID
+        look.portrait = portraitID
+        let how = analysis.face != nil ? (analysis.segmented ? L("AI 识别了人脸并抠出人像", "AI found the face and cut the person out")
+                                                             : L("AI 识别了人脸", "AI found the face"))
+                                       : L("未检测到人脸，按画面估计", "no face detected, estimated from the picture")
         if target != 0, let a = society.agents[target] {
-            look.style = a.look.style
             a.look = look
-            showToast(String(format: L("%@ 已按照片换装", "%@ now looks like the photo"), a.name(zh: GameModel.zh)))
+            showToast(String(format: L("%@ 已生成像素形象（%@）", "%@ became a pixel character (%@)"), a.name(zh: GameModel.zh), how))
+            if selectedID == target { selectedPortrait = portraits[portraitID] }
         } else {
-            look.style = playerLook.style
             look.shoes = playerLook.shoes
             playerLook = look
-            showToast(L("已用照片生成你的角色", "Your character now looks like the photo"))
+            playerPortrait = portraits[portraitID]
+            showToast(String(format: L("已生成你的像素角色（%@）", "Your pixel character is ready (%@)"), how))
         }
         scene?.clearTextureCache()
         scene?.faceCameraOnce()

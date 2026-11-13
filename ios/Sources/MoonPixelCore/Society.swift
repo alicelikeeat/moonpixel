@@ -111,6 +111,8 @@ public struct AgentTask {
 
 public struct Look: Codable, Equatable {
     public var skin = "#f2c8a4", hair = "#5a3a22", shirt = "#5a8ae8", pants = "#4a4a5a", shoes = "#5a3a2a", face = "", style = 0
+    /// Asset id of the pixel portrait generated from a photo (optional: older saves have none).
+    public var portrait: String?
     public init() {}
 }
 
@@ -197,6 +199,8 @@ public final class Settlement: Codable {
     public var origin = TilePos(0, 0)
     var trees: [TilePos] = [], rocks: [TilePos] = [], berries: [TilePos] = []
     var claims: [TilePos: Int] = [:]
+    var unreachable: Set<TilePos> = []
+    var unreachT = 0.0
     var resT = 0.0, planT = 0.0, aiAcc = 0.0
 
     enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned }
@@ -479,11 +483,13 @@ public final class Society {
     // MARK: settlement brain
     func scan(_ s: Settlement) {
         var trees: [TilePos] = [], rocks: [TilePos] = [], berries: [TilePos] = []
+        // resources nobody could reach are ignored for a while instead of being retried forever
+        if world.time > s.unreachT { s.unreachable.removeAll(); s.unreachT = world.time + 600 }
         let inner = 6
         for y in inner..<(Settlement.span - inner) { for x in inner..<(Settlement.span - inner) {
             let wx = s.origin.x + x, wy = s.origin.y + y
             let o = world.tile(2, wx, wy)
-            if o == 0 { continue }
+            if o == 0 || s.unreachable.contains(TilePos(wx, wy)) { continue }
             if o == T["berry_bush"] { berries.append(TilePos(wx, wy)) }
             else if o == T["rock"] { rocks.append(TilePos(wx, wy)) }
             else if let t = content.tile(o), t.natural && (t.big || o == T["cactus"]) { trees.append(TilePos(wx, wy)) }
@@ -875,7 +881,8 @@ public final class Society {
             let t = nearest(a, s, s.trees, isTree)
             if !t.isNone {
                 if go(a, s, t, "chop", 5) { s.claims[t] = a.id; return true }
-                s.trees.removeAll { $0 == t }       // unreachable (e.g. across water): forget it until the next survey
+                s.trees.removeAll { $0 == t }       // unreachable (e.g. across water)
+                s.unreachable.insert(t)
             } else if s.trees.count < 12 {
                 // forestry: plant saplings around the village so timber never runs out for good
                 for _ in 0..<6 {
@@ -893,6 +900,7 @@ public final class Society {
             if !t.isNone {
                 if go(a, s, t, "mine", 6) { s.claims[t] = a.id; return true }
                 s.rocks.removeAll { $0 == t }
+                s.unreachable.insert(t)
             }
         case "farmer":
             for b in s.buildings where b.type == "farm" && b.done {
@@ -909,6 +917,7 @@ public final class Society {
             if !t.isNone {
                 if go(a, s, t, "forage", 3) { s.claims[t] = a.id; return true }
                 s.berries.removeAll { $0 == t }
+                s.unreachable.insert(t)
             }
             if s.wood < 60 { return work(a, s, "woodcutter") }
             if s.stone < 30 { return work(a, s, "miner") }

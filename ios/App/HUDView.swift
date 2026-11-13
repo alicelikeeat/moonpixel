@@ -94,6 +94,13 @@ struct HUDView: View {
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let p = model.playerPortrait {
+                HStack(spacing: 8) {
+                    Image(uiImage: p).interpolation(.none).resizable().scaledToFit().frame(width: 40, height: 40)
+                        .padding(3).background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Text(L("你的像素形象（由照片生成）", "Your pixel character (from your photo)")).font(.system(size: 11, design: .rounded)).opacity(0.85)
+                }
+            }
             Text(model.statsText).font(.system(size: 13, design: .rounded))
             Text(model.techText).font(.system(size: 12, weight: .medium, design: .rounded)).foregroundStyle(Color(red: 1, green: 0.9, blue: 0.6))
             bar(model.techProgress, Color(red: 1, green: 0.8, blue: 0.3))
@@ -131,6 +138,10 @@ struct HUDView: View {
     private func agentCard(_ info: Society.TalkInfo) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                if let p = model.selectedPortrait {
+                    Image(uiImage: p).interpolation(.none).resizable().scaledToFit().frame(width: 44, height: 44)
+                        .padding(3).background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
                 Text("\(info.name)  \(info.female ? "♀" : "♂") \(info.age)").font(.system(size: 15, weight: .bold, design: .rounded))
                 Spacer()
                 Button { model.deselect() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).frame(width: 28, height: 28).background(Color.white.opacity(0.14), in: Circle()) }

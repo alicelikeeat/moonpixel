@@ -431,13 +431,28 @@ public enum AssetImporter {
         return (x0, y0, max(4, x1 - x0 + 1), max(4, y1 - y0 + 1))
     }
 
-    /// Portrait -> character colours + a 10x8 pixel face for the sprite's head.
-    public static func photoToLook(_ photo: Bitmap) -> (look: Look, face: Bitmap, faceRect: (Int, Int, Int, Int)) {
+    public struct PhotoResult {
+        public var look: Look
+        public var face: Bitmap             // 10x8, painted on the sprite's head
+        public var portrait: Bitmap         // pixel-art bust of the person
+        public var faceRect: (Int, Int, Int, Int)   // in the 64x64 working image
+        public var longHair: Bool
+        public var usedDetector: Bool       // true when a face detector supplied the face box
+    }
+
+    /// Portrait -> pixel character. `face` is the face box in photo pixels when a
+    /// detector (e.g. Apple Vision) found one; without it a skin-tone heuristic is
+    /// used. If the photo already has a transparent background (person
+    /// segmentation applied), only the person contributes to colours and portrait.
+    public static func photoToCharacter(_ photo: Bitmap, face detected: (x: Int, y: Int, w: Int, h: Int)? = nil) -> PhotoResult {
         let small = photo.resampled(to: 64, 64)
-        let f = findFace(small)
+        var f = findFace(small)
+        if let d = detected, d.w > 4, d.h > 4 {
+            f = (d.x * 64 / photo.w, d.y * 64 / photo.h, max(4, d.w * 64 / photo.w), max(4, d.h * 64 / photo.h))
+        }
         let fh = f.3
-        var skin = mean(small, f.0, f.1, f.2, f.3, skin: 1)
-        if skin.1 == 0 { skin = mean(small, f.0, f.1, f.2, f.3, skin: -1) }
+        var skin = mean(small, f.0 + f.2 / 6, f.1 + fh / 6, max(2, f.2 * 2 / 3), max(2, fh * 2 / 3), skin: 1)
+        if skin.1 == 0 { skin = mean(small, f.0 + f.2 / 4, f.1 + fh / 4, max(2, f.2 / 2), max(2, fh / 2), skin: -1) }
         var hair = mean(small, f.0 + f.2 / 4, f.1 - max(2, fh * 28 / 100), max(2, f.2 / 2), max(2, fh * 28 / 100), skin: 0)
         if hair.1 < 6 { hair = mean(small, f.0 - 4, f.1 - 2, 4, fh / 2, skin: 0) }
         var shirt = mean(small, f.0 - f.2 / 2, f.1 + fh + fh * 3 / 10, f.2 * 2, fh * 8 / 10, skin: 0)
@@ -445,22 +460,57 @@ public enum AssetImporter {
         let pants = mean(small, 8, 58, 48, 6, skin: 0)
         var look = Look()
         look.skin = skin.0.hex
-        look.hair = hair.1 > 0 ? hair.0.hex : "#3a2a22"
+        let hairC = hair.1 > 0 ? hair.0 : RGBA(hex: "#3a2a22")
+        look.hair = hairC.hex
         let shirtC = shirt.1 > 0 ? shirt.0 : RGBA(hex: "#3a6ac8")
         look.shirt = shirtC.hex
         look.pants = (pants.1 > 20 && pants.0.dist(shirtC) > 0.18 ? pants.0 : shirtC.darkened(0.45)).hex
+        // long hair: hair-coloured pixels beside the lower half of the face and below the chin
+        var hairPx = 0, sidePx = 0
+        for y in (f.1 + fh / 2)..<min(64, f.1 + fh + fh / 2) {
+            for x in [f.0 - 3, f.0 - 2, f.0 - 1, f.0 + f.2, f.0 + f.2 + 1, f.0 + f.2 + 2] where x >= 0 && x < 64 {
+                let c = small.get(x, y)
+                if c.a < 128 { continue }
+                sidePx += 1
+                if c.dist(hairC) < 0.16 && c.dist(shirtC) > 0.10 { hairPx += 1 }
+            }
+        }
+        let longHair = sidePx > 0 && Double(hairPx) / Double(sidePx) > 0.35
+        look.style = longHair ? 2 : 0
+        // pixel face
         let ix = max(0, f.0 + f.2 / 8), iy = max(0, f.1 + fh / 5)
         let iw = max(4, f.2 * 3 / 4), ih = max(4, fh * 7 / 10)
         let sx = photo.w * ix / 64, sy = photo.h * iy / 64, sw = max(1, photo.w * iw / 64), sh = max(1, photo.h * ih / 64)
         var crop = Bitmap(sw, sh)
         crop.blit(photo, sx: sx, sy: sy, sw: sw, sh: sh, dx: 0, dy: 0, blend: false)
-        var face = crop.resampled(to: 10, 8)
+        var faceBmp = crop.resampled(to: 10, 8)
         for y in 0..<8 { for x in 0..<10 {
-            let c = face.get(x, y)
+            let c = faceBmp.get(x, y)
             func q(_ v: UInt8) -> UInt8 { UInt8(min(255, (Int(v) + 10) / 21 * 21)) }
-            face.set(x, y, RGBA(q(c.r), q(c.g), q(c.b)))
+            faceBmp.set(x, y, c.a < 128 ? skin.0 : RGBA(q(c.r), q(c.g), q(c.b)))
         } }
-        return (look, face, f)
+        // pixel portrait: head and shoulders
+        let bx0 = max(0, photo.w * (f.0 - f.2 * 6 / 10) / 64), by0 = max(0, photo.h * (f.1 - fh * 7 / 10) / 64)
+        let bx1 = min(photo.w, photo.w * (f.0 + f.2 + f.2 * 6 / 10) / 64), by1 = min(photo.h, photo.h * (f.1 + fh + fh * 9 / 10) / 64)
+        var bust = Bitmap(max(1, bx1 - bx0), max(1, by1 - by0))
+        bust.blit(photo, sx: bx0, sy: by0, sw: bust.w, sh: bust.h, dx: 0, dy: 0, blend: false)
+        var transparent = 0
+        for i in stride(from: 3, to: bust.px.count, by: 4) where bust.px[i] < 128 { transparent += 1 }
+        let alreadyCutOut = transparent * 4 * 20 > bust.px.count      // > 5 % transparent: segmentation was applied
+        var portrait = pixelize(bust, maxSide: 32, colors: 20, removeBackground: !alreadyCutOut)
+        var outlined = Bitmap(portrait.w + 2, portrait.h + 2)
+        outlined.blit(portrait, sx: 0, sy: 0, sw: portrait.w, sh: portrait.h, dx: 1, dy: 1, blend: false)
+        PixelArt.addOutline(&outlined)
+        portrait = outlined
+        return PhotoResult(look: look, face: faceBmp, portrait: portrait, faceRect: f, longHair: longHair, usedDetector: detected != nil)
+    }
+
+    /// Portrait -> character colours + a 10x8 pixel face for the sprite's head.
+    public static func photoToLook(_ photo: Bitmap) -> (look: Look, face: Bitmap, faceRect: (Int, Int, Int, Int)) {
+        let r = photoToCharacter(photo)
+        var look = r.look
+        look.style = 0
+        return (look, r.face, r.faceRect)
     }
 
     /// Median-cut palette (at most n colours) of the opaque pixels.
