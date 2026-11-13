@@ -542,6 +542,115 @@ public enum AssetImporter {
         }
     }
 
+    /// Frames of a GIF or video -> one animated pixel sprite (no skeleton: the
+    /// frames themselves are the animation). All frames share one crop, one scale
+    /// and one palette so the character does not jitter or flicker. Frames that
+    /// already carry transparency (an AI cut-out) keep it; otherwise the
+    /// background is flood-filled away from the borders.
+    public static func spriteFrames(_ frames: [Bitmap], maxFrames: Int = 12, maxW: Int = 36, maxH: Int = 44, colors: Int = 24) -> [Bitmap] {
+        guard !frames.isEmpty else { return [] }
+        var picked: [Bitmap] = []
+        let n = min(max(1, maxFrames), frames.count)
+        for i in 0..<n { picked.append(frames[i * frames.count / n]) }
+        let w0 = picked[0].w, h0 = picked[0].h
+        picked = picked.map { $0.w == w0 && $0.h == h0 ? $0 : $0.resampled(to: w0, h0) }
+        func hasAlpha(_ b: Bitmap) -> Bool {
+            var clear = 0
+            for i in stride(from: 3, to: b.px.count, by: 4) where b.px[i] < 128 { clear += 1 }
+            return clear * 25 > b.w * b.h
+        }
+        if !picked.allSatisfy(hasAlpha) {
+            picked = picked.map { f in
+                // work at a moderate size, then let the flood fill clear the backdrop
+                let k = min(1.0, 96.0 / Double(max(f.w, f.h)))
+                let small = f.resampled(to: max(1, Int(Double(f.w) * k)), max(1, Int(Double(f.h) * k)))
+                return clearBackground(small)
+            }
+        }
+        let fw = picked[0].w, fh = picked[0].h
+        // union bounding box of everything opaque
+        var x0 = fw, y0 = fh, x1 = -1, y1 = -1
+        for f in picked { for y in 0..<fh { for x in 0..<fw where f.px[(y * fw + x) * 4 + 3] >= 128 {
+            if x < x0 { x0 = x }; if x > x1 { x1 = x }; if y < y0 { y0 = y }; if y > y1 { y1 = y }
+        } } }
+        if x1 < x0 || y1 < y0 { x0 = 0; y0 = 0; x1 = fw - 1; y1 = fh - 1 }
+        let bw = x1 - x0 + 1, bh = y1 - y0 + 1
+        let k = min(Double(maxW) / Double(bw), Double(maxH) / Double(bh))
+        let ow = max(1, Int((Double(bw) * k).rounded())), oh = max(1, Int((Double(bh) * k).rounded()))
+        var small: [Bitmap] = picked.map { f in
+            var c = Bitmap(bw, bh)
+            c.blit(f, sx: x0, sy: y0, sw: bw, sh: bh, dx: 0, dy: 0, blend: false)
+            return c.resampled(to: ow, oh)
+        }
+        // one palette for the whole animation
+        var sheet = Bitmap(ow * small.count, oh)
+        for (i, f) in small.enumerated() { sheet.blit(f, sx: 0, sy: 0, sw: ow, sh: oh, dx: i * ow, dy: 0, blend: false) }
+        let pal = palette(sheet, min(64, max(2, colors)))
+        let ink = RGBA(hex: "#2a2233")
+        for i in 0..<small.count {
+            var img = small[i]
+            for y in 0..<oh { for x in 0..<ow {
+                let c = img.get(x, y)
+                if c.a < 128 || pal.isEmpty { img.set(x, y, .clear); continue }
+                var best = pal[0], bd = 9.0
+                for pc in pal { let d = c.dist(pc); if d < bd { bd = d; best = pc } }
+                img.set(x, y, best)
+            } }
+            // dark outline so the sprite reads against any ground
+            var out = Bitmap(ow + 2, oh + 2)
+            out.blit(img, sx: 0, sy: 0, sw: ow, sh: oh, dx: 1, dy: 1, blend: false)
+            for y in 0..<(oh + 2) { for x in 0..<(ow + 2) where out.get(x, y).a < 128 {
+                var edge = false
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nx = x + dx - 1, ny = y + dy - 1
+                    if nx >= 0 && ny >= 0 && nx < ow && ny < oh && img.get(nx, ny).a >= 128 { edge = true; break }
+                }
+                if edge { out.set(x, y, ink) }
+            } }
+            small[i] = out
+        }
+        return small
+    }
+
+    /// Lay animation frames side by side (for saving as one PNG) and cut them apart again.
+    public static func sheet(_ frames: [Bitmap]) -> Bitmap {
+        guard let f = frames.first else { return Bitmap(1, 1) }
+        var s = Bitmap(f.w * frames.count, f.h)
+        for (i, fr) in frames.enumerated() { s.blit(fr, sx: 0, sy: 0, sw: f.w, sh: f.h, dx: i * f.w, dy: 0, blend: false) }
+        return s
+    }
+
+    public static func unsheet(_ sheet: Bitmap, count: Int) -> [Bitmap] {
+        guard count > 0, sheet.w % count == 0 else { return [sheet] }
+        let fw = sheet.w / count
+        return (0..<count).map { i in
+            var f = Bitmap(fw, sheet.h)
+            f.blit(sheet, sx: i * fw, sy: 0, sw: fw, sh: sheet.h, dx: 0, dy: 0, blend: false)
+            return f
+        }
+    }
+
+    /// Flood-fill the backdrop away from the image borders.
+    public static func clearBackground(_ src: Bitmap) -> Bitmap {
+        var img = src
+        let w = img.w, h = img.h
+        let corners = [img.get(0, 0), img.get(w - 1, 0), img.get(0, h - 1), img.get(w - 1, h - 1)]
+        let bg = RGBA(UInt8(corners.reduce(0) { $0 + Int($1.r) } / 4), UInt8(corners.reduce(0) { $0 + Int($1.g) } / 4), UInt8(corners.reduce(0) { $0 + Int($1.b) } / 4))
+        var stack: [(Int, Int)] = []
+        for x in 0..<w { stack.append((x, 0)); stack.append((x, h - 1)) }
+        for y in 0..<h { stack.append((0, y)); stack.append((w - 1, y)) }
+        var seen = [Bool](repeating: false, count: w * h)
+        while let p = stack.popLast() {
+            if p.0 < 0 || p.1 < 0 || p.0 >= w || p.1 >= h || seen[p.1 * w + p.0] { continue }
+            seen[p.1 * w + p.0] = true
+            let c = img.get(p.0, p.1)
+            if c.a >= 128 && c.dist(bg) > 0.16 { continue }
+            img.set(p.0, p.1, .clear)
+            stack.append((p.0 + 1, p.1)); stack.append((p.0 - 1, p.1)); stack.append((p.0, p.1 + 1)); stack.append((p.0, p.1 - 1))
+        }
+        return img
+    }
+
     /// Any picture -> small palette-reduced sprite with the background removed.
     public static func pixelize(_ src: Bitmap, maxSide: Int = 32, colors: Int = 16, removeBackground: Bool = true) -> Bitmap {
         let side = min(maxSprite, max(8, maxSide))

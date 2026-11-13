@@ -54,6 +54,8 @@ public final class Chunk {
 /// Unbounded deterministic terrain: every tile is a pure function of (seed, x, y).
 public final class Generator {
     public let seed: Int
+    /// Climate shifts chosen when the world was created (see WorldRecipe).
+    public var tempBias = 0.0, moistBias = 0.0, elevBias = 0.0
     let content = Content.shared
     let nElev, nTemp, nMoist, nRiver, nForest, nDetail: Noise
     var ground = [UInt8](), alt = [UInt8](), altCh = [Double](), density = [Double]()
@@ -84,7 +86,7 @@ public final class Generator {
     /// (elevation, temperature, moisture)
     public func climate(_ wx: Int, _ wy: Int) -> (Double, Double, Double) {
         let x = Double(wx), y = Double(wy)
-        return (0.5 + 0.62 * nElev.get(x, y), min(1, max(0, 0.5 + 1.0 * nTemp.get(x, y))), min(1, max(0, 0.5 + 0.85 * nMoist.get(x, y))))
+        return (0.5 + elevBias + 0.62 * nElev.get(x, y), min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y))), min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y))))
     }
 
     public func biome(_ wx: Int, _ wy: Int) -> Int {
@@ -107,9 +109,9 @@ public final class Generator {
                 let wx = bx + tx
                 let x = Double(wx), y = Double(wy)
                 let dn = nDetail.get(x, y)
-                let e = 0.5 + 0.62 * nElev.get(x, y) + dn * 0.006
-                let t = min(1, max(0, 0.5 + 1.0 * nTemp.get(x, y) + dn * 0.012))
-                let m = min(1, max(0, 0.5 + 0.85 * nMoist.get(x, y) + dn * 0.012))
+                let e = 0.5 + elevBias + 0.62 * nElev.get(x, y) + dn * 0.006
+                let t = min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y) + dn * 0.012))
+                let m = min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y) + dn * 0.012))
                 let fo = nForest.get(x, y)
                 let b = Biome.classify(e, t, m)
                 let h = MP.h2(seed, wx, wy)

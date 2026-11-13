@@ -209,7 +209,12 @@ final class GameScene: SKScene {
             let working = a.task.map { $0.stage == 1 && ["chop", "mine", "build", "forage", "reap", "sow", "plant"].contains($0.act) } ?? false
             var held = st == "elder" ? "cane" : (GameScene.jobTool[a.job] ?? "")
             if working && a.task?.act == "build" { held = "hammer" }
-            let tex = charTexture(look, a.facing, moving: a.moving, acting: working, held: held, child: st == "child", female: a.female, phase: phase + a.id)
+            let tex: SKTexture
+            if let fr = look.anim.flatMap({ model.anims[$0] }), !fr.isEmpty {
+                tex = fr[a.sleeping ? 0 : (phase + a.id) % fr.count]      // GIF / video character: its own frames are the animation
+            } else {
+                tex = charTexture(look, a.facing, moving: a.moving, acting: working, held: held, child: st == "child", female: a.female, phase: phase + a.id)
+            }
             node.texture = tex
             node.size = tex.size()
             let side = abs(a.facing.x) > abs(a.facing.y)
@@ -230,7 +235,12 @@ final class GameScene: SKScene {
 
         // player
         let held = GameModel.weapons[model.weaponIndex]
-        let ptex = charTexture(model.playerLook, facing, moving: moving, acting: attackT > 0.12, held: held, child: false, female: false, phase: phase)
+        let ptex: SKTexture
+        if let fr = model.playerLook.anim.flatMap({ model.anims[$0] }), !fr.isEmpty {
+            ptex = fr[phase % fr.count]
+        } else {
+            ptex = charTexture(model.playerLook, facing, moving: moving, acting: attackT > 0.12, held: held, child: false, female: false, phase: phase)
+        }
         playerNode.texture = ptex
         playerNode.size = ptex.size()
         let side = abs(facing.x) > abs(facing.y)

@@ -42,7 +42,7 @@ struct HUDView: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
         }
         .foregroundStyle(.white)
-        .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .images)
+        .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .any(of: [.images, .videos]))
         .onChange(of: model.pick) { _, v in
             guard v != .none else { return }
             pending = v            // remember the purpose until a photo actually arrives
@@ -54,15 +54,24 @@ struct HUDView: View {
             guard let item = item else { return }
             let purpose = pending
             Task {
-                let data = try? await item.loadTransferable(type: Data.self)
+                // photos, GIFs and videos all arrive here
+                let media = await MediaLoader.load(item)
                 await MainActor.run {
-                    if let data = data, let img = UIImage(data: data) {
+                    switch media {
+                    case .failed: model.showToast(L("无法读取所选内容", "Could not read the selection"))
+                    case .still(let img):
                         switch purpose {
                         case .asset: model.importAsset(img)
                         case .villager(let id): model.applyPhoto(img, target: id)
                         default: model.applyPhoto(img, target: 0)
                         }
-                    } else { model.showToast(L("无法读取图片", "Could not read the picture")) }
+                    case .motion(let frames):
+                        switch purpose {
+                        case .asset: if let img = frames[0].uiImage { model.importAsset(img) }
+                        case .villager(let id): model.applyMotion(frames, target: id)
+                        default: model.applyMotion(frames, target: 0)
+                        }
+                    }
                     pending = .none
                     pickerItem = nil
                 }
@@ -165,7 +174,7 @@ struct HUDView: View {
             }
             HStack(spacing: 6) {
                 pill(model.following ? L("停止跟随", "Unfollow") : L("跟随", "Follow"), "figure.walk") { model.following.toggle() }
-                pill(L("用照片换装", "Photo look"), "camera.fill") { model.pick = .villager(model.selectedID) }
+                pill(L("照片/GIF/视频换装", "Photo / GIF / video"), "camera.fill") { model.pick = .villager(model.selectedID) }
             }
         }
         .padding(14).frame(width: 310, alignment: .leading)
@@ -186,7 +195,7 @@ struct HUDView: View {
             tab(L("地图", "Map"), "map.fill") { model.toggleMap() }
             tab(L("村落", "Village"), "house.fill") { model.nextVillage() }
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
-            tab(L("照片", "Photo"), "person.crop.circle.badge.plus") { model.pick = .player }
+            tab(L("形象", "Photo"), "person.crop.circle.badge.plus") { model.pick = .player }
             tab(L("素材", "Import"), "photo.badge.plus") { model.pick = .asset }
             tab(L("清理", "Clean"), "sparkles") { model.cleanMemory(announce: true) }
             tab(L("保存", "Save"), "square.and.arrow.down.fill") { model.save(announce: true) }

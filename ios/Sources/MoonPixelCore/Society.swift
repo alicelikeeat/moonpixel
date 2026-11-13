@@ -110,6 +110,8 @@ public struct AgentTask {
 }
 
 public struct Look: Codable, Equatable {
+    /// Asset id of an animated sprite made from a GIF or video; drawn instead of the built-in body.
+    public var anim: String?
     public var skin = "#f2c8a4", hair = "#5a3a22", shirt = "#5a8ae8", pants = "#4a4a5a", shoes = "#5a3a2a", face = "", style = 0
     /// Asset id of the pixel portrait generated from a photo (optional: older saves have none).
     public var portrait: String?
@@ -278,6 +280,8 @@ public final class Society {
     /// Number of technologies discovered so far, and progress towards the next.
     public private(set) var techCount = 0
     public private(set) var research = 0.0
+    /// Start a world in a later era: the first `n` technologies are already known.
+    public func grantTech(_ n: Int) { techCount = max(techCount, min(Society.techs.count, n)) }
 
     public func has(_ tech: String) -> Bool {
         guard let i = Society.techs.firstIndex(where: { $0.0 == tech }) else { return false }

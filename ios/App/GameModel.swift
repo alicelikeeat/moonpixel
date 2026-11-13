@@ -58,6 +58,9 @@ final class GameModel: ObservableObject {
     var playerLook = GameModel.defaultLook
     var assets: [String: SKTexture] = [:]
     var portraits: [String: UIImage] = [:]
+    /// Animated sprites made from GIFs and videos (asset id -> frames).
+    var anims: [String: [SKTexture]] = [:]
+    var recipe: WorldRecipe?
     private var lastLogCount = 0
     private var cleanCooldown = 0.0
     private var memObserver: NSObjectProtocol?
@@ -69,6 +72,7 @@ final class GameModel: ObservableObject {
         var society: Society.Snapshot
         var px: Double, py: Double
         var look: Look
+        var recipe: WorldRecipe?
     }
 
     // MARK: world store (several worlds side by side)
@@ -104,10 +108,11 @@ final class GameModel: ObservableObject {
         refreshWorlds()
     }
 
-    func createWorld(name: String, seed: Int, overrideMB: Int) {
+    /// One sentence is enough: the recipe was analysed from what the player typed.
+    func createWorld(_ recipe: WorldRecipe, overrideMB: Int) {
         let id = "w\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 100..<1000))"
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        start(id: id, name: clean.isEmpty ? L("世界", "World") + " \(worlds.count + 1)" : clean, seed: seed, overrideMB: overrideMB, load: false)
+        start(id: id, name: recipe.suggestedName(zh: GameModel.zh, index: worlds.count + 1), seed: recipe.seed, overrideMB: overrideMB, load: false, recipe: recipe)
+        if !recipe.prompt.isEmpty { showToast(L("已按你的描述创建：", "Created from your words: ") + recipe.summary(zh: GameModel.zh).prefix(4).joined(separator: " · ")) }
     }
 
     func openWorld(_ m: WorldMeta, overrideMB: Int) { start(id: m.id, name: m.name, seed: m.seed, overrideMB: overrideMB, load: true) }
@@ -128,6 +133,17 @@ final class GameModel: ObservableObject {
         }
         if args.contains("--map") { DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.toggleMap() } }
         if args.contains("--details") { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.showDetails = true; self?.refreshHUD() } }
+        if args.contains("--test-anim") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self = self else { return }
+                let clip = GameModel.syntheticClip()
+                self.applyMotion(clip, target: 0)
+                if let sc = self.scene, let a = self.society.agent(near: sc.player, radius: 600) {
+                    self.applyMotion(clip, target: a.id)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 6) { self.select(a.id) }
+                }
+            }
+        }
         if args.contains("--test-photo") {
             // end-to-end check of the photo pipeline with a synthetic portrait (player + nearest villager)
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
@@ -151,7 +167,7 @@ final class GameModel: ObservableObject {
         }
     }
 
-    func start(id: String, name: String, seed: Int, overrideMB: Int, load: Bool) {
+    func start(id: String, name: String, seed: Int, overrideMB: Int, load: Bool, recipe newRecipe: WorldRecipe? = nil) {
         worldID = id
         worldName = name
         let budget = MemoryBudget(overrideMB: overrideMB)
@@ -163,9 +179,12 @@ final class GameModel: ObservableObject {
         if !load { try? FileManager.default.removeItem(at: saveDir) }
         let w = OpenWorld(seed: index?.world.seed ?? seed, budget: budget)
         w.diskLimitBytes = GameModel.mapLimitBytes
+        recipe = index?.recipe ?? (load ? nil : newRecipe)
+        if let r = recipe { w.gen.tempBias = r.tempBias; w.gen.moistBias = r.moistBias; w.gen.elevBias = r.elevBias }
         w.open(directory: saveDir)
         let s = Society(world: w, seed: w.seed)
         s.zh = GameModel.zh
+        if let r = recipe { s.minPopulation = r.minPopulation }
         var start = Vec2(8, 8)
         playerLook = GameModel.defaultLook
         if let ix = index {
@@ -174,7 +193,8 @@ final class GameModel: ObservableObject {
             start = Vec2(ix.px, ix.py)
             playerLook = ix.look
         } else {
-            s.bootstrap(origin: TilePos(0, 0), villages: 4, per: 30)
+            s.grantTech(recipe?.startTech ?? 0)
+            s.bootstrap(origin: TilePos(0, 0), villages: recipe?.villages ?? 4, per: recipe?.perVillage ?? 30)
             if let first = s.settlements[1] { start = w.findFree(near: first.center + TilePos(0, 4), maxR: 8).center }
         }
         world = w
@@ -201,7 +221,7 @@ final class GameModel: ObservableObject {
     func save(announce: Bool) {
         guard let w = world, let s = society, let sc = scene else { return }
         w.saveAll()
-        let ix = Index(world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook)
+        let ix = Index(world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook, recipe: recipe)
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(ix) { try? data.write(to: saveDir.appendingPathComponent("index.json"), options: .atomic) }
         let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count,
@@ -361,10 +381,17 @@ final class GameModel: ObservableObject {
     func loadAssets() {
         assets.removeAll()
         portraits.removeAll()
+        anims.removeAll()
         for f in (try? FileManager.default.contentsOfDirectory(atPath: assetsDir.path)) ?? [] where f.hasSuffix(".png") {
-            guard let img = UIImage(contentsOfFile: assetsDir.appendingPathComponent(f).path), let bmp = Bitmap(image: img, maxSide: 128) else { continue }
             let id = String(f.dropLast(4))
-            if id.hasPrefix("face_") { PixelArt.faces[id] = bmp }
+            guard let img = UIImage(contentsOfFile: assetsDir.appendingPathComponent(f).path),
+                  let bmp = Bitmap(image: img, maxSide: id.hasPrefix("anim_") ? 2048 : 128) else { continue }
+            if id.hasPrefix("anim_") {
+                // "anim_<stamp>_n<frames>": one PNG strip holding every frame
+                let n = Int(id.components(separatedBy: "_n").last ?? "") ?? 1
+                anims[id] = AssetImporter.unsheet(bmp, count: n).map { $0.texture }
+            }
+            else if id.hasPrefix("face_") { PixelArt.faces[id] = bmp }
             else if id.hasPrefix("portrait_") { portraits[id] = bmp.uiImage }
             else { assets[id] = bmp.texture }
         }
@@ -414,6 +441,69 @@ final class GameModel: ObservableObject {
         }
         scene?.clearTextureCache()
         scene?.faceCameraOnce()
+    }
+
+    /// GIF or video -> animated pixel character. No skeleton: the frames are
+    /// pixelised together (one crop, one palette) and played back in the world.
+    func applyMotion(_ frames: [Bitmap], target: Int) {
+        guard frames.count > 1 else { return }
+        showToast(L("AI 正在把动画逐帧像素化…", "AI is pixelising the animation frame by frame…"))
+        DispatchQueue.global(qos: .userInitiated).async {
+            let analyses = frames.map { PhotoAI.analyze($0) }
+            // use the AI cut-outs only when the person was found in every frame
+            let cut = analyses.allSatisfy { $0.segmented }
+            let sprites = AssetImporter.spriteFrames(cut ? analyses.map { $0.bitmap } : frames, maxFrames: 12)
+            let first = analyses[0]
+            let still = AssetImporter.photoToCharacter(first.bitmap, face: first.face)
+            DispatchQueue.main.async { [weak self] in self?.finishMotion(sprites, still: still, foundFace: first.face != nil, cut: cut, target: target) }
+        }
+    }
+
+    private func finishMotion(_ sprites: [Bitmap], still: AssetImporter.PhotoResult, foundFace: Bool, cut: Bool, target: Int) {
+        guard society != nil, !sprites.isEmpty else { showToast(L("无法读取动画", "Could not read the animation")); return }
+        let stamp = "\(Int(Date().timeIntervalSince1970))_\(Int.random(in: 0..<100000))"
+        let animID = "anim_\(stamp)_n\(sprites.count)", portraitID = "portrait_" + stamp
+        store(AssetImporter.sheet(sprites), id: animID)
+        anims[animID] = sprites.map { $0.texture }
+        // card picture: the AI portrait when a face was found, otherwise the first frame
+        let portrait = foundFace ? still.portrait : sprites[0]
+        store(portrait, id: portraitID)
+        portraits[portraitID] = portrait.uiImage
+        var look = foundFace ? still.look : Look()
+        look.face = ""
+        look.anim = animID
+        look.portrait = portraitID
+        let how = String(format: L("%d 帧%@", "%d frames%@"), sprites.count, cut ? L("，AI 抠出人像", ", person cut out by AI") : "")
+        if target != 0, let a = society.agents[target] {
+            a.look = look
+            showToast(String(format: L("%@ 已变成动画像素角色（%@）", "%@ is now an animated pixel character (%@)"), a.name(zh: GameModel.zh), how))
+            if selectedID == target { selectedPortrait = portraits[portraitID] }
+        } else {
+            playerLook = look
+            playerPortrait = portraits[portraitID]
+            showToast(String(format: L("已生成你的动画像素角色（%@）", "Your animated pixel character is ready (%@)"), how))
+        }
+        scene?.clearTextureCache()
+        scene?.faceCameraOnce()
+    }
+
+    /// A short synthetic clip (a waving figure) for the simulator smoke test.
+    static func syntheticClip() -> [Bitmap] {
+        (0..<8).compactMap { i -> Bitmap? in
+            let r = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 220))
+            let bob = CGFloat(i % 4 < 2 ? 0 : 8), arm = CGFloat(i % 4) * 14
+            let img = r.image { ctx in
+                UIColor(red: 0.2, green: 0.75, blue: 0.4, alpha: 1).setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 160, height: 220))
+                UIColor(red: 0.95, green: 0.6, blue: 0.15, alpha: 1).setFill(); UIBezierPath(roundedRect: CGRect(x: 50, y: 95 + bob, width: 60, height: 80), cornerRadius: 14).fill()
+                UIColor(red: 0.25, green: 0.25, blue: 0.6, alpha: 1).setFill()
+                ctx.fill(CGRect(x: 54, y: 172 + bob, width: 20, height: 38 - bob)); ctx.fill(CGRect(x: 86, y: 172 + bob, width: 20, height: 38 - bob))
+                UIColor(red: 0.98, green: 0.82, blue: 0.68, alpha: 1).setFill()
+                UIBezierPath(ovalIn: CGRect(x: 44, y: 22 + bob, width: 72, height: 72)).fill()
+                ctx.fill(CGRect(x: 110, y: 110 + bob - arm, width: 16, height: 44)); ctx.fill(CGRect(x: 34, y: 110 + bob, width: 16, height: 44))
+                UIColor(red: 0.3, green: 0.15, blue: 0.4, alpha: 1).setFill(); UIBezierPath(ovalIn: CGRect(x: 44, y: 16 + bob, width: 72, height: 36)).fill()
+            }
+            return Bitmap(image: img, maxSide: 220)
+        }
     }
 
     /// Any picture -> placeable pixel object.
