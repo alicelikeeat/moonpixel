@@ -140,12 +140,12 @@ struct LawsPanel: View {
                 if model.lawBusy {
                     ProgressView(value: model.lawProgress).tint(.white)
                 }
-                HStack(alignment: .top, spacing: 8) { thanos; annihilation }
-                HStack(alignment: .top, spacing: 8) { genesis; guixu }
                 if !model.lawReport.isEmpty {
                     Text(model.lawReport).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(Color(red: 1, green: 0.9, blue: 0.6))
                         .accessibilityIdentifier("law-report")
                 }
+                HStack(alignment: .top, spacing: 8) { thanos; annihilation }
+                HStack(alignment: .top, spacing: 8) { genesis; guixu }
                 storage
             }
         }
