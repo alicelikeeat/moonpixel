@@ -22,19 +22,24 @@ extension Bitmap {
     var uiImage: UIImage? { cgImage.map { UIImage(cgImage: $0) } }
 
     /// Decode any UIImage into RGBA pixels (downscaled so photos stay small).
+    /// The image is first re-rendered upright, so camera orientation flags never
+    /// leave the photo sideways or upside down.
     init?(image: UIImage, maxSide: Int = 512) {
-        guard let cg = image.cgImage else { return nil }
-        let k = min(1.0, Double(maxSide) / Double(max(cg.width, cg.height)))
-        let w = max(1, Int(Double(cg.width) * k)), h = max(1, Int(Double(cg.height) * k))
+        let src = image.size
+        guard src.width >= 1, src.height >= 1 else { return nil }
+        let k = min(1.0, Double(maxSide) / Double(max(src.width, src.height)))
+        let w = max(1, Int(Double(src.width) * k)), h = max(1, Int(Double(src.height) * k))
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 1
+        fmt.opaque = false
+        let upright = UIGraphicsImageRenderer(size: CGSize(width: w, height: h), format: fmt).image { _ in
+            image.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
+        guard let cg = upright.cgImage else { return nil }
         var buf = [UInt8](repeating: 0, count: w * h * 4)
         guard let ctx = CGContext(data: &buf, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        ctx.interpolationQuality = .medium
-        // respect the photo's orientation by drawing the UIImage, not the raw CGImage
-        UIGraphicsPushContext(ctx)
-        ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: 1, y: -1)
-        image.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
-        UIGraphicsPopContext()
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
         self.init(w, h)
         self.px = buf
     }

@@ -42,7 +42,7 @@ extension View {
     @ViewBuilder func glass<S: Shape>(_ shape: S) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: shape)
+            self.glassEffect(.regular, in: shape)
         } else {
             self.background(.ultraThinMaterial, in: shape)
         }
@@ -53,3 +53,15 @@ extension View {
 }
 
 func L(_ zh: String, _ en: String) -> String { GameModel.zh ? zh : en }
+
+/// Button style with an explicit, generous hit area and visible press feedback.
+/// (The glass panels themselves are not interactive, so they can never swallow a tap.)
+struct PressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}

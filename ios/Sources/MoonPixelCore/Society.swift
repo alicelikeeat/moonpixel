@@ -175,6 +175,8 @@ public final class Building: Codable {
     public var done = false
     public var residents: [Int] = []
     public var cap = 0
+    /// Household that owns this house (optional so that older saves still load).
+    public var owner: Int?
     public var door = TilePos(0, 0)
     public init() {}
 }
@@ -195,7 +197,7 @@ public final class Settlement: Codable {
     public var origin = TilePos(0, 0)
     var trees: [TilePos] = [], rocks: [TilePos] = [], berries: [TilePos] = []
     var claims: [TilePos: Int] = [:]
-    var resT = 0.0, planT = 0.0
+    var resT = 0.0, planT = 0.0, aiAcc = 0.0
 
     enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned }
     public init() {}
@@ -235,7 +237,9 @@ public final class Society {
         "died_hunger": ("%@ starved to death (%@)", "%@ 饿死了（%@ 岁）"), "died_ill": ("%@ died of illness (%@)", "%@ 因病去世（%@ 岁）"),
         "paired": ("%@ and %@ became a couple", "%@ 和 %@ 结为伴侣"), "built": ("%@ finished a %@", "%@ 建成了一座%@"),
         "founded": ("%@ settlers from %@ founded %@", "%@ 位来自%@的开拓者建立了%@"), "arrived": ("%@ wanderers joined %@", "%@ 位流浪者加入了%@"),
-        "abandoned": ("%@ has been abandoned", "%@ 已被废弃"),
+        "abandoned": ("%@ has been abandoned", "%@ 已被废弃"), "tech": ("The people discovered %@", "人们掌握了%@"),
+        "school": ("school", "学校"), "workshop": ("workshop", "工坊"), "factory": ("factory", "工厂"), "lab": ("research lab", "研究所"),
+        "ai_center": ("AI centre", "人工智能中心"),
         "house": ("house", "房屋"), "farm": ("farm", "农田"), "well": ("well", "水井"), "lights": ("lantern square", "灯火广场"),
         "job_": ("resting", "休息"), "job_child": ("child", "孩子"), "job_elder": ("elder", "长者"), "job_forager": ("forager", "采集者"),
         "job_woodcutter": ("woodcutter", "伐木工"), "job_miner": ("stonecutter", "采石工"), "job_farmer": ("farmer", "农夫"), "job_builder": ("builder", "建筑工"),
@@ -255,6 +259,70 @@ public final class Society {
         "s_town": ("%@ has %@ people and %@ houses now.", "%@现在有 %@ 人、%@ 座房屋。"),
     ]
 
+    /// Technologies the civilisation discovers on its own, in order.
+    /// (key, English, Chinese, research cost)
+    public static let techs: [(String, String, String, Double)] = [
+        ("farming", "Farming", "农耕", 80), ("masonry", "Masonry", "石工", 180), ("writing", "Writing", "文字", 320),
+        ("metalwork", "Metalworking", "冶金", 520), ("machinery", "Machinery", "机械", 840), ("electricity", "Electricity", "电力", 1300),
+        ("manufacturing", "Advanced manufacturing", "先进制造", 1900), ("computing", "Computing", "计算机", 2600),
+        ("ai", "Artificial intelligence", "人工智能", 3600),
+    ]
+    /// Buildings a technology unlocks: (tech key, building type, minimum population).
+    static let techBuildings: [(String, String, Int)] = [
+        ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
+    ]
+    /// Number of technologies discovered so far, and progress towards the next.
+    public private(set) var techCount = 0
+    public private(set) var research = 0.0
+
+    public func has(_ tech: String) -> Bool {
+        guard let i = Society.techs.firstIndex(where: { $0.0 == tech }) else { return false }
+        return i < techCount
+    }
+    public func techName(_ i: Int) -> String { i < 0 || i >= Society.techs.count ? "" : (zh ? Society.techs[i].2 : Society.techs[i].1) }
+    /// 0...1 progress towards the next technology (1 when everything is known).
+    public var researchProgress: Double { techCount >= Society.techs.count ? 1 : research / Society.techs[techCount].3 }
+    /// Research points per second produced by the whole civilisation right now.
+    public var researchRate: Double {
+        var rate = 0.0
+        for s in settlements.values where !s.abandoned {
+            let adults = Double(s.members.count) * 0.7
+            let boost = 1.0 + 0.6 * Double(s.count("school", done: true)) + 1.2 * Double(s.count("lab", done: true)) + 2.5 * Double(s.count("ai_center", done: true))
+            rate += adults * 0.003 * boost
+        }
+        return rate
+    }
+
+    func advanceResearch(_ dt: Double) {
+        guard techCount < Society.techs.count else { return }
+        research += researchRate * dt
+        while techCount < Society.techs.count && research >= Society.techs[techCount].3 {
+            research -= Society.techs[techCount].3
+            techCount += 1
+            emit("tech", [techName(techCount - 1)], settlements.values.first { !$0.abandoned }?.center.center ?? .zero)
+            for s in settlements.values { s.planT = 0 }
+        }
+    }
+
+    /// Advanced manufacturing and AI change how a village works.
+    func automation(_ s: Settlement, _ dt: Double) {
+        let factories = Double(s.count("factory", done: true))
+        if factories > 0 { s.wood += 0.03 * factories * dt; s.stone += 0.02 * factories * dt }
+        if s.count("ai_center", done: true) > 0 {
+            // AI-run farms: ripe wheat is harvested and replanted without anyone walking there
+            s.aiAcc += dt
+            if s.aiAcc >= 4 {
+                s.aiAcc = 0
+                for b in s.buildings where b.type == "farm" && b.done {
+                    for dy in 0..<b.h { for dx in 0..<b.w where world.tile(2, b.x + dx, b.y + dy) == T["wheat_2"] {
+                        world.setTile(2, b.x + dx, b.y + dy, T["wheat_0"]!)
+                        s.food += 4
+                    } }
+                }
+            }
+        }
+    }
+
     public let world: OpenWorld
     let content = Content.shared
     public var zh = false
@@ -273,7 +341,7 @@ public final class Society {
         self.world = world
         rng = RNG(seed: seed)
         for k in ["tree_oak", "rock", "berry_bush", "berry_bush_empty", "wheat_0", "wheat_2", "farmland", "campfire", "chest", "crate",
-                  "cobble_road", "path", "grave"] { T[k] = content.tid(k) }
+                  "cobble_road", "path", "grave", "cactus"] { T[k] = content.tid(k) }
         world.onTileChanged.append { [weak self] x, y, _, _, _ in
             guard let self = self else { return }
             let t = TilePos(x, y)
@@ -391,7 +459,9 @@ public final class Society {
             s.planT -= dt
             if s.planT <= 0 { s.planT = 6; plan(s) }
             if world.time >= s.resT { s.resT = world.time + 25; scan(s) }
+            automation(s, dt)
         }
+        advanceResearch(dt)
         for id in agents.keys.sorted() { if let a = agents[id], a.alive { update(a, dt) } }
         hourAcc += dt
         while hourAcc >= Society.hour { hourAcc -= Society.hour; hourly() }
@@ -416,7 +486,7 @@ public final class Society {
             if o == 0 { continue }
             if o == T["berry_bush"] { berries.append(TilePos(wx, wy)) }
             else if o == T["rock"] { rocks.append(TilePos(wx, wy)) }
-            else if let t = content.tile(o), t.natural && t.big { trees.append(TilePos(wx, wy)) }
+            else if let t = content.tile(o), t.natural && (t.big || o == T["cactus"]) { trees.append(TilePos(wx, wy)) }
         } }
         s.trees = trees; s.rocks = rocks; s.berries = berries
         s.claims = s.claims.filter { agents[$0.value] != nil }
@@ -453,6 +523,7 @@ public final class Society {
         let b = Building()
         b.type = type
         var w = 6, h = type == "farm" ? 4 : 5
+        if let spec = Society.roomSpecs[type] { w = spec.w; h = spec.h }
         var pos = TilePos(0, 0)
         if type == "well" {
             pos = s.center + TilePos(3, 3); w = 1; h = 1
@@ -477,7 +548,7 @@ public final class Society {
             b.door = pos + TilePos(w / 2, h)
         } else if type == "house" {
             b.cap = 4
-            let stone = s.count("house") >= 6 && s.stone > 20
+            let stone = has("masonry") && s.stone > 24
             let wall = stone ? "wall_stone" : "wall_wood"
             let cx = pos.x + w / 2, cy = pos.y + h / 2
             var dd = TilePos(2, h - 1), out = TilePos(0, 1)
@@ -498,10 +569,41 @@ public final class Society {
             b.cells.append(BuildCell(dx: w - 1 - farX, dy: farY, layer: 2, key: "bed", wood: 2, stone: 0))
             b.door = pos + dd + out
         }
+        if let spec = Society.roomSpecs[type] {
+            // public buildings: a walled room facing the square with its signature equipment
+            let dd = TilePos(w / 2, h - 1)
+            for dy in 1..<(h - 1) { for dx in 1..<(w - 1) { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 0, key: spec.floor, wood: 0, stone: 0)) } }
+            for dy in 0..<h { for dx in 0..<w where dx == 0 || dy == 0 || dx == w - 1 || dy == h - 1 {
+                if TilePos(dx, dy) == dd { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: "door_wood", wood: 1, stone: 0)) }
+                else { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: spec.wall, wood: spec.wall == "wall_wood" ? 1 : 0, stone: spec.wall == "wall_wood" ? 0 : 1)) }
+            } }
+            for f in spec.items where f.0 < w - 1 && f.1 < h - 1 { b.cells.append(BuildCell(dx: f.0, dy: f.1, layer: 2, key: f.2, wood: 2, stone: 2)) }
+            b.door = pos + dd + TilePos(0, 1)
+        }
         b.id = nextBID; nextBID += 1
         b.x = pos.x; b.y = pos.y; b.w = w; b.h = h
         s.buildings.append(b)
         return true
+    }
+
+    struct RoomSpec { let w: Int, h: Int, wall: String, floor: String, items: [(Int, Int, String)] }
+    static let roomSpecs: [String: RoomSpec] = [
+        "school": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "wood_floor", items: [(1, 1, "bookshelf"), (2, 2, "desk"), (4, 2, "desk")]),
+        "workshop": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "stone_floor", items: [(1, 1, "anvil"), (4, 1, "workbench"), (3, 2, "furnace")]),
+        "factory": RoomSpec(w: 8, h: 6, wall: "wall_brick", floor: "stone_floor", items: [(1, 1, "chimney"), (3, 1, "machine"), (5, 1, "machine"), (2, 3, "machine"), (6, 3, "crate")]),
+        "lab": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "server"), (4, 1, "server"), (2, 2, "desk")]),
+        "ai_center": RoomSpec(w: 8, h: 6, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "server"), (2, 1, "server"), (5, 1, "server"), (6, 1, "antenna"), (3, 3, "ai_core")]),
+    ]
+
+    /// Household id: couples share one, children belong to a parent's, everyone else has their own.
+    func household(_ a: Agent, _ now: Double) -> Int {
+        if a.age(now) < 16 {
+            for pid in [a.mother, a.father] where pid != 0 {
+                if let p = agents[pid], p.sid == a.sid { return household(p, now) }
+            }
+        }
+        if a.partner != 0, let p = agents[a.partner], p.sid == a.sid { return min(a.id, p.id) }
+        return a.id
     }
 
     func plan(_ s: Settlement) {
@@ -517,26 +619,32 @@ public final class Society {
         let now = world.time
         s.food = min(s.food, 40 + Double(pop) * 14)
         var workers = living.filter { $0.stage(now) == "adult" && !$0.travelling }
-        let open = s.buildings.filter { !$0.done }.count
-        let houseCap = s.buildings.filter { $0.type == "house" }.reduce(0) { $0 + $1.cap }
-        if open < 2 {
-            let homeless = living.filter { $0.home < 0 }.count
-            if s.count("farm") < Int((Double(pop) / 9).rounded(.up)) && s.count("farm") * 2 <= s.count("house") { queue(s, "farm") }
-            else if houseCap < pop + 1 || (homeless > 0 && houseCap < pop + 4) { queue(s, "house") }
-            else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
-            else if pop >= 22 && s.count("lights") == 0 { queue(s, "lights") }
+        // households: every family gets a house of its own
+        var households: [Int: [Agent]] = [:]
+        for a in living { households[household(a, now), default: []].append(a) }
+        let houses = s.buildings.filter { $0.type == "house" }
+        for b in houses where b.owner != nil && households[b.owner!] == nil { b.owner = nil; b.residents = [] }
+        for hid in households.keys.sorted() {
+            let members = households[hid]!
+            var hb = houses.first { $0.owner == hid }
+            if hb == nil, let free = houses.first(where: { $0.done && $0.owner == nil }) { free.owner = hid; hb = free }
+            for m in members {
+                let newHome = (hb?.done ?? false) ? hb!.id : -1
+                if newHome >= 0 && m.home != newHome { m.think(now, "t_home") }
+                m.home = newHome
+            }
+            hb?.residents = members.map { $0.id }
         }
-        for a in living {
-            if a.home >= 0 && s.building(a.home) == nil { a.home = -1 }
-            if a.home >= 0 { continue }
-            var want: Building?
-            for rid in [a.partner, a.mother, a.father] where rid != 0 {
-                if let r = agents[rid], r.sid == s.id, r.home >= 0, let hb = s.building(r.home), hb.residents.count < hb.cap + 1 { want = hb; break }
+        let open = s.buildings.filter { !$0.done }.count
+        if open < 2 {
+            let farmsWanted = Int((Double(pop) / (has("farming") ? 12 : 9)).rounded(.up))
+            if s.count("farm") < farmsWanted && s.count("farm") * 3 <= s.count("house") { queue(s, "farm") }
+            else if houses.count < households.count { queue(s, "house") }
+            else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
+            else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }
+            else {
+                for tb in Society.techBuildings where has(tb.0) && pop >= tb.2 && s.count(tb.1) == 0 { queue(s, tb.1); break }
             }
-            if want == nil && a.stage(now) != "child" {
-                want = s.buildings.first { $0.type == "house" && $0.done && $0.residents.count < $0.cap - 1 }
-            }
-            if let hb = want { a.home = hb.id; hb.residents.append(a.id); a.think(now, "t_home") }
         }
         let n = workers.count
         let project = s.activeProject
@@ -730,7 +838,10 @@ public final class Society {
         return best
     }
 
-    func isTree(_ p: TilePos) -> Bool { let o = world.tile(2, p.x, p.y); return o != 0 && content.tile(o)?.big == true }
+    func isTree(_ p: TilePos) -> Bool {
+        let o = world.tile(2, p.x, p.y)
+        return o != 0 && (content.tile(o)?.big == true || o == T["cactus"])
+    }
 
     func work(_ a: Agent, _ s: Settlement, _ job: String) -> Bool {
         switch job {
@@ -739,14 +850,21 @@ public final class Society {
             var idx = -1
             if !b.retry.isEmpty { idx = b.retry.removeLast() } else if b.next < b.cells.count { idx = b.next }
             if idx < 0 { return false }
-            let cell = b.cells[idx]
+            var cell = b.cells[idx]
+            if s.wood < cell.wood && s.stone >= cell.wood + cell.stone + 2 {
+                // no timber left: build this piece from stone instead
+                cell.stone += cell.wood
+                cell.wood = 0
+                if cell.key == "wall_wood" { cell.key = "wall_stone" }
+                b.cells[idx] = cell
+            }
             if s.wood < cell.wood || s.stone < cell.stone {
                 if idx != b.next { b.retry.append(idx) }
                 return work(a, s, s.wood < cell.wood ? "woodcutter" : "miner")
             }
             let target = TilePos(b.x + cell.dx, b.y + cell.dy)
             let solid = !cell.key.isEmpty && content.solid[Int(content.tid(cell.key))]
-            if !go(a, s, target, "build", 1.2, bid: b.id, cell: idx, beside: solid) {
+            if !go(a, s, target, "build", has("machinery") ? 0.5 : 1.2, bid: b.id, cell: idx, beside: solid) {
                 if idx != b.next { b.retry.append(idx) } else { b.next = idx + 1; b.retry.insert(idx, at: 0) }
                 return false
             }
@@ -758,6 +876,17 @@ public final class Society {
             if !t.isNone {
                 if go(a, s, t, "chop", 5) { s.claims[t] = a.id; return true }
                 s.trees.removeAll { $0 == t }       // unreachable (e.g. across water): forget it until the next survey
+            } else if s.trees.count < 12 {
+                // forestry: plant saplings around the village so timber never runs out for good
+                for _ in 0..<6 {
+                    let ang = rng.unit() * 2 * Double.pi, rad = rng.range(12, 30)
+                    let p = TilePos(s.center.x + Int(cos(ang) * rad), s.center.y + Int(sin(ang) * rad))
+                    if !s.inArea(p) || s.claims[p] != nil || !world.isLand(p.x, p.y) || world.tile(2, p.x, p.y) != 0 || world.tile(1, p.x, p.y) != 0 { continue }
+                    let g = world.tile(0, p.x, p.y)
+                    if content.tile(g)?.built == true || g == T["farmland"] { continue }
+                    if s.buildings.contains(where: { p.x >= $0.x - 1 && p.x <= $0.x + $0.w && p.y >= $0.y - 1 && p.y <= $0.y + $0.h }) { continue }
+                    if go(a, s, p, "plant", 2) { s.claims[p] = a.id; return true }
+                }
             }
         case "miner":
             let t = nearest(a, s, s.rocks) { self.world.tile(2, $0.x, $0.y) == self.T["rock"] }
@@ -840,9 +969,9 @@ public final class Society {
             a.carryKind = ""; a.carryN = 0
         case "chop":
             let o = world.tile(2, t.x, t.y)
-            if o != 0, let td = content.tile(o), td.big {
+            if o != 0, let td = content.tile(o), td.big || o == T["cactus"] {
                 world.setTile(2, t.x, t.y, content.tid(td.after))
-                a.carryKind = "wood"; a.carryN = 3
+                a.carryKind = "wood"; a.carryN = (has("metalwork") ? 5 : 3) - (td.big ? 0 : 1)
                 s.trees.removeAll { $0 == t }
                 if rng.unit() < 0.15 { a.think(now, "t_work_woodcutter") }
             }
@@ -850,7 +979,7 @@ public final class Society {
             if world.tile(2, t.x, t.y) == T["rock"] {
                 world.setTile(2, t.x, t.y, 0)
                 world.schedule(t.x, t.y, layer: 2, to: T["rock"]!, delay: 700, expect: 0)
-                a.carryKind = "stone"; a.carryN = 3
+                a.carryKind = "stone"; a.carryN = has("metalwork") ? 5 : 3
                 if rng.unit() < 0.15 { a.think(now, "t_work_miner") }
             }
         case "forage":
@@ -862,8 +991,13 @@ public final class Society {
         case "reap":
             if world.tile(2, t.x, t.y) == T["wheat_2"] {
                 world.setTile(2, t.x, t.y, T["wheat_0"]!)
-                a.carryKind = "food"; a.carryN = 4
+                a.carryKind = "food"; a.carryN = has("farming") ? 6 : 4
                 if rng.unit() < 0.15 { a.think(now, "t_work_farmer") }
+            }
+        case "plant":
+            if world.tile(2, t.x, t.y) == 0 && world.isLand(t.x, t.y) {
+                world.setTile(2, t.x, t.y, content.tid("sapling"))
+                world.setTile(3, t.x, t.y, 0)
             }
         case "sow":
             if world.tile(2, t.x, t.y) == 0 && world.tile(0, t.x, t.y) == T["farmland"] { world.setTile(2, t.x, t.y, T["wheat_0"]!) }
@@ -898,7 +1032,7 @@ public final class Society {
         if b.placed >= b.cells.count {
             b.done = true
             stats.buildings += 1
-            if b.type == "house" || b.type == "farm" { layPath(s, b.door) }
+            if b.type != "well" && b.type != "lights" { layPath(s, b.door) }
             for id2 in s.members { if let m = agents[id2], m.job == "builder" { m.think(world.time, "t_built", [tx(b.type)]) } }
             emit("built", [s.name(zh: zh), tx(b.type)], TilePos(b.x, b.y).center)
             s.planT = 0
@@ -1050,6 +1184,37 @@ public final class Society {
         return best
     }
 
+    /// Which villagers to draw and which to summarise. At most `limit` villagers
+    /// (nearest to `center` first, never the ones asleep indoors) are shown as
+    /// characters; everybody else in view is counted on the building they belong
+    /// to (their home, else the village square), so nobody silently disappears.
+    public func crowdSplit(center: Vec2, halfW: Double, halfH: Double, limit: Int = 50) -> (shown: [Agent], badges: [TilePos: Int]) {
+        var candidates: [(Double, Agent)] = []
+        var badges: [TilePos: Int] = [:]
+        func anchor(_ a: Agent) -> TilePos {
+            guard let s = settlements[a.sid] else { return a.pos.tile }
+            if a.home >= 0, let b = s.building(a.home) { return TilePos(b.x + b.w / 2, b.y) }
+            return s.center
+        }
+        for a in agents.values {
+            let inside = a.sleeping && a.home >= 0
+            let dx = abs(a.pos.x - center.x), dy = abs(a.pos.y - center.y)
+            if inside {
+                let t = anchor(a)
+                if abs(Double(t.x * 16) - center.x) <= halfW + 48 && abs(Double(t.y * 16) - center.y) <= halfH + 48 { badges[t, default: 0] += 1 }
+                continue
+            }
+            if dx > halfW || dy > halfH { continue }
+            candidates.append((dx * dx + dy * dy, a))
+        }
+        candidates.sort { $0.0 != $1.0 ? $0.0 < $1.0 : $0.1.id < $1.1.id }
+        var shown: [Agent] = []
+        for (i, c) in candidates.enumerated() {
+            if i < limit { shown.append(c.1) } else { badges[anchor(c.1), default: 0] += 1 }
+        }
+        return (shown, badges)
+    }
+
     public func jobLabel(_ a: Agent) -> String {
         let st = a.stage(world.time)
         return st != "adult" ? tx("job_" + st) : tx("job_" + a.job)
@@ -1101,11 +1266,12 @@ public final class Society {
     // MARK: persistence
     public struct Snapshot: Codable {
         var agents: [Agent], settlements: [Settlement], nextID: Int, nextSID: Int, nextBID: Int, stats: SocietyStats, rng: RNG
+        var techCount: Int?, research: Double?
     }
 
     public func snapshot() -> Snapshot {
         Snapshot(agents: agents.values.sorted { $0.id < $1.id }, settlements: settlements.values.sorted { $0.id < $1.id },
-                 nextID: nextID, nextSID: nextSID, nextBID: nextBID, stats: stats, rng: rng)
+                 nextID: nextID, nextSID: nextSID, nextBID: nextBID, stats: stats, rng: rng, techCount: techCount, research: research)
     }
 
     public func restore(_ s: Snapshot) {
@@ -1113,5 +1279,6 @@ public final class Society {
         for st in s.settlements { settlements[st.id] = st; if !st.abandoned { attach(st) } }
         for a in s.agents where settlements[a.sid] != nil { a.prevPos = a.pos; agents[a.id] = a }
         nextID = s.nextID; nextSID = s.nextSID; nextBID = s.nextBID; stats = s.stats; rng = s.rng
+        techCount = min(Society.techs.count, s.techCount ?? 0); research = s.research ?? 0
     }
 }

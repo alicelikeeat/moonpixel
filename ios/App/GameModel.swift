@@ -2,17 +2,37 @@ import SwiftUI
 import SpriteKit
 import MoonPixelCore
 
-/// Owns the world, the society and everything the SwiftUI HUD shows.
+/// Saved-world summary shown in the world list.
+struct WorldMeta: Codable, Identifiable, Equatable {
+    var id: String
+    var name: String
+    var seed: Int
+    var savedAt: Date
+    var year: Int
+    var population: Int
+    var diskBytes: Int
+    var tech: String
+}
+
+enum PhotoPick: Equatable { case none, player, villager(Int), asset }
+
+/// Owns the worlds, the running society and everything the SwiftUI HUD shows.
 @MainActor
 final class GameModel: ObservableObject {
     static let zh: Bool = (Locale.preferredLanguages.first ?? "en").hasPrefix("zh")
     static let speeds: [Double] = [0, 1, 4, 16, 64]
     static let weapons = ["", "sword", "bow", "staff"]
+    static let mapLimitBytes = 5 * 1024 * 1024 * 1024       // 5 GB per world
 
     @Published var scene: GameScene?
+    @Published var worlds: [WorldMeta] = []
     @Published var status = ""
     @Published var statsText = ""
     @Published var memoryText = ""
+    @Published var techText = ""
+    @Published var techProgress = 0.0
+    @Published var mapSizeText = ""
+    @Published var mapSizeFraction = 0.0
     @Published var logLines: [String] = []
     @Published var toast = ""
     @Published var toastID = 0
@@ -26,23 +46,20 @@ final class GameModel: ObservableObject {
     @Published var mapCaption = ""
     @Published var autoClean = true
     @Published var weaponIndex = 1
-    @Published var photoTarget: Int? = nil       // nil = no picker; 0 = player; else villager id
-    @Published var importingAsset = false
+    @Published var pick: PhotoPick = .none
     @Published var placingAsset: String? = nil
 
     var world: OpenWorld!
     var society: Society!
-    var playerLook: Look = { var l = Look(); l.hair = "#f0e8d0"; l.shirt = "#f4f0e0"; l.pants = "#5a5a78"; l.style = 3; return l }()
+    var worldID = ""
+    var worldName = ""
+    var playerLook = GameModel.defaultLook
     var assets: [String: SKTexture] = [:]
     private var lastLogCount = 0
     private var cleanCooldown = 0.0
     private var memObserver: NSObjectProtocol?
 
-    var saveDir: URL {
-        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("world", isDirectory: true)
-    }
-    var hasSave: Bool { FileManager.default.fileExists(atPath: saveDir.appendingPathComponent("index.json").path) }
+    static var defaultLook: Look { var l = Look(); l.hair = "#f0e8d0"; l.shirt = "#f4f0e0"; l.pants = "#5a5a78"; l.style = 3; return l }
 
     struct Index: Codable {
         var world: OpenWorld.Snapshot
@@ -51,12 +68,54 @@ final class GameModel: ObservableObject {
         var look: Look
     }
 
+    // MARK: world store (several worlds side by side)
+    static var documents: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
+    static var worldsDir: URL { documents.appendingPathComponent("worlds", isDirectory: true) }
+    static func dir(_ id: String) -> URL { worldsDir.appendingPathComponent(id, isDirectory: true) }
+    var saveDir: URL { GameModel.dir(worldID) }
+    var assetsDir: URL { saveDir.appendingPathComponent("assets", isDirectory: true) }
+
+    func refreshWorlds() {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: GameModel.worldsDir, withIntermediateDirectories: true)
+        // adopt the single save made by earlier builds
+        let legacy = GameModel.documents.appendingPathComponent("world", isDirectory: true)
+        if fm.fileExists(atPath: legacy.appendingPathComponent("index.json").path) {
+            try? fm.moveItem(at: legacy, to: GameModel.dir("w-legacy"))
+        }
+        var list: [WorldMeta] = []
+        for id in (try? fm.contentsOfDirectory(atPath: GameModel.worldsDir.path)) ?? [] {
+            let d = GameModel.dir(id)
+            guard fm.fileExists(atPath: d.appendingPathComponent("index.json").path) else { continue }
+            if let data = try? Data(contentsOf: d.appendingPathComponent("meta.json")), let m = try? JSONDecoder().decode(WorldMeta.self, from: data) {
+                list.append(m)
+            } else {
+                list.append(WorldMeta(id: id, name: id == "w-legacy" ? L("旧存档", "Earlier save") : id, seed: 0, savedAt: .distantPast, year: 0, population: 0, diskBytes: 0, tech: ""))
+            }
+        }
+        worlds = list.sorted { $0.savedAt > $1.savedAt }
+    }
+
+    func deleteWorld(_ id: String) {
+        try? FileManager.default.removeItem(at: GameModel.dir(id))
+        refreshWorlds()
+    }
+
+    func createWorld(name: String, seed: Int, overrideMB: Int) {
+        let id = "w\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 100..<1000))"
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        start(id: id, name: clean.isEmpty ? L("世界", "World") + " \(worlds.count + 1)" : clean, seed: seed, overrideMB: overrideMB, load: false)
+    }
+
+    func openWorld(_ m: WorldMeta, overrideMB: Int) { start(id: m.id, name: m.name, seed: m.seed, overrideMB: overrideMB, load: true) }
+
     // MARK: lifecycle
     func handleLaunchArguments() {
+        refreshWorlds()
         let args = ProcessInfo.processInfo.arguments
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
-        start(seed: seed, overrideMB: 0, load: false)
+        start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)
         speedIndex = 2
         if args.contains("--select") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
@@ -64,23 +123,45 @@ final class GameModel: ObservableObject {
                 self.select(a.id)
             }
         }
-        if args.contains("--map") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.toggleMap() }
+        if args.contains("--map") { DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.toggleMap() } }
+        if args.contains("--details") { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.showDetails = true; self?.refreshHUD() } }
+        if args.contains("--test-photo") {
+            // end-to-end check of the photo pipeline with a synthetic portrait (player + nearest villager)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self = self, let img = GameModel.syntheticPortrait() else { return }
+                self.applyPhoto(img, target: 0)
+                if let sc = self.scene, let a = self.society.agent(near: sc.player, radius: 600) { self.applyPhoto(img, target: a.id); self.select(a.id) }
+            }
         }
     }
 
-    func start(seed: Int, overrideMB: Int, load: Bool) {
+    static func syntheticPortrait() -> UIImage? {
+        let r = UIGraphicsImageRenderer(size: CGSize(width: 240, height: 320))
+        return r.image { ctx in
+            UIColor(red: 0.56, green: 0.7, blue: 0.85, alpha: 1).setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 240, height: 320))
+            UIColor(red: 0.85, green: 0.2, blue: 0.5, alpha: 1).setFill(); UIBezierPath(roundedRect: CGRect(x: 40, y: 215, width: 160, height: 120), cornerRadius: 30).fill()
+            UIColor(red: 0.2, green: 0.25, blue: 0.7, alpha: 1).setFill(); UIBezierPath(ovalIn: CGRect(x: 48, y: 16, width: 144, height: 168)).fill()
+            UIColor(red: 0.79, green: 0.54, blue: 0.38, alpha: 1).setFill(); UIBezierPath(ovalIn: CGRect(x: 58, y: 70, width: 124, height: 130)).fill()
+        }
+    }
+
+    func start(id: String, name: String, seed: Int, overrideMB: Int, load: Bool) {
+        worldID = id
+        worldName = name
         let budget = MemoryBudget(overrideMB: overrideMB)
         var index: Index?
         if load, let data = try? Data(contentsOf: saveDir.appendingPathComponent("index.json")) {
             index = try? JSONDecoder().decode(Index.self, from: data)
+            if index == nil { showToast(L("存档无法读取，已重新生成世界", "Save could not be read; the world was regenerated")) }
         }
-        if index == nil { try? FileManager.default.removeItem(at: saveDir) }
+        if !load { try? FileManager.default.removeItem(at: saveDir) }
         let w = OpenWorld(seed: index?.world.seed ?? seed, budget: budget)
+        w.diskLimitBytes = GameModel.mapLimitBytes
         w.open(directory: saveDir)
         let s = Society(world: w, seed: w.seed)
         s.zh = GameModel.zh
         var start = Vec2(8, 8)
+        playerLook = GameModel.defaultLook
         if let ix = index {
             w.restore(ix.world)
             s.restore(ix.society)
@@ -93,6 +174,8 @@ final class GameModel: ObservableObject {
         world = w
         society = s
         loadAssets()
+        deselect()
+        showMap = false
         let sc = GameScene(size: CGSize(width: 874, height: 402))
         sc.scaleMode = .resizeFill
         sc.model = self
@@ -105,6 +188,7 @@ final class GameModel: ObservableObject {
             }
         }
         refreshHUD()
+        if !load { save(announce: false) }
     }
 
     func save(announce: Bool) {
@@ -113,11 +197,39 @@ final class GameModel: ObservableObject {
         let ix = Index(world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook)
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(ix) { try? data.write(to: saveDir.appendingPathComponent("index.json"), options: .atomic) }
+        let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count,
+                             diskBytes: mapBytes(), tech: s.techCount > 0 ? s.techName(s.techCount - 1) : "")
+        if let data = try? JSONEncoder().encode(meta) { try? data.write(to: saveDir.appendingPathComponent("meta.json"), options: .atomic) }
         if announce { showToast(L("已保存", "Saved")) }
+    }
+
+    /// Save and go back to the world list.
+    func exitToMenu() {
+        save(announce: false)
+        scene?.isPaused = true
+        scene = nil
+        world = nil
+        society = nil
+        refreshWorlds()
     }
 
     // MARK: HUD
     func showToast(_ text: String) { toast = text; toastID += 1 }
+
+    /// Bytes this world occupies on disk (chunks + index + assets).
+    func mapBytes() -> Int {
+        guard let w = world else { return 0 }
+        var n = w.diskBytes
+        for f in ["index.json", "meta.json"] {
+            n += ((try? FileManager.default.attributesOfItem(atPath: saveDir.appendingPathComponent(f).path)[.size]) as? NSNumber)?.intValue ?? 0
+        }
+        return n
+    }
+
+    static func sizeText(_ bytes: Int) -> String {
+        let mb = Double(bytes) / 1_048_576
+        return mb >= 1024 ? String(format: "%.2f GB", mb / 1024) : String(format: mb >= 10 ? "%.0f MB" : "%.1f MB", mb)
+    }
 
     /// Called a few times per second from the scene.
     func refreshHUD() {
@@ -133,25 +245,37 @@ final class GameModel: ObservableObject {
             let houses = s.settlements.values.reduce(0) { $0 + $1.count("house", done: true) }
             statsText = String(format: L("出生 %d · 死亡 %d · 伴侣 %d\n村落 %d · 房屋 %d · 建筑 %d", "Births %d · Deaths %d · Couples %d\nVillages %d · Houses %d · Built %d"),
                                st.births, st.deaths, st.pairs, s.livingSettlements, houses, st.buildings)
+            let known = s.techCount > 0 ? s.techName(s.techCount - 1) : L("原始", "Primitive")
+            if s.techCount < Society.techs.count {
+                techText = String(format: L("科技：%@ → 正在研究 %@（%d%%）", "Tech: %@ → researching %@ (%d%%)"), known, s.techName(s.techCount), Int(s.researchProgress * 100))
+            } else {
+                techText = String(format: L("科技：%@（已全部掌握）", "Tech: %@ (everything discovered)"), known)
+            }
+            techProgress = s.researchProgress
+            let bytes = mapBytes()
+            mapSizeFraction = min(1, Double(bytes) / Double(GameModel.mapLimitBytes))
+            mapSizeText = String(format: L("地图存档 %@ / 5 GB · 内存中 %@ · 已探明 %d 区块%@", "Map on disk %@ / 5 GB · in memory %@ · %d chunks mapped%@"),
+                                 GameModel.sizeText(bytes), GameModel.sizeText(w.memoryBytes), w.surveyed,
+                                 w.prunedFiles > 0 ? String(format: L(" · 已回收 %d 个旧区块", " · %d old chunks pruned"), w.prunedFiles) : "")
             let b = w.budget
-            memoryText = String(format: L("内存：设备 %d MB · 预算 %d MB%@ · 已用 %d MB\n区块：缓存 %d/%d · 生成 %d · 回收 %d · 地图 %d",
-                                          "Memory: device %d MB · budget %d MB%@ · used %d MB\nChunks: cached %d/%d · generated %d · evicted %d · mapped %d"),
-                                b.physicalMB, b.budgetMB, b.overrideMB > 0 ? L("（手动）", " (manual)") : L("（自动）", " (auto)"), MemoryBudget.usedMB(),
-                                w.cache.count, b.maxChunks, w.generated, w.evicted, w.surveyed)
-            logLines = s.log.suffix(5).map { "· " + $0.text }
+            memoryText = String(format: L("内存：设备 %d MB · 预算 %d MB%@ · 已用 %d MB · 区块缓存 %d/%d",
+                                          "Memory: device %d MB · budget %d MB%@ · used %d MB · chunk cache %d/%d"),
+                                b.physicalMB, b.budgetMB, b.overrideMB > 0 ? L("（手动）", " (manual)") : L("（自动）", " (auto)"), MemoryBudget.usedMB(), w.cache.count, b.maxChunks)
+            logLines = s.log.suffix(4).map { "· " + $0.text }
         }
         if selectedID != 0 {
             if let info = s.talk(selectedID, speak: false) {
                 var i = info
                 i.line = selected?.line ?? info.line
                 selected = i
-            } else { selectedID = 0; selected = nil; following = false }
+            } else { deselect() }
         }
     }
 
     func tickHousekeeping(_ dt: Double) {
         cleanCooldown = max(0, cleanCooldown - dt)
         if autoClean && cleanCooldown <= 0 && world.budget.pressure() > 0.9 { cleanMemory(announce: true) }
+        if world.diskBytes > world.diskLimitBytes { world.enforceDiskLimit() }
     }
 
     func select(_ id: Int) {
@@ -202,7 +326,6 @@ final class GameModel: ObservableObject {
         guard let w = world, let sc = scene else { return }
         let R = OpenWorld.region
         let pc = TilePos(Int((sc.player.x / 512).rounded(.down)), Int((sc.player.y / 512).rounded(.down)))
-        // fit the map to what has actually been surveyed around the player
         var ext = 10
         for (k, r) in w.regions {
             for i in 0..<r.count where r[i] != 0 {
@@ -223,12 +346,10 @@ final class GameModel: ObservableObject {
         }
         bmp.rect(ext - 1, ext - 1, 3, 3, RGBA(128, 230, 255))
         mapImage = bmp.uiImage
-        mapCaption = String(format: L("已探明 %d 个区块 · 地图随村民扩张自动生长", "%d chunks mapped · the map grows as villagers spread"), w.surveyed)
+        mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / 5 GB", "%d chunks mapped · %@ of 5 GB on disk"), w.surveyed, GameModel.sizeText(mapBytes()))
     }
 
     // MARK: photos and assets
-    var assetsDir: URL { saveDir.appendingPathComponent("assets", isDirectory: true) }
-
     func loadAssets() {
         assets.removeAll()
         for f in (try? FileManager.default.contentsOfDirectory(atPath: assetsDir.path)) ?? [] where f.hasSuffix(".png") {
@@ -255,14 +376,15 @@ final class GameModel: ObservableObject {
         if target != 0, let a = society.agents[target] {
             look.style = a.look.style
             a.look = look
-            showToast(L("村民外观已更新", "Villager updated from photo"))
+            showToast(String(format: L("%@ 已按照片换装", "%@ now looks like the photo"), a.name(zh: GameModel.zh)))
         } else {
             look.style = playerLook.style
             look.shoes = playerLook.shoes
             playerLook = look
-            showToast(L("已用照片生成角色", "Character created from photo"))
+            showToast(L("已用照片生成你的角色", "Your character now looks like the photo"))
         }
         scene?.clearTextureCache()
+        scene?.faceCameraOnce()
     }
 
     /// Any picture -> placeable pixel object.

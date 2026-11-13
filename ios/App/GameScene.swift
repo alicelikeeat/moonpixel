@@ -28,8 +28,13 @@ final class GameScene: SKScene {
     private var tapStart: [ObjectIdentifier: CGPoint] = [:]
     private var lastTime: TimeInterval = 0
     private var hudAcc = 0.0, maintAcc = 0.0, saveAcc = 0.0, walkT = 0.0, attackT = 0.0
-    private var pinchStart: CGFloat = 2
     private var hooked = false
+    private var badgeNodes: [TilePos: SKNode] = [:]
+    private var otherTouches: [UITouch] = []
+    private var pinchDist: CGFloat = 0
+    private var pinchZoom: CGFloat = 2
+    private var pinching = false
+    static let maxCharacters = 50
 
     static let jobTool = ["woodcutter": "axe", "miner": "pick", "farmer": "hoe", "builder": "hammer", "forager": "basket"]
 
@@ -52,7 +57,6 @@ final class GameScene: SKScene {
             joyBase.fillColor = UIColor(white: 1, alpha: 0.10); joyBase.strokeColor = UIColor(white: 1, alpha: 0.35); joyBase.lineWidth = 1.5; joyBase.zPosition = 900
             joyKnob.fillColor = UIColor(white: 1, alpha: 0.35); joyKnob.strokeColor = .clear; joyKnob.zPosition = 901
             cam.addChild(joyBase); cam.addChild(joyKnob)
-            view.addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(onPinch(_:))))
         }
         if !hooked, let w = model?.world {
             hooked = true
@@ -60,10 +64,8 @@ final class GameScene: SKScene {
         }
     }
 
-    @objc private func onPinch(_ g: UIPinchGestureRecognizer) {
-        if g.state == .began { pinchStart = zoom; joyTouch = nil; joyVec = .zero }
-        if g.state == .changed { zoom = min(5, max(1, (pinchStart * g.scale * 2).rounded() / 2)) }
-    }
+    /// After a photo is applied, turn the player towards the camera so the new face is visible.
+    func faceCameraOnce() { facing = Vec2(0, 1) }
 
     func zoomBy(_ d: CGFloat) { zoom = min(5, max(1, zoom + d)) }
 
@@ -184,8 +186,10 @@ final class GameScene: SKScene {
         let phase = Int(CACurrentMediaTime() * 6.5)
         let halfW = Double(size.width / zoom / 2) + 40, halfH = Double(size.height / zoom / 2) + 56
         var seen = Set<Int>()
-        for a in society.agents.values {
-            if abs(a.pos.x - player.x) > halfW || abs(a.pos.y - player.y) > halfH { continue }
+        // at most 50 characters on screen; everyone else becomes a number on their building
+        let split = society.crowdSplit(center: player, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters)
+        updateBadges(split.badges)
+        for a in split.shown {
             seen.insert(a.id)
             let node = agentNodes[a.id] ?? {
                 let n = SKSpriteNode()
@@ -202,7 +206,7 @@ final class GameScene: SKScene {
             let st = a.stage(now)
             var look = a.look
             if a.age(now) >= 58 && look.face.isEmpty { look.hair = "#e0e0e8" }
-            let working = a.task.map { $0.stage == 1 && ["chop", "mine", "build", "forage", "reap", "sow"].contains($0.act) } ?? false
+            let working = a.task.map { $0.stage == 1 && ["chop", "mine", "build", "forage", "reap", "sow", "plant"].contains($0.act) } ?? false
             var held = st == "elder" ? "cane" : (GameScene.jobTool[a.job] ?? "")
             if working && a.task?.act == "build" { held = "hammer" }
             let tex = charTexture(look, a.facing, moving: a.moving, acting: working, held: held, child: st == "child", female: a.female, phase: phase + a.id)
@@ -245,6 +249,26 @@ final class GameScene: SKScene {
             ghost.isHidden = false; ghost.texture = t; ghost.size = t.size()
             ghost.position = CGPoint(x: player.x + facing.x * 28, y: -(player.y + facing.y * 28))
         } else { ghost.isHidden = true }
+    }
+
+    private func updateBadges(_ badges: [TilePos: Int]) {
+        for (t, n) in badges {
+            let node = badgeNodes[t] ?? {
+                let holder = SKNode()
+                let bg = SKShapeNode(rectOf: CGSize(width: 22, height: 13), cornerRadius: 6.5)
+                bg.fillColor = UIColor(red: 0.08, green: 0.1, blue: 0.18, alpha: 0.85); bg.strokeColor = UIColor(white: 1, alpha: 0.7); bg.lineWidth = 0.75
+                let label = SKLabelNode(fontNamed: "AvenirNext-Bold")
+                label.fontSize = 9; label.fontColor = .white; label.verticalAlignmentMode = .center; label.name = "n"
+                holder.addChild(bg); holder.addChild(label)
+                holder.position = CGPoint(x: t.x * 16 + 8, y: -(t.y * 16 - 14))
+                holder.zPosition = 700
+                addChild(holder)
+                badgeNodes[t] = holder
+                return holder
+            }()
+            (node.childNode(withName: "n") as? SKLabelNode)?.text = "\(n)"
+        }
+        for (t, node) in badgeNodes where badges[t] == nil { node.removeFromParent(); badgeNodes[t] = nil }
     }
 
     // MARK: weapons and magic (visual)
@@ -302,17 +326,31 @@ final class GameScene: SKScene {
         return p.x < v.bounds.width * 0.36 && p.y > v.bounds.height * 0.34 && p.y < v.bounds.height - 70
     }
 
+    private func touchDistance() -> CGFloat {
+        guard let v = view, otherTouches.count >= 2 else { return 0 }
+        let a = otherTouches[0].location(in: v), b = otherTouches[1].location(in: v)
+        return hypot(a.x - b.x, a.y - b.y)
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let v = view else { return }
         for t in touches {
             let p = t.location(in: v)
-            if joyTouch == nil && inJoyZone(p) { joyTouch = t; joyOrigin = p; joyVec = .zero }
-            else { tapStart[ObjectIdentifier(t)] = p }
+            if joyTouch == nil && otherTouches.isEmpty && inJoyZone(p) { joyTouch = t; joyOrigin = p; joyVec = .zero }
+            else {
+                tapStart[ObjectIdentifier(t)] = p
+                otherTouches.append(t)
+                if otherTouches.count == 2 { pinching = true; pinchDist = max(1, touchDistance()); pinchZoom = zoom }
+            }
         }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let v = view, let jt = joyTouch, touches.contains(jt) else { return }
+        guard let v = view else { return }
+        if pinching && otherTouches.count >= 2 {
+            zoom = min(5, max(1, (pinchZoom * touchDistance() / pinchDist * 2).rounded() / 2))
+        }
+        guard let jt = joyTouch, touches.contains(jt) else { return }
         let p = jt.location(in: v)
         var d = CGVector(dx: (p.x - joyOrigin.x) / 40, dy: (p.y - joyOrigin.y) / 40)
         let l = hypot(d.dx, d.dy)
@@ -324,7 +362,10 @@ final class GameScene: SKScene {
         guard let v = view, let model = model else { return }
         for t in touches {
             if t === joyTouch { joyTouch = nil; joyVec = .zero; continue }
-            guard let start = tapStart.removeValue(forKey: ObjectIdentifier(t)) else { continue }
+            let wasPinch = pinching
+            otherTouches.removeAll { $0 === t }
+            if otherTouches.isEmpty { pinching = false }
+            guard let start = tapStart.removeValue(forKey: ObjectIdentifier(t)), !wasPinch else { continue }
             let p = t.location(in: v)
             if hypot(p.x - start.x, p.y - start.y) > 14 { continue }
             let sp = t.location(in: self)
@@ -344,6 +385,8 @@ final class GameScene: SKScene {
         for t in touches {
             if t === joyTouch { joyTouch = nil; joyVec = .zero }
             tapStart.removeValue(forKey: ObjectIdentifier(t))
+            otherTouches.removeAll { $0 === t }
         }
+        if otherTouches.isEmpty { pinching = false }
     }
 }

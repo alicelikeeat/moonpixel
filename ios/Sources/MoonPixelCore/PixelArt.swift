@@ -202,6 +202,27 @@ public enum PixelArt {
         case "grave":
             img.rect(bx + 4, by + 4, 8, 11, c1); img.rect(bx + 5, by + 2, 6, 2, c1)
             img.rect(bx + 7, by + 6, 2, 5, c2); img.rect(bx + 6, by + 7, 4, 1, c2)
+        case "machine":
+            img.rect(bx + 1, by + 3, 14, 12, c2); img.rect(bx + 1, by + 3, 14, 4, c1)
+            img.disc(Double(bx) + 5, Double(by) + 11, 2.5, c1.lightened(0.2)); img.set(bx + 4, by + 10, c2)
+            img.rect(bx + 9, by + 9, 4, 3, c3); img.rect(bx + 12, by, 2, 4, c2)
+        case "chimney":
+            img.rect(bx + 4, by - 10, 8, 26, c2); img.rect(bx + 4, by - 10, 3, 26, c1)
+            img.rect(bx + 3, by - 12, 10, 3, c1.lightened(0.1))
+            img.disc(Double(bx) + 9, Double(by) - 15, 3, c3); img.disc(Double(bx) + 12, Double(by) - 19, 2.2, c3.lightened(0.3))
+        case "server":
+            img.rect(bx + 2, by - 6, 12, 22, c2); img.rect(bx + 2, by - 6, 12, 2, c1)
+            for i in 0..<5 { img.rect(bx + 4, by - 2 + i * 4, 8, 2, c1); img.set(bx + 5, by - 2 + i * 4, c3); img.set(bx + 10, by - 1 + i * 4, RGBA(hex: "#6fe07a")) }
+        case "antenna":
+            img.rect(bx + 7, by - 12, 2, 28, c2); img.rect(bx + 3, by - 6, 10, 1, c1); img.rect(bx + 5, by - 1, 6, 1, c1)
+            img.rect(bx + 6, by - 14, 4, 2, c3); img.rect(bx + 4, by + 13, 8, 2, c2)
+        case "desk":
+            img.rect(bx + 1, by + 6, 14, 3, c1); img.rect(bx + 2, by + 9, 2, 6, c2); img.rect(bx + 12, by + 9, 2, 6, c2)
+            img.rect(bx + 5, by + 3, 5, 3, c3); img.set(bx + 11, by + 5, RGBA(hex: "#e84a5a"))
+        case "ai_core":
+            img.rect(bx + 2, by + 8, 12, 8, c1); img.rect(bx + 4, by + 5, 8, 3, c1.lightened(0.15))
+            img.disc(Double(bx) + 8, Double(by) - 1, 6, c2); img.disc(Double(bx) + 8, Double(by) - 1, 3.2, c3)
+            for p in [(1, -6), (14, -5), (2, 4), (13, 5)] { img.set(bx + p.0, by + p.1, c2) }
         default:
             img.rect(bx + 2, by + 3, 12, 12, c2); img.rect(bx + 2, by + 3, 12, 5, c1); img.rect(bx + 4, by + 10, 8, 1, c3)
         }

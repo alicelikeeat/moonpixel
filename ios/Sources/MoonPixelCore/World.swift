@@ -243,6 +243,12 @@ public final class OpenWorld {
     public var nextPropID = 1
     public var directory: URL?
     var saved: Set<Int64> = []
+    /// Size on disk of every saved chunk file (bytes), kept up to date on every write.
+    private var fileSizes: [Int64: Int] = [:]
+    public private(set) var diskBytes = 0
+    /// Hard cap for the saved map. Default 5 GB.
+    public var diskLimitBytes = 5 * 1024 * 1024 * 1024
+    public private(set) var prunedFiles = 0
     var clock = 0
     var ring: [TilePos: Int] = [:]
     var timerAcc = 0.0
@@ -261,7 +267,13 @@ public final class OpenWorld {
         try? FileManager.default.createDirectory(at: chunks, withIntermediateDirectories: true)
         for f in (try? FileManager.default.contentsOfDirectory(atPath: chunks.path)) ?? [] where f.hasSuffix(".json") {
             let p = f.dropLast(5).split(separator: "_")
-            if p.count == 3, let x = Int(p[1]), let y = Int(p[2]) { saved.insert(MP.chunkKey(x, y)) }
+            if p.count == 3, let x = Int(p[1]), let y = Int(p[2]) {
+                let k = MP.chunkKey(x, y)
+                saved.insert(k)
+                let size = ((try? FileManager.default.attributesOfItem(atPath: chunks.appendingPathComponent(f).path)[.size]) as? NSNumber)?.intValue ?? 0
+                fileSizes[k] = size
+                diskBytes += size
+            }
         }
     }
 
@@ -313,10 +325,45 @@ public final class OpenWorld {
 
     func write(_ c: Chunk) -> Bool {
         guard let url = path(c.cx, c.cy) else { return !c.modified }
-        do { try c.encoded().write(to: url, options: .atomic) } catch { return false }
+        let data = c.encoded()
+        do { try data.write(to: url, options: .atomic) } catch { return false }
         c.dirty = false
         saved.insert(c.key)
+        diskBytes += data.count - (fileSizes[c.key] ?? 0)
+        fileSizes[c.key] = data.count
+        if diskBytes > diskLimitBytes { enforceDiskLimit() }
         return true
+    }
+
+    /// Estimated memory used by cached chunk data (bytes).
+    public var memoryBytes: Int { cache.count * MemoryBudget.chunkBytes + regions.count * OpenWorld.region * OpenWorld.region }
+
+    /// Keeps the saved map under `diskLimitBytes`: the oldest chunk files that
+    /// are not pinned (no living settlement there) and not currently loaded are
+    /// removed; those areas return to their natural, regenerated state.
+    @discardableResult public func enforceDiskLimit() -> Int {
+        guard let dir = directory, diskBytes > diskLimitBytes else { return 0 }
+        let target = diskLimitBytes * 9 / 10
+        var cands: [(Int64, Date)] = []
+        for k in saved where pins[k] == nil && cache[k] == nil {
+            guard let url = path(MP.keyCX(k), MP.keyCY(k)) else { continue }
+            let date = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date) ?? .distantPast
+            cands.append((k, date))
+        }
+        cands.sort { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 < $1.0 }
+        var removed = 0
+        for (k, _) in cands {
+            if diskBytes <= target { break }
+            guard let url = path(MP.keyCX(k), MP.keyCY(k)) else { continue }
+            try? FileManager.default.removeItem(at: url)
+            diskBytes -= fileSizes[k] ?? 0
+            fileSizes[k] = nil
+            saved.remove(k)
+            removed += 1
+        }
+        _ = dir
+        prunedFiles += removed
+        return removed
     }
 
     /// Keep the cache inside the memory budget (least recently used first).
@@ -502,6 +549,8 @@ public final class OpenWorld {
             let p = TilePos(from.x + Int(cos(ang) * rad), from.y + Int(sin(ang) * rad))
             let b = gen.biome(p.x, p.y)
             if b == Biome.ocean || b == Biome.mountain || b == Biome.canyon { continue }
+            // the first two thirds of the attempts insist on green land with timber nearby
+            if k < 160 && (b == Biome.desert || b == Biome.snow || b == Biome.beach) { continue }
             if avoid.contains(where: { Double(($0 - p).lengthSquared).squareRoot() < avoidDist }) { continue }
             // every tile of the village core must be dry, walkable ground:
             // a river through the square would cut the villagers off from each other
