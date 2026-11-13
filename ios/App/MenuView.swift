@@ -43,6 +43,8 @@ struct MenuView: View {
                 // --- new world
                 VStack(spacing: 10) {
                     Text("MoonPixel").font(.system(size: 30, weight: .bold, design: .rounded))
+                    Text("v" + ((Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0") + " (" + ((Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "1") + ")")
+                        .font(.system(size: 10, weight: .medium, design: .rounded)).opacity(0.6)
                     Text(L("世界由游戏生成，未来由居民和你决定。", "A self-growing world of autonomous villagers."))
                         .font(.system(size: 12, design: .rounded)).opacity(0.9).multilineTextAlignment(.center)
                     field(L("名称", "Name"), text: $nameText, placeholder: L("世界", "World") + " \(model.worlds.count + 1)", numeric: false)

@@ -33,7 +33,7 @@ jobs:
           set -o pipefail
           xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/dd \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build.log 2>&1 || { grep -E "error:|error " build.log | sort -u | head -60; tail -15 build.log; exit 1; }
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" build > build.log 2>&1 || { grep -E "error:|error " build.log | sort -u | head -60; tail -15 build.log; exit 1; }
           grep -E "warning: .*deprecated" build.log | sort -u | head -5 || true
       - name: Package unsigned IPA
         working-directory: ios
@@ -42,21 +42,21 @@ jobs:
           test -n "$APP"
           ls -la "$APP" | head -12
           mkdir -p Payload && cp -R "$APP" Payload/
-          zip -qry MoonPixel-unsigned.ipa Payload
-          ls -la MoonPixel-unsigned.ipa
+          zip -qry MoonPixel-1.0-unsigned.ipa Payload
+          ls -la MoonPixel-1.0-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: MoonPixel-unsigned-ipa
-          path: ios/MoonPixel-unsigned.ipa
+          path: ios/MoonPixel-1.0-unsigned.ipa
           if-no-files-found: error
       - name: Publish GitHub release
         working-directory: ios
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="ios-unsigned-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" MoonPixel-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "MoonPixel iOS native (unsigned) build ${GITHUB_RUN_NUMBER}" \
+          TAG="v1.0-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" MoonPixel-1.0-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "MoonPixel 1.0 (build ${GITHUB_RUN_NUMBER}, unsigned)" \
             --notes "原生 Swift 版（SpriteKit + SwiftUI Liquid Glass）。未签名 ipa，需自行签名后安装。 Native Swift build, unsigned: sign it yourself before installing. Commit ${GITHUB_SHA}."
       - name: Smoke test in the iOS Simulator
         working-directory: ios
@@ -99,6 +99,6 @@ jobs:
           " 2>/dev/null; ls ui-*.png 2>/dev/null
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
-          TAG="ios-unsigned-${GITHUB_RUN_NUMBER}"
+          TAG="v1.0-build.${GITHUB_RUN_NUMBER}"
           gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png
