@@ -147,10 +147,17 @@ public final class Agent: Codable {
     public var legion: Int?
     /// Refugee until this time (integrates afterwards, or earlier when the player takes them in).
     public var refugee: Double?
+    /// Boredom, 0...1. Taverns and festivals cure it.
+    public var fun: Double?
+    /// Who this person is courting, and since when.
+    public var crush: Int?
+    public var crushSince: Double?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
     public var moving = false, sleeping = false, alive = true
+    public var stunUntil = 0.0
+    public var followUntil = 0.0
     public var task: AgentTask?
     public var path: [Vec2] = []
     public var pathI = 0
@@ -159,7 +166,7 @@ public final class Agent: Codable {
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
              health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
-             nation, hp, legion, refugee
+             nation, hp, legion, refugee, fun, crush, crushSince
     }
 
     public init() {}
@@ -170,7 +177,7 @@ public final class Agent: Codable {
         if thoughts.count > 6 { thoughts.removeFirst() }
     }
     public var mood: Double {
-        var m = 1.0 - hunger * 0.45 - (1 - energy) * 0.15 - social * 0.15 - grief * 0.3
+        var m = 1.0 - hunger * 0.45 - (1 - energy) * 0.15 - social * 0.15 - grief * 0.3 - (fun ?? 0) * 0.08
         if home < 0 { m -= 0.12 }
         return min(1, max(0, m * health))
     }
@@ -288,7 +295,7 @@ public final class Society {
     ]
     /// Buildings a technology unlocks: (tech key, building type, minimum population).
     static let techBuildings: [(String, String, Int)] = [
-        ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
+("masonry", "tavern", 12), ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
     ]
     /// Technology belongs to nations. `techCount` is the most advanced nation's level
     /// (what the HUD shows); inside settlement logic `has` asks the nation in charge.
@@ -369,6 +376,10 @@ public final class Society {
     public var minPopulation = 100
     /// Three nations, their wars and the player's standing (see Realm.swift).
     public var realm = Realm()
+    var pendingFX: [WorldFX] = []
+    var wardActive = false
+    /// Where the player is, so companions can follow. Set by the scene; never saved.
+    public var viewer: Vec2?
     public var stats = SocietyStats()
     public internal(set) var log: [(t: Double, text: String)] = []
     public var onEvent: ((String, String, Vec2) -> Void)?
@@ -633,6 +644,7 @@ public final class Society {
 
     struct RoomSpec { let w: Int, h: Int, wall: String, floor: String, items: [(Int, Int, String)] }
     static let roomSpecs: [String: RoomSpec] = [
+"tavern": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 2, "table"), (4, 2, "chair"), (4, 1, "barrel")]),
         "school": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "wood_floor", items: [(1, 1, "bookshelf"), (2, 2, "desk"), (4, 2, "desk")]),
         "workshop": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "stone_floor", items: [(1, 1, "anvil"), (4, 1, "workbench"), (3, 2, "furnace")]),
         "factory": RoomSpec(w: 8, h: 6, wall: "wall_brick", floor: "stone_floor", items: [(1, 1, "chimney"), (3, 1, "machine"), (5, 1, "machine"), (2, 3, "machine"), (6, 3, "crate")]),
@@ -777,6 +789,15 @@ public final class Society {
         a.moving = false
         guard let s = settlements[a.sid] else { return }
         techCtx = s.nation ?? 0
+        a.fun = min(1, (a.fun ?? 0) + dt / (1.2 * MP.daySeconds))
+        if world.time < a.stunUntil { return }                       // held by a word, frozen, or caught in a gravity well
+        if world.time < a.followUntil, let v = viewer, a.legion == nil {
+            // keeping the player company
+            let to = v - a.pos
+            if to.length > 26 { a.pos = a.pos + to.normalized * min(to.length - 24, Society.speed * 1.3 * dt); a.moving = true; a.facing = to.normalized }
+            a.task = nil; a.path = []
+            return
+        }
         if let lid = a.legion, let lg = realm.legion(lid), lg.state != 0 { follow(a, lg, dt); return }
         a.hunger = min(1, a.hunger + dt / (0.45 * MP.daySeconds))
         a.social = min(1, a.social + dt / (0.6 * MP.daySeconds))
@@ -859,6 +880,9 @@ public final class Society {
         let h = world.hour
         if a.social > 0.7 || (h > 17 && a.social > 0.35) || (st == "elder" && rng.unit() < 0.5) {
             if go(a, s, s.center + TilePos(rng.int(-4, 4), rng.int(-4, 4)), "social", 3) { return }
+        }
+        if (a.fun ?? 0) > 0.6 && h > 16, let tv = s.buildings.first(where: { $0.type == "tavern" && $0.done }) {
+            if go(a, s, TilePos(tv.x + 2 + a.id % 3, tv.y + 2 + a.id % 2), "revel", 4) { a.fun = 0; if rng.unit() < 0.3 { a.think(now, "t_revel") }; return }
         }
         if st == "adult" && !a.job.isEmpty && work(a, s, a.job) { return }
         if st == "elder" && rng.unit() < 0.4 && work(a, s, "forager") { return }
@@ -1135,7 +1159,20 @@ public final class Society {
         a.social = max(0, a.social - 0.5); b.social = max(0, b.social - 0.3)
         if a.partner == 0 && b.partner == 0 && a.female != b.female && !related(a, b) {
             let aa = a.age(now), ab = b.age(now)
-            if aa >= 18 && ab >= 18 && abs(aa - ab) < 16 && (a.rel[b.id] ?? 0) > 0.45 && (b.rel[a.id] ?? 0) > 0.45 { pair(a, b, announce: true) }
+            if aa >= 18 && ab >= 18 && abs(aa - ab) < 16 && (a.rel[b.id] ?? 0) > 0.45 && (b.rel[a.id] ?? 0) > 0.45 && realm.player.partner != a.id && realm.player.partner != b.id {
+                // love takes a season: first they court, then they marry - unless one heart is already elsewhere
+                if a.crush == b.id && b.crush == a.id {
+                    if now - (a.crushSince ?? now) >= 0.12 * MP.year { a.crush = nil; b.crush = nil; pair(a, b, announce: true) }
+                } else if let other = b.crush, other != a.id, agents[other] != nil, (b.rel[other] ?? 0) >= (b.rel[a.id] ?? 0) {
+                    a.grief = min(1, a.grief + 0.15)
+                    a.think(now, "t_rejected", [zh ? b.nameZh : b.nameEn])
+                    a.rel[b.id] = (a.rel[b.id] ?? 0) - 0.2
+                } else {
+                    a.crush = b.id; b.crush = a.id; a.crushSince = now; b.crushSince = now
+                    a.think(now, "t_court", [zh ? b.nameZh : b.nameEn]); b.think(now, "t_court", [zh ? a.nameZh : a.nameEn])
+                    emit("courting", [a.name(zh: zh), b.name(zh: zh)], a.pos)
+                }
+            }
         }
     }
 
@@ -1170,6 +1207,13 @@ public final class Society {
             if rng.unit() < hazard * dty { die(a, age > 55 ? "old" : "ill"); continue }
             if !a.female { continue }
             if a.pregnantDue > 0 { if now >= a.pregnantDue { birth(a) }; continue }
+            // couples who have grown cold part ways
+            if a.partner != 0, let p = agents[a.partner], (a.rel[p.id] ?? 1) < 0.05, (p.rel[a.id] ?? 1) < 0.05 {
+                a.partner = 0; p.partner = 0
+                a.grief = min(1, a.grief + 0.3); p.grief = min(1, p.grief + 0.3)
+                emit("split_up", [a.name(zh: zh), p.name(zh: zh)], a.pos)
+                continue
+            }
             guard a.partner != 0, let p = agents[a.partner], age >= 18, age <= 43, !a.travelling, let s = settlements[a.sid] else { continue }
             if p.sid != a.sid || now - a.lastBirth < 1.2 * MP.year || a.children.count >= 6 { continue }
             let fed = s.food >= Double(s.members.count) * 2.5 && a.hunger < 0.7

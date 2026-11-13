@@ -11,10 +11,10 @@ final class GameScene: SKScene {
     var zoom: CGFloat = 2
     var chunkNodes: [Int64: SKSpriteNode] = [:]
     private var dirty: Set<Int64> = []
-    private var agentNodes: [Int: SKSpriteNode] = [:]
-    private var texCache: [String: SKTexture] = [:]
-    private let cam = SKCameraNode()
-    private let playerNode = SKSpriteNode()
+    var agentNodes: [Int: SKSpriteNode] = [:]
+    var texCache: [String: SKTexture] = [:]
+    let cam = SKCameraNode()
+    let playerNode = SKSpriteNode()
     private let playerRing = SKShapeNode(circleOfRadius: 8)
     private let selectRing = SKShapeNode(circleOfRadius: 9)
     private let staffGlow = SKShapeNode(circleOfRadius: 5)
@@ -26,7 +26,7 @@ final class GameScene: SKScene {
     private var joyOrigin = CGPoint.zero
     private var joyVec = CGVector.zero
     private var tapStart: [ObjectIdentifier: CGPoint] = [:]
-    private var lastTime: TimeInterval = 0
+    var lastTime: TimeInterval = 0
     private var hudAcc = 0.0, maintAcc = 0.0, saveAcc = 0.0, walkT = 0.0, attackT = 0.0
     private var hooked = false
     private var badgeNodes: [TilePos: SKNode] = [:]
@@ -38,9 +38,16 @@ final class GameScene: SKScene {
 
     static let jobTool = ["woodcutter": "axe", "miner": "pick", "farmer": "hoe", "builder": "hammer", "forager": "basket", "soldier": "sword"]
     var flashOnAppear = false
+    var animalNodes: [Int: SKSpriteNode] = [:]
+    var animalTex: [String: SKTexture] = [:]
+    var weatherNodes: [SKSpriteNode] = []
+    var weatherFall = 0
+    let weatherVeil = SKSpriteNode(color: .black, size: CGSize(width: 4000, height: 4000))
+    var thunderT = 4.0
+    var wardRing: SKShapeNode?
     private var townLabels: [Int: SKLabelNode] = [:]
     private var nationColors: [Int: UIColor] = [:]
-    private var effects = 0
+    var effects = 0
     static let maxEffects = 120
 
     override func didMove(to view: SKView) {
@@ -80,7 +87,7 @@ final class GameScene: SKScene {
         return n
     }
 
-    private func pt(_ v: Vec2) -> CGPoint { CGPoint(x: v.x, y: -v.y) }
+    func pt(_ v: Vec2) -> CGPoint { CGPoint(x: v.x, y: -v.y) }
 
     // MARK: frame
     override func update(_ currentTime: TimeInterval) {
@@ -92,10 +99,21 @@ final class GameScene: SKScene {
         } else {
             var sim = dt * GameModel.speeds[model.speedIndex]
             while sim > 0 { let step = min(sim, 1.0); society.tick(step); sim -= step }
+            // wards last by the real clock; companions and animals need to know where the traveller is
+            society.playerWarded = CACurrentMediaTime() < (society.realm.player.wardUntil ?? 0)
+            society.viewer = player
+            society.playerRest(dt)
             let threat = society.playerThreat(at: player, dt: dt)
+            let here = player.tile
+            let bite = society.faunaTick(dt, viewer: player, mazeHere: world.gen.isMaze(here.x >> 5, here.y >> 5))
+            var hurt = threat.died
+            if bite > 0 { var t = Society.Threat(); t.damage = bite; if society.harmPlayer(t).died { hurt = true } }
             playerNode.color = .red
-            playerNode.colorBlendFactor = threat.attackers > 0 ? 0.35 : 0
-            if threat.died { model.playerDied() }
+            playerNode.colorBlendFactor = (threat.attackers > 0 || bite > 0) && !society.playerWarded ? 0.35 : 0
+            if hurt { model.playerDied() }
+            for fx in society.takeFX() { worldFX(fx) }
+            updateAnimals(society)
+            updateWeather(society, dt)
         }
         if flashOnAppear { flashOnAppear = false; genesisFX() }
 
@@ -306,6 +324,17 @@ final class GameScene: SKScene {
         guard attackT <= 0, let model = model, !model.lawBusy else { return }
         var dir = (target - player).normalized
         if dir == .zero { dir = facing }
+        if !model.activePower.isEmpty {
+            facing = dir
+            let cast = model.society.playerCast(model.activePower, from: player, target: target, clock: CACurrentMediaTime())
+            model.casted(cast)
+            if cast.ok {
+                attackT = 0.25
+                if let to = cast.blinkTo { blinkFX(from: pt(player), to: pt(to)); player = to }
+                castFX(cast)
+            }
+            return
+        }
         // the core decides hits, damage, cooldown, deaths and whose side everyone is on
         let strike = model.society.playerStrike(from: player, dir: dir, weapon: GameModel.weapons[model.weaponIndex], clock: CACurrentMediaTime())
         if strike.onCooldown { return }
@@ -340,7 +369,7 @@ final class GameScene: SKScene {
         }
     }
 
-    private func burst(at p: CGPoint) {
+    func burst(at p: CGPoint) {
         let ring = SKShapeNode(circleOfRadius: 26)
         ring.strokeColor = UIColor(red: 0.45, green: 0.9, blue: 1, alpha: 1); ring.lineWidth = 2.5; ring.fillColor = .clear
         ring.position = p; ring.zPosition = 800; ring.setScale(0.15)
@@ -387,7 +416,7 @@ final class GameScene: SKScene {
     func markAllDirty() { for k in chunkNodes.keys { dirty.insert(k) } }
 
     /// A few pixels that drift up and fade. Capped, so mass deletions never flood the scene.
-    private func dust(at p: CGPoint, color: UIColor, count: Int = 9) {
+    func dust(at p: CGPoint, color: UIColor, count: Int = 9) {
         for n in 0..<count {
             if effects >= GameScene.maxEffects { return }
             effects += 1
@@ -400,7 +429,7 @@ final class GameScene: SKScene {
         }
     }
 
-    private func hitFX(at p: CGPoint, damage: Double, dead: Bool) {
+    func hitFX(at p: CGPoint, damage: Double, dead: Bool) {
         if effects < GameScene.maxEffects {
             effects += 1
             let l = SKLabelNode(fontNamed: "AvenirNext-Bold")
@@ -498,6 +527,7 @@ final class GameScene: SKScene {
             let sp = t.location(in: self)
             let wp = Vec2(Double(sp.x), Double(-sp.y))
             if !model.buildMode.isEmpty { model.build(at: wp.tile); continue }
+            if model.tapWorld(wp.tile) { continue }                 // treasure chests and flowers within reach
             if let id = model.placingAsset {
                 model.world.addProp(key: "asset:" + id, at: wp)
                 model.placingAsset = nil

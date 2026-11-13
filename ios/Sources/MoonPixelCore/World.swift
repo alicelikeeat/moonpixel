@@ -174,8 +174,53 @@ public final class Generator {
                 }
             }
         }
+        if isMaze(cx, cy) { carveMaze(cx, cy, &g, &st, &ob, &de) }
         c.layers = [g, st, ob, de]
         return c
+    }
+
+    /// One chunk in every 6x6 block of chunks holds an old maze - if it stands on
+    /// land and is not near where the first villages are founded.
+    public func isMaze(_ cx: Int, _ cy: Int) -> Bool {
+        let rx = Int((Double(cx) / 6).rounded(.down)), ry = Int((Double(cy) / 6).rounded(.down))
+        let h = MP.h2(seed &+ 77, rx, ry)
+        if rx * 6 + Int(h % 6) != cx || ry * 6 + Int((h >> 8) % 6) != cy { return false }
+        if abs(cx) <= 3 && abs(cy) <= 3 { return false }
+        let e = climate(cx * 32 + 16, cy * 32 + 16).0
+        return e > Biome.sea + 0.03 && e < Biome.mountainLevel - 0.03
+    }
+
+    func carveMaze(_ cx: Int, _ cy: Int, _ g: inout [UInt8], _ st: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
+        let c = Content.shared
+        let wall = c.tid("ruin_wall"), floor = c.tid("ruin_floor"), chest = c.tid("chest"), torch = c.tid("torch"), bones = c.tid("bones")
+        var r = RNG(seed: Int(MP.h2(seed &+ 991, cx, cy)))
+        // 15 x 15 cells on odd coordinates of a 31 x 31 grid; depth-first carving
+        var open = [Bool](repeating: false, count: 31 * 31)
+        var stack = [(1, 1)]
+        open[1 * 31 + 1] = true
+        while let cur = stack.last {
+            var opts: [(Int, Int)] = []
+            for (dx, dy) in [(2, 0), (-2, 0), (0, 2), (0, -2)] {
+                let nx = cur.0 + dx, ny = cur.1 + dy
+                if nx > 0 && ny > 0 && nx < 30 && ny < 30 && !open[ny * 31 + nx] { opts.append((nx, ny)) }
+            }
+            if opts.isEmpty { stack.removeLast(); continue }
+            let n = opts[r.index(opts.count)]
+            open[((cur.1 + n.1) / 2) * 31 + (cur.0 + n.0) / 2] = true
+            open[n.1 * 31 + n.0] = true
+            stack.append(n)
+        }
+        for y in 14...16 { for x in 14...16 { open[y * 31 + x] = true } }      // treasure room
+        open[30 * 31 + 15] = true; open[29 * 31 + 15] = true                   // south gate
+        open[0 * 31 + 15] = true; open[1 * 31 + 15] = true                     // north gate
+        for y in 0..<31 { for x in 0..<31 {
+            let i = y * 32 + x
+            g[i] = floor; st[i] = 0; de[i] = 0
+            ob[i] = open[y * 31 + x] ? 0 : wall
+            if open[y * 31 + x] && r.unit() < 0.03 { de[i] = bones }
+            if open[y * 31 + x] && r.unit() < 0.02 { ob[i] = torch }
+        } }
+        ob[15 * 32 + 15] = chest
     }
 }
 
@@ -621,6 +666,9 @@ public final class OpenWorld {
             // the first two thirds of the attempts insist on green land with timber nearby
             if k < 160 && (b == Biome.desert || b == Biome.snow || b == Biome.beach) { continue }
             if avoid.contains(where: { Double(($0 - p).lengthSquared).squareRoot() < avoidDist }) { continue }
+            var mazeNear = false
+            for my in -1...1 { for mx in -1...1 where gen.isMaze((p.x >> 5) + mx, (p.y >> 5) + my) { mazeNear = true } }
+            if mazeNear { continue }
             // every tile of the village core must be dry, walkable ground:
             // a river through the square would cut the villagers off from each other
             var dry = true

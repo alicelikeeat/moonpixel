@@ -78,7 +78,9 @@ extension GameModel {
         guard let s = society, let sc = scene else { return }
         let p = s.realm.player
         let side = s.realm.nation(p.nation)?.name(zh: GameModel.zh) ?? L("自由旅人", "Free traveller")
-        playerLine = String(format: L("%@ · 生命 %d · 粮 %d 木 %d 石 %d", "%@ · HP %d · food %d wood %d stone %d"), side, Int(p.hp), Int(p.food), Int(p.wood), Int(p.stone))
+        let pack = String(format: L("%@ · 生命 %d · 专注 %d · 粮 %d 木 %d 石 %d 花 %d", "%@ · HP %d · focus %d · food %d wood %d stone %d flowers %d"),
+                          side, Int(p.hp), Int(p.focus ?? 100), Int(p.food), Int(p.wood), Int(p.stone), Int(p.flowers ?? 0))
+        playerLine = pack + " · " + s.weatherName + (p.cheated == true ? L(" · 已作弊", " · cheated") : "")
         guard showRealm else { return }
         _ = sc
         var cards: [NationCard] = []

@@ -68,6 +68,8 @@ public struct RealmConfig: Codable, Equatable {
     public var unityResearch = 1.3, unityTrade = 0.05
     public var splitIdentity = 1.0, splitGeography = 0.6, splitMilitary = 0.4
     // --- research
+    public var arsenalScale = 3.0, arsenalWar = 1.5      // weapons research: speed, and the spur of war
+    public var arsenalPower = 0.03, arsenalPowerCap = 1.5   // army strength per tier learned, and its ceiling
     public var researchScale = 1.5, catchUp = 1.5, breakthroughBoost = 3.0
     // --- events
     public var events: [String: EventRule] = [
@@ -79,6 +81,9 @@ public struct RealmConfig: Codable, Equatable {
         "town_defect": EventRule(chance: 1.0, duration: 0, cooldown: 1.0),
         "alliance_broken": EventRule(chance: 0.6, duration: 0, cooldown: 1.5),
     ]
+    // --- weather, leisure
+    public var rainFood = 0.6, heatSpoil = 0.01, lightningChance = 0.5, lightningDamage = 0.15
+    public var festivalFood = 8.0, festivalEvery = 1.0
     public var harvestBonus = 1.5, harvestLoss = 0.02, generalPower = 1.25
     // --- player
     public var playerHP = 100.0, playerRegen = 2.0, soldierHit = 9.0, hostileRep = -0.5
@@ -97,6 +102,9 @@ public struct Nation: Codable {
     public var overT = 0.0
     public var exileSince: Double?
     public var rep = 0.0                   // the player's standing with this nation, -1...1
+    public var powers: [String]?           // weapons, spells and arts this nation has learned
+    public var arsenalPts: Double?
+    public var studying: String?
     // refreshed every game hour
     public var pressure = 0.0, pFood = 0.0, pHousing = 0.0, pJobs = 0.0, pLand = 0.0
     public var pop = 0, identity = 0, towns = 0, soldiers = 0, food = 0.0
@@ -131,6 +139,15 @@ public struct PlayerState: Codable {
     public var food = 0.0, wood = 0.0, stone = 0.0
     public var nextAttack = 0.0
     public var kills = 0, deaths = 0
+    // optional so that earlier saves load
+    public var focus: Double?
+    public var cooldowns: [String: Double]?
+    public var artifacts: [String]?
+    public var wardUntil: Double?
+    public var god: Bool?
+    public var cheated: Bool?
+    public var partner: Int?
+    public var flowers: Double?
 }
 
 public struct Realm: Codable {
@@ -152,6 +169,11 @@ public struct Realm: Codable {
     public var rng = RNG(seed: 1)
     public var acc = 0.0
     public var player = PlayerState()
+    public var arsenal: ArsenalTree?
+    var weatherBox: Weather?
+    var faunaBox: Fauna?
+    public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
+    public var fauna: Fauna { get { faunaBox ?? Fauna() } set { faunaBox = newValue } }
     public init() {}
 
     public func nation(_ id: Int) -> Nation? { nations.first { $0.id == id } }
@@ -179,7 +201,11 @@ extension Society {
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
         "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
-        "resettled": ("New settlers begin again as three peoples", "新的移民以三国之名重新开始"), "soldier": ("soldier", "士兵"), "refugee": ("refugee", "难民"),
+        "resettled": ("New settlers begin again as three peoples", "新的移民以三国之名重新开始"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
+        "festival": ("%@ holds a festival", "%@ 举办了庆典"), "wedding_player": ("You and %@ are married", "你与 %@ 结为伴侣"), "tavern": ("tavern", "酒馆"),
+        "courting": ("%@ and %@ are courting", "%@ 和 %@ 开始相恋"), "split_up": ("%@ and %@ parted ways", "%@ 和 %@ 分手了"),
+        "t_festival": ("What a feast that was!", "那场庆典真热闹！"), "t_date": ("A lovely walk.", "一起散步真好。"), "t_breakup": ("My heart is heavy.", "心里很难受。"),
+        "t_court": ("I keep thinking of %@.", "我总是想起 %@。"), "t_rejected": ("%@ loves another.", "%@ 心有所属。"), "t_revel": ("A fine evening at the tavern.", "酒馆的夜晚真快活。"), "soldier": ("soldier", "士兵"), "refugee": ("refugee", "难民"),
     ]
     static let nationSeeds: [(String, String, String)] = [("Azure", "青曜", "#4a8af0"), ("Crimson", "赤焰", "#e8504a"), ("Golden", "金穗", "#e8b83a")]
 
@@ -420,6 +446,7 @@ extension Society {
         var p = Double(lg.members.count) * (1 + cfg.techPower * Double(n.techCount)) * (1 - 0.3 * min(1, n.fatigue))
         if realm.active("general", lg.nation, world.time) { p *= cfg.generalPower }
         p *= defending ? cfg.fortify : lg.supply
+        p *= arsenalBonus(lg.nation)
         return p
     }
 
@@ -531,7 +558,7 @@ extension Society {
         guard let target = settlements[lg.target], !target.abandoned, let enemy = target.nation, enemy != lg.nation, realm.atWar(lg.nation, enemy) else { sendHome(lg); return }
         if lg.state == 1 {
             let to = target.center.center - lg.pos
-            let stepLen = cfg.marchSpeed * (0.5 + 0.5 * min(1, lg.supply)) * dt
+            let stepLen = cfg.marchSpeed * (0.5 + 0.5 * min(1, lg.supply)) * marchWeather() * dt
             if to.length <= max(48, stepLen) {
                 lg.state = 2
                 emit("siege", [realm.nation(lg.nation)?.name(zh: zh) ?? "", target.name(zh: zh)], target.center.center)
@@ -1013,6 +1040,11 @@ extension Society {
         landCheck()
         if realm.era == 1 { unity(dty) } else { diplomacy(dty) }
         events(dty)
+        arsenalHourly()
+        weatherHourly()
+        leisureHourly()
+        petsHourly()
+        spouseHourly()
         for a in agents.values { if let r = a.refugee, now >= r { a.refugee = nil } }
         realm.depots.removeAll { world.tile(2, $0.x, $0.y) != T["crate"] }
     }

@@ -145,7 +145,9 @@ extension Society {
         return out
     }
 
-    public struct Threat { public var damage = 0.0, attackers = 0, died = false }
+    public struct Threat { public var damage = 0.0, attackers = 0, died = false; public init() {} }
+    /// Set by the scene from its own clock while a ward lasts.
+    public var playerWarded: Bool { get { wardActive } set { wardActive = newValue } }
 
     /// Hostile soldiers near the player hurt them. Call every frame with real `dt`.
     public func playerThreat(at pos: Vec2, dt: Double) -> Threat {
@@ -158,6 +160,16 @@ extension Society {
             return out
         }
         out.damage = realm.cfg.soldierHit * Double(min(4, out.attackers)) * dt
+        return harmPlayer(out)
+    }
+
+    /// Focus returns with time. Call every frame.
+    public func playerRest(_ dt: Double) { realm.player.focus = min(100, (realm.player.focus ?? 100) + 6 * dt) }
+
+    /// Apply damage to the player unless a ward or god mode stands in the way.
+    public func harmPlayer(_ t: Threat, clock: Double = Date().timeIntervalSinceReferenceDate) -> Threat {
+        var out = t
+        if realm.player.god == true || playerWarded { out.damage = 0; return out }
         realm.player.hp -= out.damage
         if realm.player.hp <= 0 {
             out.died = true

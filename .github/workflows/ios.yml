@@ -27,13 +27,18 @@ jobs:
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
+      - name: Version
+        run: |
+          # every release gets the next minor version: 1.1, 1.2, 1.3 ...
+          echo "MP_VERSION=1.$((GITHUB_RUN_NUMBER - 20))" >> "$GITHUB_ENV"
+          echo "version 1.$((GITHUB_RUN_NUMBER - 20))"
       - name: Build for device without code signing
         working-directory: ios
         run: |
           set -o pipefail
           xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/dd \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" build > build.log 2>&1 || { grep -E "error:" build.log | cut -c1-400 | sort -u | head -60; exit 1; }
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" MARKETING_VERSION="${MP_VERSION}" CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" build > build.log 2>&1 || { grep -E "error:" build.log | cut -c1-400 | sort -u | head -60; exit 1; }
           grep -E "warning: .*deprecated" build.log | sort -u | head -5 || true
       - name: Package unsigned IPA
         working-directory: ios
@@ -42,21 +47,21 @@ jobs:
           test -n "$APP"
           ls -la "$APP" | head -12
           mkdir -p Payload && cp -R "$APP" Payload/
-          zip -qry MoonPixel-1.0-unsigned.ipa Payload
-          ls -la MoonPixel-1.0-unsigned.ipa
+          zip -qry MoonPixel-${MP_VERSION}-unsigned.ipa Payload
+          ls -la MoonPixel-${MP_VERSION}-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: MoonPixel-unsigned-ipa
-          path: ios/MoonPixel-1.0-unsigned.ipa
+          path: ios/MoonPixel-${{ env.MP_VERSION }}-unsigned.ipa
           if-no-files-found: error
       - name: Publish GitHub release
         working-directory: ios
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v1.0-build.${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" MoonPixel-1.0-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "MoonPixel 1.0 (build ${GITHUB_RUN_NUMBER}, unsigned)" \
+          TAG="v${MP_VERSION}"
+          gh release create "$TAG" MoonPixel-${MP_VERSION}-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)" \
             --notes "原生 Swift 版（SpriteKit + SwiftUI Liquid Glass）。未签名 ipa，需自行签名后安装。 Native Swift build, unsigned: sign it yourself before installing. Commit ${GITHUB_SHA}."
       - name: Smoke test in the iOS Simulator
         working-directory: ios
@@ -68,7 +73,7 @@ jobs:
           set +e
           xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO MARKETING_VERSION="${MP_VERSION}" build > simbuild.log 2>&1
           echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | cut -c1-300 | sort -u | head -20
           APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
@@ -91,6 +96,10 @@ jobs:
           xcrun simctl terminate "$UDID" org.moonpixel.game
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --laws; sleep 24; shot sim-laws.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --powers; sleep 22; shot sim-powers.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --storm; sleep 16; shot sim-storm1.png; sleep 1; shot sim-storm2.png; sleep 1; shot sim-storm3.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
           echo "===== UI test: tap the HUD buttons ====="
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
             -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
@@ -105,6 +114,6 @@ jobs:
           " 2>/dev/null; ls ui-*.png 2>/dev/null
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
-          TAG="v1.0-build.${GITHUB_RUN_NUMBER}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
+          TAG="v${MP_VERSION}"
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png

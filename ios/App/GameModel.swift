@@ -64,6 +64,15 @@ final class GameModel: ObservableObject {
     @Published var policy = StoragePolicy()
     @Published var limitMB = 5 * 1024
     @Published var buildMode = ""
+    @Published var activePower = ""
+    @Published var powerCards: [PowerCard] = []
+    @Published var arsenalLines: [String] = []
+    @Published var showArsenal = false
+    @Published var showCheats = false
+    @Published var mapPick: TilePos?
+    @Published var mapZoom = 1.0
+    var mapOrigin = TilePos(0, 0)
+    var mapSide = 0
     @Published var lawRatio = 0.3
     @Published var lawSpaceMB = 0
     @Published var lawNewSeed = true
@@ -157,6 +166,27 @@ final class GameModel: ObservableObject {
         }
         if args.contains("--map") { DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.toggleMap() } }
         if args.contains("--details") { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.showDetails = true; self?.refreshHUD() } }
+        if args.contains("--powers") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self = self else { return }
+                self.cheat("powers"); self.cheat("weather:3"); self.cheat("animals")
+                self.showArsenal = true
+            }
+        }
+        if args.contains("--storm") {
+            // cast a few powers in a thunderstorm so the effects are on screen
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self = self else { return }
+                self.cheat("powers"); self.cheat("god"); self.cheat("weather:3"); self.cheat("animals")
+            }
+            for (i, key) in ["mg", "thunder", "judgment", "perish", "meteor", "fireball", "storm"].enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8 + Double(i) * 0.5) { [weak self] in
+                    guard let self = self, let sc = self.scene else { return }
+                    self.activePower = key
+                    sc.attack(toward: sc.player + Vec2(Double(i * 50 - 150), -70))
+                }
+            }
+        }
         if args.contains("--realm") { DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.showRealm = true; self?.refreshRealm() } }
         if args.contains("--laws") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.showLaws = true }
@@ -368,7 +398,7 @@ final class GameModel: ObservableObject {
     func deselect() { selectedID = 0; selected = nil; following = false; selectedPortrait = nil }
     func talk() { if selectedID != 0 { selected = society.talk(selectedID, speak: true) } }
     func feed() { if selectedID != 0 { society.giftFood(selectedID); talk() } }
-    func cycleWeapon() { weaponIndex = (weaponIndex + 1) % GameModel.weapons.count }
+    func cycleWeapon() { weaponIndex = (weaponIndex + 1) % GameModel.weapons.count; activePower = "" }
 
     func nextVillage() {
         guard let sc = scene else { return }
@@ -415,6 +445,8 @@ final class GameModel: ObservableObject {
         }
         ext = min(ext, 160)
         let side = ext * 2 + 1
+        mapOrigin = TilePos(pc.x - ext, pc.y - ext)
+        mapSide = side
         var bmp = Bitmap(side, side, fill: RGBA(8, 10, 18))
         let cols = Content.shared.biomes.map { RGBA(hex: $0.color) }
         for y in 0..<side { for x in 0..<side {
@@ -432,7 +464,15 @@ final class GameModel: ObservableObject {
             let x = Int((lg.pos.x / 512).rounded(.down)) - pc.x + ext, y = Int((lg.pos.y / 512).rounded(.down)) - pc.y + ext
             bmp.rect(x, y, 2, 2, .white)
         }
+        // old mazes in country that has been surveyed
+        for y in 0..<side { for x in 0..<side where w.known(pc.x - ext + x, pc.y - ext + y) != 0 && w.gen.isMaze(pc.x - ext + x, pc.y - ext + y) {
+            bmp.rect(x - 1, y - 1, 3, 3, RGBA(200, 110, 255))
+        } }
         bmp.rect(ext - 1, ext - 1, 3, 3, RGBA(128, 230, 255))
+        if let p = mapPick {
+            let x = p.x - mapOrigin.x, y = p.y - mapOrigin.y
+            bmp.rect(x - 3, y, 7, 1, .white); bmp.rect(x, y - 3, 1, 7, .white)
+        }
         mapImage = bmp.uiImage
         mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / %@ · 城镇按国家着色", "%d chunks mapped · %@ of %@ on disk · towns in their nation's colour"), w.surveyed, GameModel.sizeText(mapBytes()), limitText)
     }

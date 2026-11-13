@@ -46,6 +46,8 @@ struct HUDView: View {
         .foregroundStyle(.white)
         .overlay { if model.showRealm { RealmPanel() } }
         .overlay { if model.showLaws { LawsPanel() } }
+        .overlay { if model.showArsenal { ArsenalPanel() } }
+        .overlay { if model.showCheats { CheatPanel() } }
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .any(of: [.images, .videos]))
         .onChange(of: model.pick) { _, v in
             guard v != .none else { return }
@@ -180,8 +182,14 @@ struct HUDView: View {
                 pill(model.following ? L("停止跟随", "Unfollow") : L("跟随", "Follow"), "figure.walk") { model.following.toggle() }
                 pill(L("照片/GIF/视频换装", "Photo / GIF / video"), "camera.fill") { model.pick = .villager(model.selectedID) }
             }
+            HStack(spacing: 6) {
+                pill(L("送花", "Flower"), "camera.macro") { model.gift("flower") }
+                pill(L("约会", "Date"), "heart.fill") { model.date() }
+                pill(L("求婚", "Propose"), "sparkles") { model.propose() }
+                pill(L("掷骰", "Dice"), "dice.fill") { model.dice() }
+            }
         }
-        .padding(14).frame(width: 310, alignment: .leading)
+        .padding(14).frame(width: 356, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .transition(.move(edge: .trailing).combined(with: .opacity))
     }
@@ -199,6 +207,8 @@ struct HUDView: View {
             tab(L("地图", "Map"), "map.fill") { model.toggleMap() }
             tab(L("三国", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
             tab(L("法则", "Laws"), "flame.fill") { model.showLaws = true }
+            tab(L("能力", "Powers"), "bolt.fill") { model.showArsenal = true }
+            tab(L("作弊", "Cheats"), "wand.and.rays") { model.showCheats = true }
             tab(L("村落", "Village"), "house.fill") { model.nextVillage() }
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
             tab(L("形象", "Photo"), "person.crop.circle.badge.plus") { model.pick = .player }
@@ -214,6 +224,7 @@ struct HUDView: View {
     }
 
     private var weaponName: String {
+        if let p = Power.byKey[model.activePower] { return p.name(zh: GameModel.zh) }
         switch GameModel.weapons[model.weaponIndex] {
         case "sword": return L("剑", "Sword")
         case "bow": return L("弓", "Bow")
@@ -225,6 +236,7 @@ struct HUDView: View {
     }
 
     private var weaponIcon: String {
+        if !model.activePower.isEmpty { return "bolt.circle.fill" }
         switch GameModel.weapons[model.weaponIndex] {
         case "bow": return "scope"
         case "staff": return "wand.and.stars"
@@ -252,16 +264,50 @@ struct HUDView: View {
     private var mapOverlay: some View {
         ZStack {
             Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { model.toggleMap() }
-            VStack(spacing: 10) {
-                if let img = model.mapImage {
-                    Image(uiImage: img).interpolation(.none).resizable().scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .padding(8).glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                }
-                Text(model.mapCaption).font(.system(size: 12, design: .rounded)).padding(.horizontal, 14).padding(.vertical, 8).glass(Capsule())
+            HStack(alignment: .center, spacing: 10) {
+                mapCanvas
+                mapControls
             }
-            .padding(.vertical, 60).padding(.horizontal, 40)
-            .allowsHitTesting(false)
+            .padding(.vertical, 14).padding(.leading, 58).padding(.trailing, 20)
         }
+    }
+
+    private var mapCanvas: some View {
+        let side = 330.0 * model.mapZoom
+        return ScrollView([.horizontal, .vertical]) {
+            if let img = model.mapImage {
+                Image(uiImage: img).interpolation(.none).resizable().frame(width: side, height: side)
+                    .onTapGesture(coordinateSpace: .local) { p in model.pickMap(Double(p.x) / side, Double(p.y) / side) }
+                    .accessibilityIdentifier("map-image")
+            }
+        }
+        .frame(width: 340, height: 340)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(6).glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var mapControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(model.mapCaption).font(.system(size: 11, design: .rounded)).fixedSize(horizontal: false, vertical: true)
+            Text(L("放大后点击地图上的任意位置，再按“瞬移到这里”。紫色方块是迷宫。", "Zoom in, tap anywhere on the map, then press Teleport. Purple squares are mazes."))
+                .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                pill("1×", "minus.magnifyingglass") { model.mapZoom = 1 }
+                pill("2×", "magnifyingglass") { model.mapZoom = 2 }
+                pill("4×", "plus.magnifyingglass") { model.mapZoom = 4 }
+            }
+            pill(L("最近的迷宫", "Nearest maze"), "square.grid.3x3.fill") { model.pickNearestMaze() }
+            if model.mapPick != nil {
+                Button { model.teleportToPick() } label: {
+                    Label(L("瞬移到这里", "Teleport here"), systemImage: "location.fill").font(.system(size: 14, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 16).frame(height: 44).background(Color(red: 0.45, green: 0.4, blue: 0.95), in: Capsule())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityIdentifier("teleport")
+            }
+            pill(L("关闭地图", "Close map"), "xmark") { model.toggleMap() }
+        }
+        .padding(14).frame(width: 300, alignment: .leading)
+        .glass(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
