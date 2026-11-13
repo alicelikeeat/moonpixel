@@ -27,7 +27,7 @@ struct GlassSheet<Content: View>: View {
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .glass(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.leading, 58).padding(.trailing, 20).padding(.vertical, 10)      // clear of the Dynamic Island in landscape
         }
         .foregroundStyle(.white)
     }
