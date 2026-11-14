@@ -73,8 +73,11 @@ extension GameModel {
         guard society != nil, !lawBusy, !lawSavePending, policy.mode != .cacheFirst else { return }
         guard let d = policy.decide(used: totalBytes(), limit: limitBytes, clock: Date().timeIntervalSince1970) else { return }
         saveSettings()
-        guard save(announce: false) else { return }
-        startLaw(society.planLaw(d.0, options: d.1, seed: Int.random(in: 1..<1_000_000)), auto: true)
+        // start only from a saved state, so the journal's base generation is exactly what the plan was made from
+        save(announce: false) { [weak self] ok, _ in
+            guard let self = self, ok, let s = self.society, !self.lawBusy else { return }
+            self.startLaw(s.planLaw(d.0, options: d.1, seed: Int.random(in: 1..<1_000_000)), auto: true)
+        }
     }
 
     // MARK: nations
@@ -187,17 +190,21 @@ extension GameModel {
     func runLaw(_ mode: LawMode) {
         guard let s = society, !lawBusy else { return }
         if lawSavePending { showToast(L("上一次世界法则还没有保存成功，请先重试保存", "The last world law has not been saved yet: retry saving first")); return }
-        guard save(announce: false) else { return }                            // never start from an unsaved state
         var o = LawOptions()
         o.ratio = lawRatio
         o.spaceTarget = lawSpaceMB * 1_048_576
         o.newSeed = lawNewSeed
         o.radius = lawRadius
-        startLaw(s.planLaw(mode, options: o, seed: Int.random(in: 1..<1_000_000)), auto: false)
+        // never start from an unsaved state: the plan is made from exactly what was just committed
+        save(announce: false) { [weak self] ok, message in
+            guard let self = self, !self.lawBusy else { return }
+            if !ok { self.showToast(L("无法先保存当前世界，法则没有执行：", "The world could not be saved first, so the law did not run: ") + (message ?? "")); return }
+            self.startLaw(s.planLaw(mode, options: o, seed: Int.random(in: 1..<1_000_000)), auto: false)
+        }
     }
 
     func startLaw(_ plan: LawPlan, auto: Bool) {
-        guard LawJournal.write(plan, saveDir) else {
+        guard LawJournal.write(plan, saveDir, baseGen: store?.headGen) else {
             showToast(L("无法写入恢复日志（空间不足？），未执行任何删除", "Could not write the recovery journal (no space?). Nothing was deleted"))
             return
         }
@@ -211,7 +218,7 @@ extension GameModel {
 
     /// Called once per frame while a law runs: a batch at a time, so the screen keeps moving.
     func stepLaw() {
-        guard let run = lawRun else { lawBusy = false; return }
+        guard let run = lawRun else { if !lawCommitting { lawBusy = false }; return }
         run.step(40)
         lawProgress = run.progress
         if run.done { lawRun = nil; finishLaw(run.result, plan: run.plan) }
@@ -230,18 +237,32 @@ extension GameModel {
             sc.clearTextureCache()
             sc.markAllDirty()
         }
-        r.assetsRemoved = collectAssets()
-        let ok = save(announce: false)
-        if ok { LawJournal.clear(saveDir) }                                    // the plan is the only recovery data; it goes once committed
-        else { lawSavePending = true }                                         // the journal stays; nothing else may change the world until it is saved
-        r.bytesBefore = lawBefore
-        r.bytesAfter = totalBytes()
-        lawBusy = false
-        lawReport = describe(r) + (ok ? "" : L("（保存失败：请重试保存；若此时退出，下次启动会按同一计划继续完成）", " (saving failed: retry saving; if the app closes now, the same plan is finished at the next start)"))
-        showToast(lawReport)
-        lastSeenEvent = society.lastEventID
-        refreshStorage()
-        refreshRealm()
+        commitLaw(r)
+    }
+
+    /// The end of every law: commit (dropping the older generation, which still holds what was deleted),
+    /// then remove the journal and unused assets - in that order, so every step can be redone safely.
+    /// Until the commit succeeds the world stays locked.
+    func commitLaw(_ result: LawResult, suffix: String = "") {
+        lawCommitting = true
+        save(announce: false, purge: true, force: true) { [weak self] ok, message in
+            guard let self = self else { return }
+            var r = result
+            self.lawCommitting = false
+            self.lawBusy = false
+            if ok {
+                LawJournal.clear(self.saveDir)
+                r.assetsRemoved = self.collectAssets()           // only now: the saved world no longer points at them
+            } else { self.lawSavePending = true }
+            r.bytesBefore = self.lawBefore
+            r.bytesAfter = self.totalBytes()
+            self.lawReport = self.describe(r) + suffix
+                + (ok ? "" : L("（保存失败：请重试保存；若此时退出，下次启动会按同一计划继续完成）", " (saving failed: retry saving; if the app closes now, the same plan is finished at the next start)"))
+            self.showToast(self.lawReport)
+            if let s = self.society { self.lastSeenEvent = s.lastEventID }
+            self.refreshStorage()
+            self.refreshRealm()
+        }
     }
 
     func describe(_ r: LawResult) -> String {
@@ -296,8 +317,7 @@ extension GameModel {
         society = g.society
         society.zh = GameModel.zh
         if recipe != nil { recipe!.seed = plan.newSeed }
-        var r = g.result
-        r.assetsRemoved = collectAssets()
+        let r = g.result
         loadAssets()
         playerPortrait = playerLook.portrait.flatMap { portraits[$0] }
         var start = Vec2(8, 8)
@@ -309,16 +329,8 @@ extension GameModel {
         sc.flashOnAppear = true
         scene = sc
         lastSeenEvent = society.lastEventID
-        let ok = save(announce: false)
-        if ok { LawJournal.clear(saveDir) } else { lawSavePending = true }
-        r.bytesBefore = lawBefore
-        r.bytesAfter = totalBytes()
-        lawBusy = false
-        lawReport = describe(r) + String(format: L(" · 新种子 %d", " · new seed %d"), plan.newSeed)
-            + (ok ? "" : L("（保存失败：请重试保存）", " (saving failed: retry saving)"))
-        showToast(lawReport)
-        refreshStorage()
-        refreshRealm()
+        lawBusy = true
+        commitLaw(r, suffix: String(format: L(" · 新种子 %d", " · new seed %d"), plan.newSeed))
     }
 
     /// Finish a law whose journal was still on disk when the world was opened.

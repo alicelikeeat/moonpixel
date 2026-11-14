@@ -40,6 +40,7 @@ struct HUDView: View {
                     }
                 }
                 if model.lawSavePending { savePendingBar }
+                if model.exitBlocked != nil { exitBlockedBar }
                 Spacer(minLength: 0)
                 if model.watch != .none { watchBar }
                 if model.pendingPlan != nil || !model.buildMode.isEmpty { buildBar }
@@ -128,6 +129,32 @@ struct HUDView: View {
             .accessibilityIdentifier("retry-save")
         }
         .padding(.horizontal, 14).padding(.vertical, 8).glass(Capsule())
+    }
+
+    /// Leaving was refused because the save failed: the world is still here, paused, and can be saved again.
+    private var exitBlockedBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.exclamationmark").foregroundStyle(.yellow)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L("保存失败，没有离开这个世界", "Saving failed, so the world was not closed")).font(.system(size: 12, weight: .bold, design: .rounded))
+                Text(model.exitBlocked ?? "").font(.system(size: 10, design: .rounded)).opacity(0.85).lineLimit(3)
+            }
+            Button { model.retryExit() } label: {
+                Label(L("重试保存并离开", "Retry and leave"), systemImage: "arrow.clockwise").font(.system(size: 12, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12).frame(minHeight: 44).background(Color.white.opacity(0.22), in: Capsule())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("retry-exit")
+            Button { model.stayAfterFailedExit() } label: {
+                Text(L("继续游戏", "Keep playing")).font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .padding(.horizontal, 12).frame(minHeight: 44).background(Color.white.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("stay")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8).glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("exit-blocked")
     }
 
     /// While watching, it is always clear that the camera is not the character.

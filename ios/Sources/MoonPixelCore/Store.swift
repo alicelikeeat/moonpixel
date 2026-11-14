@@ -211,10 +211,12 @@ public final class WorldStore {
     /// the kept manifests needs. Idempotent; a failure here never affects HEAD.
     /// `purge` is used after a permanent deletion: the older generation would otherwise still hold the
     /// deleted content.
-    @discardableResult public func collectGarbage(purge: Bool = false) throws -> Int {
+    /// `current` is the generation to keep as HEAD (pass the manifest just written when collecting on a
+    /// background queue before `finishCommit` has run).
+    @discardableResult public func collectGarbage(purge: Bool = false, current: Manifest? = nil) throws -> Int {
         try check(.cleanup, after: false)
         let fm = FileManager.default
-        guard let h = head else { return 0 }
+        guard let h = current ?? head else { return 0 }
         var keep: [Manifest] = [h]
         if !purge, let p = h.prev, let pm = loadManifest(p) { keep.append(pm) }
         let keepGens = Set(keep.map { $0.gen })

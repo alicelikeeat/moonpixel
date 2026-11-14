@@ -118,7 +118,7 @@ final class GameScene: SKScene {
         effectBudget = frameAvg > 1.0 / 40 ? 40 : (frameAvg > 1.0 / 50 ? 80 : 120)
         if model.lawBusy {
             model.stepLaw()                      // a world law is being carried out: the simulation waits for it
-        } else if model.lawSavePending {
+        } else if model.savePause {
             // a law is done but not saved: nothing moves until it is, so the save matches the plan
         } else {
             // the simulation gets a fixed slice of each frame; what does not fit is dropped, and the

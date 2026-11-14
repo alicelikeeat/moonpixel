@@ -96,6 +96,21 @@ final class GameModel: ObservableObject {
     var recipe: WorldRecipe?
     var lastLogCount = 0
     var lastSeenEvent = 0
+    // saving (SaveCoordinator.swift)
+    var saveRunning = false
+    var saveAgain = false
+    var saveWaiters: [(Bool, String?) -> Void] = []
+    var savePurgeNext = false
+    var saveAnnounceNext = false
+    var exitRequested = false
+    var failSaves = 0
+    var lawCommitting = false
+    @Published var saveError: String?
+    @Published var exitBlocked: String?
+    @Published var lastSavedGen = 0
+    var lastSavedAt: Date?
+    var storeDiskBytes = 0
+    let perf = PerfStats()
     // v1.3: building, crafting, cities, chronicle, war watching
     @Published var showBuild = false
     @Published var showCraft = false
@@ -154,7 +169,7 @@ final class GameModel: ObservableObject {
         var list: [WorldMeta] = []
         for id in (try? fm.contentsOfDirectory(atPath: GameModel.worldsDir.path)) ?? [] {
             let d = GameModel.dir(id)
-            guard fm.fileExists(atPath: d.appendingPathComponent("index.json").path) else { continue }
+            guard fm.fileExists(atPath: d.appendingPathComponent("HEAD").path) || fm.fileExists(atPath: d.appendingPathComponent("index.json").path) else { continue }
             if let data = try? Data(contentsOf: d.appendingPathComponent("meta.json")), let m = try? JSONDecoder().decode(WorldMeta.self, from: data) {
                 list.append(m)
             } else {
@@ -218,6 +233,7 @@ final class GameModel: ObservableObject {
                 }
             }
         }
+        if let i = args.firstIndex(of: "--fail-saves"), i + 1 < args.count { failSaves = Int(args[i + 1]) ?? 0 }
         if args.contains("--demo-war") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self else { return }
@@ -312,29 +328,43 @@ final class GameModel: ObservableObject {
         epoch += 1
         var corrupt = false
         var migrated = false
-        let indexURL = saveDir.appendingPathComponent("index.json")
-        if load, let data = try? Data(contentsOf: indexURL) {
-            index = try? JSONDecoder().decode(Index.self, from: data)
-            // an older save is copied aside before it is migrated, so the original can always be recovered
-            if let ix = index, (ix.format ?? 2) < GameModel.saveFormat {
-                let keep = saveDir.appendingPathComponent("index.v\(ix.format ?? 2)-backup.json")
-                if !FileManager.default.fileExists(atPath: keep.path) { try? FileManager.default.copyItem(at: indexURL, to: keep) }
-                migrated = true
-            }
-            if index == nil {
-                // never overwrite a save we could not read: keep it beside the new one
-                corrupt = true
-                let keep = saveDir.appendingPathComponent("index.corrupt-\(Int(Date().timeIntervalSince1970)).json")
-                try? FileManager.default.copyItem(at: indexURL, to: keep)
+        if !load { try? FileManager.default.removeItem(at: saveDir) }
+        try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
+        let st = WorldStore(directory: saveDir)
+        if load && st.hasLegacyLayout {
+            // a save from before 1.6: its files are copied into generation 1 and left exactly as they were
+            do { try st.importLegacy(); migrated = true }
+            catch {
+                showToast(L("旧存档迁移失败，原文件没有改动，世界未打开", "The older save could not be migrated; its files were not changed and the world was not opened"))
+                worldID = ""; refreshWorlds(); return
             }
         }
-        if !load { try? FileManager.default.removeItem(at: saveDir) }
+        if load {
+            guard let data = st.readIndex() else {
+                showToast(L("找不到完整的存档，世界未打开，文件没有改动", "No complete save was found; the world was not opened and nothing was changed"))
+                worldID = ""; refreshWorlds(); return
+            }
+            index = try? JSONDecoder().decode(Index.self, from: data)
+            if let ix = index, (ix.format ?? 2) > GameModel.saveFormat {
+                showToast(L("这个存档来自更新的版本，请更新游戏后再打开", "This save comes from a newer version; update the game to open it"))
+                worldID = ""; refreshWorlds(); return
+            }
+            if let ix = index, (ix.format ?? 2) < GameModel.saveFormat { migrated = true }
+            if index == nil {
+                // never lose a save we could not read: its generation stays on disk and a copy is put beside it
+                corrupt = true
+                try? data.write(to: saveDir.appendingPathComponent("index.corrupt-\(Int(Date().timeIntervalSince1970)).json"))
+            }
+            if let r = st.recoveredFrom { showToast(String(format: L("存档第 %d 次不完整，已回到最近一次完整的存档（第 %d 次）", "Save #%d was incomplete; the last complete save (#%d) was opened"), r, st.headGen)) }
+        }
         let w = OpenWorld(seed: index?.world.seed ?? seed, budget: budget)
         loadSettings()
         w.diskLimitBytes = limitBytes
         recipe = index?.recipe ?? (load ? nil : newRecipe)
         if let r = recipe { w.gen.tempBias = r.tempBias; w.gen.moistBias = r.moistBias; w.gen.elevBias = r.elevBias }
-        w.open(directory: saveDir)
+        w.open(store: st)
+        storeDiskBytes = st.diskBytes()
+        lastSavedGen = st.headGen
         let s = Society(world: w, seed: w.seed)
         s.zh = GameModel.zh
         if let r = recipe { s.minPopulation = r.minPopulation }
@@ -363,7 +393,7 @@ final class GameModel: ObservableObject {
         scene = sc
         lastLogCount = s.log.count
         lastSeenEvent = s.lastEventID
-        notices = []; watch = .none; pendingPlan = nil; buildMode = ""; lawSavePending = false
+        notices = []; watch = .none; pendingPlan = nil; buildMode = ""; lawSavePending = false; exitBlocked = nil; saveError = nil
         if memObserver == nil {
             memObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.cleanMemory(announce: true) }
@@ -371,41 +401,18 @@ final class GameModel: ObservableObject {
         }
         refreshHUD()
         if !load { save(announce: false) }
-        if migrated { showToast(L("旧存档已迁移到 1.3，原文件已另存为 index.v2-backup.json", "This save was migrated to 1.3; the original is kept as index.v2-backup.json")) }
+        if migrated { showToast(L("旧存档已迁移，原文件保留在世界目录中未改动", "This save was migrated; its original files are kept unchanged in the world folder")) }
         if corrupt { showToast(L("存档已损坏，原文件已另存为 index.corrupt，未被覆盖；世界已重新生成", "The save was damaged. It was kept as index.corrupt and not overwritten; the world was regenerated")) }
         // a world law that was interrupted (app killed, power lost) is finished now
-        if load, index != nil, let j = LawJournal.read(saveDir) { recoverLaw(j.plan) }
-    }
-
-    /// Writes the world to disk. Returns false (and says so) when anything could not be written;
-    /// the previous save file is left intact in that case because writes are atomic.
-    @discardableResult func save(announce: Bool) -> Bool {
-        guard let w = world, let s = society, let sc = scene else { return false }
-        let failures = w.writeFailures, underFailures = s.under?.writeFailures ?? 0
-        w.saveAll()
-        s.under?.saveAll()
-        var ok = w.writeFailures == failures && (s.under?.writeFailures ?? 0) == underFailures
-        let ix = Index(format: GameModel.saveFormat, world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook, recipe: recipe)
-        let tech = s.techCount > 0 ? s.techName(s.techCount - 1) : ""
-        let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count, diskBytes: totalBytes(), tech: tech)
-        do {
-            try FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
-            try JSONEncoder().encode(ix).write(to: saveDir.appendingPathComponent("index.json"), options: .atomic)
-            try JSONEncoder().encode(meta).write(to: saveDir.appendingPathComponent("meta.json"), options: .atomic)
-        } catch { ok = false }
-        if !ok { showToast(L("保存失败：存储空间不足或文件不可写。上一次的存档仍然完好。", "Save failed: no space left or the file cannot be written. The previous save is intact.")) }
-        else if announce { showToast(L("已保存", "Saved")) }
-        return ok
-    }
-
-    /// Save and go back to the world list.
-    func exitToMenu() {
-        save(announce: false)
-        scene?.isPaused = true
-        scene = nil
-        world = nil
-        society = nil
-        refreshWorlds()
+        if load, index != nil {
+            switch LawJournal.recovery(saveDir, store: st) {
+            case .replay(let plan): recoverLaw(plan)                  // the law never reached a save: carry out the same plan again
+            case .alreadyCommitted:                                     // it was saved; only its journal was left behind
+                LawJournal.clear(saveDir)
+                GameModel.saveQueue.async { _ = try? st.collectGarbage(purge: true) }
+            case .none: break
+            }
+        }
     }
 
     // MARK: HUD
@@ -414,13 +421,11 @@ final class GameModel: ObservableObject {
     /// Bytes this world occupies on disk (chunks + index + assets).
     func mapBytes() -> Int { totalBytes() }
 
+    /// Map and index in the current view, kept up to date as chunks change (no walking the disk).
+    /// The real size on disk, previous generation included, is measured after each save in the background.
     func chunkAndIndexBytes() -> Int {
         guard let w = world else { return 0 }
-        var n = w.diskBytes
-        for f in ["index.json", "meta.json"] {
-            n += ((try? FileManager.default.attributesOfItem(atPath: saveDir.appendingPathComponent(f).path)[.size]) as? NSNumber)?.intValue ?? 0
-        }
-        return n
+        return w.diskBytes + (w.store?.head?.index?.s ?? 0) + (w.store?.head?.meta?.s ?? 0)
     }
 
     static func sizeText(_ bytes: Int) -> String {

@@ -23,7 +23,7 @@ extension GameModel {
     var activeWorld: OpenWorld { depth > 0 ? society.underworld() : world }
 
     /// Anything that changes the world waits while a world law is running or its result is not yet saved.
-    var worldLocked: Bool { lawBusy || lawSavePending }
+    var worldLocked: Bool { lawBusy || lawSavePending || lawCommitting || exitBlocked != nil }
 
     // MARK: building
     func chooseBuild(_ key: String) {
@@ -271,12 +271,16 @@ extension GameModel {
     // MARK: law saving that failed
     func retryLawSave() {
         guard lawSavePending else { return }
-        if save(announce: false) {
-            LawJournal.clear(saveDir)
-            lawSavePending = false
-            showToast(L("已保存，世界法则完成", "Saved: the world law is complete"))
-        } else {
-            showToast(L("仍然无法保存：请释放手机存储空间后重试", "Still cannot save: free some storage on the phone and try again"))
+        save(announce: false, purge: true) { [weak self] ok, _ in
+            guard let self = self else { return }
+            if ok {
+                LawJournal.clear(self.saveDir)
+                self.lawSavePending = false
+                _ = self.collectAssets()
+                self.showToast(L("已保存，世界法则完成", "Saved: the world law is complete"))
+            } else {
+                self.showToast(L("仍然无法保存：请释放手机存储空间后重试", "Still cannot save: free some storage on the phone and try again"))
+            }
         }
     }
 
