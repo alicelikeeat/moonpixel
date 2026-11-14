@@ -145,6 +145,8 @@ public final class Agent: Codable {
     public var hp: Double?
     /// Legion this soldier serves in.
     public var legion: Int?
+    /// 0 infantry, 1 archer, 2 cavalry, 3 siege crew, 4 supply.
+    public var unit: Int?
     /// Refugee until this time (integrates afterwards, or earlier when the player takes them in).
     public var refugee: Double?
     /// Boredom, 0...1. Taverns and festivals cure it.
@@ -166,7 +168,7 @@ public final class Agent: Codable {
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
              health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
-             nation, hp, legion, refugee, fun, crush, crushSince
+             nation, hp, legion, refugee, fun, crush, crushSince, unit
     }
 
     public init() {}
@@ -220,6 +222,13 @@ public final class Settlement: Codable {
     /// Hours of work done at each station, and why a station is waiting.
     public var work: [String: Double]?
     public var pause: [String: String]?
+    /// Name given by the player, when they founded or renamed the city.
+    public var cityName: String?
+    public var byPlayer: Bool?
+    /// Nation whose capital this once was (kept as local memory and identity).
+    public var formerCapital: Int?
+    /// Legion besieging the city right now.
+    public var siege: Int?
     // refreshed by surveyTown
     public var fixtures: [String: Int] = [:]
     public var freeBeds: [TilePos] = []
@@ -234,7 +243,7 @@ public final class Settlement: Codable {
     var unreachT = 0.0
     var resT = 0.0, planT = 0.0, aiAcc = 0.0, cityT = 0.0
 
-    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause }
+    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege }
     public init() {}
     public func inArea(_ t: TilePos) -> Bool { t.x >= origin.x && t.y >= origin.y && t.x < origin.x + Settlement.span && t.y < origin.y + Settlement.span }
     public func building(_ id: Int) -> Building? { buildings.first { $0.id == id } }
@@ -344,7 +353,7 @@ public final class Society {
             var rate = 0.0
             for s in settlements.values where !s.abandoned && s.nation == id { rate += researchRate(of: s) }
             // knowledge spreads: nations behind the leader catch up faster; a unified era shares everything
-            rate *= cfg.researchScale * (realm.nations[k].techCount < techCount ? cfg.catchUp : 1) * (realm.era == 1 ? cfg.unityResearch : 1)
+            rate *= governance(id) * cfg.researchScale * (realm.nations[k].techCount < techCount ? cfg.catchUp : 1) * (realm.era == 1 ? cfg.unityResearch : 1)
             if realm.active("breakthrough", id, world.time) { rate *= cfg.breakthroughBoost }
             realm.nations[k].research += rate * dt
             while realm.nations[k].techCount < Society.techs.count && realm.nations[k].research >= Society.techs[realm.nations[k].techCount].3 {
@@ -422,8 +431,9 @@ public final class Society {
         return s
     }
 
-    func emit(_ key: String, _ args: [String], _ pos: Vec2) {
+    func emit(_ key: String, _ args: [String], _ pos: Vec2, nations: [Int] = [], city: Int? = nil, cause: String = "", result: String = "") {
         let t = tx(key, args)
+        chronicle(key, t, pos, nations: nations, city: city, cause: cause, result: result)
         log.append((world.time, t))
         if log.count > realm.cfg.maxLog { log.removeFirst(log.count - realm.cfg.maxLog) }
         onEvent?(key, t, pos)
@@ -594,7 +604,7 @@ public final class Society {
         let b = Building()
         b.type = type
         var w = 6, h = type == "farm" ? 4 : 5
-        if let spec = Society.roomSpecs[type] { w = spec.w; h = spec.h }
+        if let spec = Society.roomSpecs[type] ?? Society.landmarkSpecs[type] { w = spec.w; h = spec.h }
         var pos = TilePos(0, 0)
         if type == "well" {
             pos = s.center + TilePos(3, 3); w = 1; h = 1
@@ -640,15 +650,19 @@ public final class Society {
             b.cells.append(BuildCell(dx: w - 1 - farX, dy: farY, layer: 2, key: "bed", wood: 2, stone: 0))
             b.door = pos + dd + out
         }
-        if let spec = Society.roomSpecs[type] {
+        if let spec = Society.roomSpecs[type] ?? Society.landmarkSpecs[type] {
+            let wallKey = styledWall(s, spec.wall)
             // public buildings: a walled room facing the square with its signature equipment
             let dd = TilePos(w / 2, h - 1)
             for dy in 1..<(h - 1) { for dx in 1..<(w - 1) { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 0, key: spec.floor, wood: 0, stone: 0)) } }
             for dy in 0..<h { for dx in 0..<w where dx == 0 || dy == 0 || dx == w - 1 || dy == h - 1 {
                 if TilePos(dx, dy) == dd { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: "door_wood", wood: 1, stone: 0)) }
-                else { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: spec.wall, wood: spec.wall == "wall_wood" ? 1 : 0, stone: spec.wall == "wall_wood" ? 0 : 1)) }
+                else { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: wallKey, wood: wallKey == "wall_wood" || wallKey == "fence" ? 1 : 0, stone: wallKey == "wall_wood" || wallKey == "fence" ? 0 : 1)) }
             } }
-            for f in spec.items where f.0 < w - 1 && f.1 < h - 1 { b.cells.append(BuildCell(dx: f.0, dy: f.1, layer: 2, key: f.2, wood: 2, stone: 2)) }
+            for f in spec.items where f.0 < w - 1 && f.1 < h - 1 {
+                let key = f.2 == "banner" ? "banner_\(max(1, min(3, s.nation ?? 1)))" : f.2
+                b.cells.append(BuildCell(dx: f.0, dy: f.1, layer: 2, key: key, wood: 2, stone: 2))
+            }
             b.door = pos + dd + TilePos(0, 1)
         }
         b.id = nextBID; nextBID += 1
@@ -691,7 +705,7 @@ public final class Society {
         }
         let pop = living.count
         let now = world.time
-        s.food = min(s.food, 40 + Double(pop) * 14)
+        s.food = min(s.food, 40 + Double(pop) * 14 + realm.cfg.granaryFood * Double(s.count("granary", done: true)))
         var workers = living.filter { $0.stage(now) == "adult" && !$0.travelling && $0.legion == nil && $0.refugee == nil }
         // households: every family gets a house of its own
         var households: [Int: [Agent]] = [:]
@@ -721,9 +735,8 @@ public final class Society {
             else if houses.count < households.count && homeless > 0 { queue(s, "house") }
             else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
             else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }
-            else {
-                for tb in Society.techBuildings where has(tb.0) && pop >= tb.2 && s.count(tb.1) == 0 { queue(s, tb.1); break }
-            }
+            else if let tb = Society.techBuildings.first(where: { has($0.0) && pop >= $0.2 && s.count($0.1) == 0 }) { queue(s, tb.1) }
+            else if let lm = wantedLandmark(s, pop: pop), s.wood >= 20 { queue(s, lm) }
         }
         let n = workers.count
         let project = s.activeProject

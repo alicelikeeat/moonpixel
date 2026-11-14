@@ -50,6 +50,12 @@ public struct RealmConfig: Codable, Equatable {
     public var supplyDistance = 400.0      // tiles at which distance alone halves supply
     public var supplyRoad = 0.25, supplyWater = 0.06, supplyDepot = 0.15, supplyMin = 0.15, supplyMax = 1.2
     public var depotRange = 12
+    // --- campaigns
+    public var rationStart = 8.0, ration = 0.02, convoyEvery = 80.0, convoyCarry = 14.0
+    public var moraleStart = 0.8, moraleLoss = 1.4, moraleHunger = 0.2, moraleRally = 0.1, moraleLeader = 0.2
+    public var waver = 0.4, rout = 0.2, routLoss = 0.1
+    public var wallHP = 60.0, wallMin = 12, engineHit = 1.2, ladderHit = 0.04, occupyTime = 30.0
+    public var meetRange = 140.0
     public var captureDamage = 2, refugeeShare = 0.2, refugeeIntegrate = 1.0
     // --- balance of power
     public var dominance = 0.5, dominanceRelease = 0.42
@@ -89,6 +95,16 @@ public struct RealmConfig: Codable, Equatable {
     public var playerHP = 100.0, playerRegen = 2.0, soldierHit = 9.0, hostileRep = -0.5
     public var roadCost = 1.0, bridgeCost = 3.0, depotWood = 8.0, depotStone = 4.0
     // --- technical limits (never left to the war system)
+    // --- cities and capitals
+    public var cityBeds = 4, cityMinGap = 40, capitalPop = 12
+    public var cityFood = 20.0, capitalFoodPerHead = 4.0
+    public var settleEvery = 0.25, settleBatch = 8
+    public var capitalMoveYears = 0.3, capitalMoveCooldown = 5.0, capitalMoveRatio = 1.6
+    public var capitalMoveWood = 30.0, capitalMoveFood = 40.0, capitalLostFatigue = 0.25
+    public var govNoCapital = 0.6, govMoving = 0.7, govSiege = 0.8, govNoPalace = 0.95
+    public var millFood = 0.4, marketFlow = 0.03, granaryFood = 150.0
+    public var fortFortress = 0.25, fortTower = 0.05, fortBallista = 0.08, fortWall = 0.3
+    public var maxNews = 120, maxHistory = 300
     // --- production
     public var cityRadius = 30             // tiles around the square that count as the town
     public var storeBase = 80.0, storePerChest = 60.0
@@ -111,6 +127,9 @@ public struct Nation: Codable {
     public var overT = 0.0
     public var exileSince: Double?
     public var rep = 0.0                   // the player's standing with this nation, -1...1
+    public var capital: Int?               // id of the capital city; nil while in exile or between capitals
+    public var moving: CapitalMove?
+    public var everCapital: Bool?
     public var powers: [String]?           // weapons, spells and arts this nation has learned
     public var arsenalPts: Double?
     public var studying: String?
@@ -135,6 +154,21 @@ public final class Legion: Codable {
     public var pos = Vec2.zero
     public var supply = 1.0, supplyT = 0.0, lossAcc = 0.0, defLossAcc = 0.0
     public var startN = 0
+    // campaign state (optional so that earlier saves load)
+    public var morale: Double?
+    public var food: Double?
+    public var engines: Int?
+    public var wallHP: Double?
+    public var phase: Int?                 // siege: 0 investing the walls, 1 assault, 2 holding the square
+    public var hold: Double?
+    public var foe: Int?                   // legion met in the field
+    public var leader: Int?
+    public var routeI: Int?
+    public var forded: Bool?
+    public var convoyT: Double?
+    public var convoyAt: Double?           // 0...1 along the road from home, while a convoy is out
+    public var convoyLoad: Double?
+    public var wallsAtStart: Int?
     /// Shared march route of the whole legion (waypoints), recomputed when roads or bridges change.
     public var route: [Vec2]?
     public init() {}
@@ -190,6 +224,8 @@ public struct Realm: Codable {
     public var acc = 0.0
     public var player = PlayerState()
     public var arsenal: ArsenalTree?
+    public var chron: [Chron]?
+    public var nextEvent: Int?
     var weatherBox: Weather?
     var faunaBox: Fauna?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
@@ -222,6 +258,12 @@ extension Society {
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
         "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
         "resettled": ("New settlers begin again as three peoples", "新的移民以三国之名重新开始"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
+        "capital_named": ("%@ made %@ its capital", "%@ 定都 %@"), "capital_lost": ("%@ lost its capital %@", "%@ 的首都 %@ 失守"),
+        "capital_moved": ("%@ moved its capital to %@", "%@ 迁都至 %@"), "capital_restored": ("%@ raised a new capital at %@", "%@ 在 %@ 重建首都"),
+        "palace_ruined": ("The palace of %@ lies in ruins", "%@ 的王宫损毁"), "city_founded": ("%@ was founded for %@", "%@ 建城，归属 %@"),
+        "palace": ("palace", "王宫"), "fortress": ("fortress", "要塞"), "barracks": ("barracks", "军营"), "watchtower": ("watchtower", "瞭望塔"),
+        "granary": ("granary", "粮仓"), "windmill": ("windmill", "风车"), "market": ("market", "市场"),
+        "breach": ("%@ breached the walls of %@", "%@ 攻破了 %@ 的城墙"), "battle": ("%@ and %@ fought in the field near %@", "%@ 与 %@ 在 %@ 附近野战"),
         "festival": ("%@ holds a festival", "%@ 举办了庆典"), "wedding_player": ("You and %@ are married", "你与 %@ 结为伴侣"), "tavern": ("tavern", "酒馆"), "warehouse": ("warehouse", "仓库"), "mine": ("mine", "矿井"),
         "courting": ("%@ and %@ are courting", "%@ 和 %@ 开始相恋"), "split_up": ("%@ and %@ parted ways", "%@ 和 %@ 分手了"),
         "t_festival": ("What a feast that was!", "那场庆典真热闹！"), "t_date": ("A lovely walk.", "一起散步真好。"), "t_breakup": ("My heart is heavy.", "心里很难受。"),
@@ -365,16 +407,31 @@ extension Society {
 
     // MARK: armies (one model for near and far: the camera never changes an outcome)
     func follow(_ a: Agent, _ lg: Legion, _ dt: Double) {
-        // soldiers in the field keep formation around their legion; fighting itself is resolved per legion
-        let k = lg.members.firstIndex(of: a.id) ?? 0
-        let ring = 10.0 + Double(k / 8) * 9
-        let ang = Double(k % 8) / 8 * 2 * Double.pi + (lg.state == 2 ? world.time * 0.9 + Double(a.id) : 0)
-        let slot = lg.pos + Vec2(cos(ang) * ring, sin(ang) * ring * 0.7)
+        // soldiers keep their place in the formation: foot in front, bows behind, horse on the wings,
+        // engines and the supply train to the rear (or out on the road with a convoy)
+        let unit = a.unit ?? Unit.infantry
+        var fwd = Vec2(0, 1)
+        if let r = lg.route, !r.isEmpty { let to = r[min(lg.routeI ?? 0, r.count - 1)] - lg.pos; if to.length > 1 { fwd = to.normalized } }
+        if lg.state == 2, let t = settlements[lg.target] { let to = t.center.center - lg.pos; if to.length > 1 { fwd = to.normalized } }
+        if lg.state == 4, let f = lg.foe.flatMap({ realm.legion($0) }) { let to = f.pos - lg.pos; if to.length > 1 { fwd = to.normalized } }
+        let side = Vec2(-fwd.y, fwd.x)
+        let k = Double(a.id % 12), row = Double((a.id / 12) % 3)
+        var slot = lg.pos
+        switch unit {
+        case Unit.archer: slot = lg.pos + fwd * (-16 - row * 9) + side * ((k - 5.5) * 8)
+        case Unit.cavalry: slot = lg.pos + fwd * (4 - row * 8) + side * ((a.id % 2 == 0 ? 1.0 : -1.0) * (58 + k * 5))
+        case Unit.siege: slot = lg.pos + fwd * -38 + side * ((k - 5.5) * 10)
+        case Unit.supply:
+            if let at = lg.convoyAt, let h = settlements[lg.home] { slot = point(on: [h.center.center, lg.pos], at: at) + side * ((k - 5.5) * 3) }
+            else { slot = lg.pos + fwd * -56 + side * ((k - 5.5) * 6) }
+        default: slot = lg.pos + fwd * (14 - row * 9) + side * ((k - 5.5) * 8)
+        }
+        if lg.state == 2 || lg.state == 4 { slot = slot + Vec2(sin(world.time * 2 + Double(a.id)) * 3, cos(world.time * 1.7 + Double(a.id)) * 3) }
         let to = slot - a.pos
-        let stepLen = Society.speed * 1.6 * dt
+        let stepLen = Society.speed * 1.8 * dt
         a.sleeping = false
         if to.length > 600 { a.pos = slot; return }          // far behind (e.g. just loaded): catch up at once
-        if to.length <= stepLen { a.pos = slot } else { a.pos = a.pos + to.normalized * stepLen; a.moving = true; a.facing = to.normalized }
+        if to.length <= stepLen { a.pos = slot; a.facing = fwd } else { a.pos = a.pos + to.normalized * stepLen; a.moving = true; a.facing = to.normalized }
         a.hunger = min(a.hunger, 0.5)                         // fed from the supply line, not from the village pot
     }
 
@@ -395,7 +452,7 @@ extension Society {
 
     func discharge(_ a: Agent) {
         if let lid = a.legion, let g = realm.legion(lid) { g.members.removeAll { $0 == a.id } }
-        a.legion = nil; a.job = ""; a.hp = nil
+        a.legion = nil; a.job = ""; a.hp = nil; a.unit = nil
     }
 
     func conscription() {
@@ -407,7 +464,7 @@ extension Society {
             let serving = adults.filter { $0.legion != nil }
             var rate = cfg.conscriptBase + cfg.conscriptPressure * min(1, n.pressure) + (realm.atWar(nid) ? cfg.conscriptWar : 0)
             if realm.era == 1 { rate = cfg.conscriptUnified }
-            let target = adults.count >= 8 ? max(2, Int(Double(adults.count) * rate)) : 0
+            let target = adults.count >= 8 ? max(2, Int(Double(adults.count) * rate)) + 2 * min(1, s.count("barracks", done: true)) + 3 * min(1, s.count("fortress", done: true)) : 0
             if serving.count < target {
                 let g = garrison(s, create: true)!
                 g.nation = nid
@@ -458,148 +515,6 @@ extension Society {
         v += cfg.supplyDepot * Double(min(2, depots))
         if powerShare(nation) > cfg.dominance { v *= cfg.strongSupply }
         return min(cfg.supplyMax, max(cfg.supplyMin, v))
-    }
-
-    func legionPower(_ lg: Legion, defending: Bool) -> Double {
-        let cfg = realm.cfg
-        guard let n = realm.nation(lg.nation) else { return 0 }
-        var p = Double(lg.members.count) * (1 + cfg.techPower * Double(n.techCount)) * (1 - 0.3 * min(1, n.fatigue))
-        if realm.active("general", lg.nation, world.time) { p *= cfg.generalPower }
-        p *= defending ? cfg.fortify : lg.supply
-        p *= arsenalBonus(lg.nation) * gearBonus(lg.nation)
-        return p
-    }
-
-    func addFatigue(_ nation: Int, _ v: Double) {
-        if let k = realm.ni(nation) { realm.nations[k].fatigue = min(1.5, max(0, realm.nations[k].fatigue + v)) }
-    }
-
-    func kill(from lg: Legion, _ count: Int) {
-        for _ in 0..<count {
-            guard !lg.members.isEmpty else { return }
-            let id = lg.members[realm.rng.index(lg.members.count)]
-            if let a = agents[id] { die(a, "battle") } else { lg.members.removeAll { $0 == id } }
-        }
-    }
-
-    func muster(_ nid: Int, against enemy: Int) {
-        let cfg = realm.cfg
-        if realm.legions.contains(where: { $0.nation == nid && $0.state != 0 }) { return }
-        let mine = towns(of: nid), theirs = towns(of: enemy)
-        guard !mine.isEmpty, !theirs.isEmpty else { return }
-        var best: (Settlement, Settlement, Int)?
-        for h in mine {
-            guard let g = garrison(h, create: false), g.members.count >= cfg.minAttack + 1 else { continue }
-            for t in theirs {
-                let d = (h.center - t.center).lengthSquared
-                if best == nil || d < best!.2 { best = (h, t, d) }
-            }
-        }
-        guard let (home, target, _) = best else { return }
-        // every garrison sends its share; the army gathers at the town nearest the enemy
-        var moving: [Int] = []
-        for h in mine {
-            guard let g = garrison(h, create: false), g.members.count >= 2 else { continue }
-            let take = min(g.members.count - 1, Int((Double(g.members.count) * cfg.attackShare).rounded()))
-            let ids = Array(g.members.sorted().prefix(take))
-            g.members.removeAll { ids.contains($0) }
-            moving += ids
-        }
-        if moving.count < cfg.minAttack {
-            for id in moving { if let a = agents[id], let h = settlements[a.sid], let g = garrison(h, create: true) { g.members.append(id) } }
-            return
-        }
-        let lg = Legion()
-        lg.id = realm.nextLegion; realm.nextLegion += 1
-        lg.nation = nid; lg.home = home.id; lg.target = target.id; lg.state = 1; lg.pos = home.center.center
-        for id in moving { if let a = agents[id] { if let s = settlements[a.sid] { abort(a, s) }; a.legion = lg.id; lg.members.append(id) } }
-        lg.startN = lg.members.count
-        lg.supply = supply(from: home.center, to: target.center, nation: nid)
-        lg.supplyT = world.time + cfg.supplyInterval
-        realm.legions.append(lg)
-    }
-
-    func sendHome(_ lg: Legion) { if lg.state == 1 || lg.state == 2 { lg.state = 3; lg.target = 0 } }
-
-    func disband(_ lg: Legion, into s: Settlement) {
-        let g = garrison(s, create: true)!
-        if g === lg { return }
-        g.nation = s.nation ?? g.nation
-        for id in lg.members { if let a = agents[id] { move(a, to: s); a.legion = g.id; if !g.members.contains(id) { g.members.append(id) } } }
-        lg.members = []
-        realm.legions.removeAll { $0 === lg }
-    }
-
-    public func realmTick(_ dt: Double) {
-        guard !realm.nations.isEmpty else { return }
-        realm.acc += dt
-        let cfg = realm.cfg
-        while realm.acc >= cfg.step {
-            realm.acc -= cfg.step
-            for lg in realm.legions.sorted(by: { $0.id < $1.id }) where lg.state != 0 { stepLegion(lg, cfg.step) }
-        }
-    }
-
-    func stepLegion(_ lg: Legion, _ dt: Double) {
-        let cfg = realm.cfg
-        lg.members.removeAll { agents[$0] == nil }
-        if lg.members.isEmpty { realm.legions.removeAll { $0 === lg }; return }
-        // where is home now?
-        var home = settlements[lg.home]
-        if home == nil || home!.abandoned || home!.nation != lg.nation {
-            home = towns(of: lg.nation).min { ($0.center.center - lg.pos).length < ($1.center.center - lg.pos).length }
-            if let h = home { lg.home = h.id }
-        }
-        guard let hm = home else {
-            // a landless army lays down its arms where it stands
-            if let near = settlements.values.filter({ !$0.abandoned }).min(by: { ($0.center.center - lg.pos).length < ($1.center.center - lg.pos).length }) {
-                for id in lg.members { if let a = agents[id] { move(a, to: near); discharge(a); a.refugee = world.time + cfg.refugeeIntegrate * MP.year } }
-            }
-            realm.legions.removeAll { $0 === lg }
-            return
-        }
-        // supply and upkeep
-        if world.time >= lg.supplyT, let t = settlements[lg.target] {
-            lg.supply = supply(from: hm.center, to: t.center, nation: lg.nation)
-            lg.supplyT = world.time + cfg.supplyInterval
-        }
-        let need = Double(lg.members.count) * cfg.fieldUpkeep * dt * (2 - min(1, lg.supply))
-        if hm.food >= need { hm.food -= need } else {
-            hm.food = 0
-            lg.lossAcc += Double(lg.members.count) * cfg.starveLoss * dt
-            addFatigue(lg.nation, cfg.fatigueHunger * dt / MP.year)
-        }
-        if lg.state == 3 {
-            let to = hm.center.center - lg.pos
-            let stepLen = cfg.marchSpeed * dt
-            if to.length <= max(40, stepLen) { disband(lg, into: hm) } else { lg.pos = lg.pos + to.normalized * stepLen }
-            return
-        }
-        guard let target = settlements[lg.target], !target.abandoned, let enemy = target.nation, enemy != lg.nation, realm.atWar(lg.nation, enemy) else { sendHome(lg); return }
-        if lg.state == 1 {
-            let to = target.center.center - lg.pos
-            let stepLen = cfg.marchSpeed * (0.5 + 0.5 * min(1, lg.supply)) * marchWeather() * dt
-            if to.length <= max(48, stepLen) {
-                lg.state = 2
-                emit("siege", [realm.nation(lg.nation)?.name(zh: zh) ?? "", target.name(zh: zh)], target.center.center)
-            } else { lg.pos = lg.pos + to.normalized * stepLen }
-            return
-        }
-        // siege: both sides lose in proportion to the other's power
-        let def = garrison(target, create: false)
-        def?.members.removeAll { agents[$0] == nil }
-        let ap = legionPower(lg, defending: false), dp = def.map { legionPower($0, defending: true) } ?? 0
-        lg.lossAcc += cfg.lethality * dp * dt
-        lg.defLossAcc += cfg.lethality * ap * dt
-        let dl = min(def?.members.count ?? 0, Int(lg.defLossAcc)), al = Int(lg.lossAcc)
-        if dl > 0, let d = def { kill(from: d, dl); lg.defLossAcc -= Double(dl) }
-        if al > 0 { kill(from: lg, al); lg.lossAcc -= Double(al) }
-        if lg.members.isEmpty { realm.legions.removeAll { $0 === lg }; emit("repelled", [target.name(zh: zh), realm.nation(lg.nation)?.name(zh: zh) ?? ""], target.center.center); return }
-        if (def?.members.count ?? 0) == 0 { capture(target, by: lg); return }
-        if Double(lg.members.count) < max(1, Double(lg.startN) * cfg.retreatShare) {
-            emit("repelled", [target.name(zh: zh), realm.nation(lg.nation)?.name(zh: zh) ?? ""], target.center.center)
-            sendHome(lg)
-        }
     }
 
     /// Knock holes into finished buildings; builders have to pay and work to repair them.
@@ -664,7 +579,10 @@ extension Society {
         addFatigue(old, cfg.fatigueLostTown)
         if let r = realm.ri(old, lg.nation) { realm.relations[r].value = max(-1, realm.relations[r].value - 0.2) }
         realm.counts.captures += 1
-        emit("captured", [realm.nation(lg.nation)?.name(zh: zh) ?? "", realm.nation(old)?.name(zh: zh) ?? "", s.name(zh: zh)], s.center.center)
+        reflag(s)
+        endSiege(s)
+        emit("captured", [realm.nation(lg.nation)?.name(zh: zh) ?? "", realm.nation(old)?.name(zh: zh) ?? "", cityName(s)], s.center.center,
+             nations: [lg.nation, old], city: s.id, cause: "siege", result: "owner=\(lg.nation)")
         s.planT = 0
         landCheck()
     }
@@ -702,17 +620,18 @@ extension Society {
             realm.relations[r].pact = false
         } else if state == 2 {
             realm.counts.truces += 1
-            for lg in realm.legions where lg.state == 1 || lg.state == 2 {
+            for lg in realm.legions where lg.state == 1 || lg.state == 2 || lg.state == 4 {
                 if let tn = settlements[lg.target]?.nation, (lg.nation == rel.a && tn == rel.b) || (lg.nation == rel.b && tn == rel.a) { sendHome(lg) }
             }
-            emit("truce", [a, b], .zero)
-        } else { emit("peace", [a, b], .zero) }
+            emit("truce", [a, b], .zero, nations: [rel.a, rel.b], cause: String(format: "fatigue %.2f/%.2f", realm.nation(rel.a)?.fatigue ?? 0, realm.nation(rel.b)?.fatigue ?? 0), result: "truce")
+        } else { emit("peace", [a, b], .zero, nations: [rel.a, rel.b], cause: "truce ended", result: "peace") }
     }
 
     func declare(_ a: Int, on b: Int) {
         guard let r = realm.ri(a, b), realm.relations[r].state == 0 else { return }
         setState(r, 1)
-        emit("war", [realm.nation(a)?.name(zh: zh) ?? "", realm.nation(b)?.name(zh: zh) ?? ""], towns(of: b).first?.center.center ?? .zero)
+        emit("war", [realm.nation(a)?.name(zh: zh) ?? "", realm.nation(b)?.name(zh: zh) ?? ""], towns(of: b).first?.center.center ?? .zero,
+             nations: [a, b], cause: String(format: "pressure %.2f", realm.nation(a)?.pressure ?? 0), result: "war")
         muster(a, against: b)
     }
 
@@ -831,6 +750,7 @@ extension Society {
         }
         s.nation = id
         s.unrest = 0
+        reflag(s)
         if let r = realm.ri(old, id) { realm.relations[r].value = max(-1, realm.relations[r].value - 0.3) }
         landCheck()
     }
@@ -877,7 +797,7 @@ extension Society {
         // what was learned anywhere is now known everywhere
         let best = realm.nations.map { $0.techCount }.max() ?? 0
         for k in realm.nations.indices { realm.nations[k].techCount = best; realm.nations[k].fatigue *= 0.5 }
-        emit("unified", [realm.nation(id)?.name(zh: zh) ?? ""], .zero)
+        emit("unified", [realm.nation(id)?.name(zh: zh) ?? ""], capital(of: id)?.center.center ?? .zero, nations: [id], city: realm.nation(id)?.capital, cause: "last rival fell", result: "unity")
     }
 
     func unity(_ dty: Double) {
@@ -953,9 +873,14 @@ extension Society {
         realm.era = 0; realm.eraSince = world.time; realm.unifier = 0; realm.fracture = 0
         realm.counts.splits += 1
         for r in realm.relations.indices { realm.relations[r].state = 2; realm.relations[r].since = world.time; realm.relations[r].value = 0; realm.relations[r].pact = false }
-        for k in realm.nations.indices { realm.nations[k].exileSince = nil; realm.nations[k].leader = pickLeader(realm.nations[k].id); realm.nations[k].overT = 0 }
+        for k in realm.nations.indices {
+            realm.nations[k].exileSince = nil; realm.nations[k].leader = pickLeader(realm.nations[k].id); realm.nations[k].overT = 0
+            realm.nations[k].moving = nil
+            // each new nation takes its seat where history and numbers point
+            if let seat = bestSeat(realm.nations[k].id) { setCapital(realm.nations[k].id, seat, kind: "capital_restored", cause: "division"); realm.nations[k].everCapital = true }
+        }
         let names = realm.nations.map { $0.name(zh: zh) }
-        emit("split", names, .zero)
+        emit("split", names, .zero, nations: realm.nations.map { $0.id }, cause: "fracture", result: "three nations")
         refreshNations()
         return true
     }
@@ -1062,6 +987,7 @@ extension Society {
         events(dty)
         arsenalHourly()
         economyHourly()
+        citiesHourly()
         weatherHourly()
         leisureHourly()
         petsHourly()

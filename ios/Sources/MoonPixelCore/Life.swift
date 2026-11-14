@@ -58,7 +58,7 @@ public struct Fauna: Codable {
 }
 
 /// Something that happened and deserves an effect on screen (lightning, fireworks...). Never saved.
-public struct WorldFX { public var kind: String; public var pos: Vec2 }
+public struct WorldFX { public var kind: String; public var pos: Vec2; public var to: Vec2 = .zero; public var nation = 0 }
 
 extension Society {
     // MARK: weather

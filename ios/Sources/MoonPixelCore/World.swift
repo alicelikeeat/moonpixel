@@ -422,6 +422,8 @@ public final class OpenWorld {
     }
 
     public func loaded(_ cx: Int, _ cy: Int) -> Bool { cache[MP.chunkKey(cx, cy)] != nil }
+    /// True when this chunk is in memory or has been changed and saved: its tiles may differ from what the generator would make.
+    public func touched(_ cx: Int, _ cy: Int) -> Bool { let k = MP.chunkKey(cx, cy); return cache[k] != nil || saved.contains(k) }
     public func pin(_ cx: Int, _ cy: Int) { pins[MP.chunkKey(cx, cy), default: 0] += 1; chunk(cx, cy) }
     public func unpin(_ cx: Int, _ cy: Int) {
         let k = MP.chunkKey(cx, cy)
