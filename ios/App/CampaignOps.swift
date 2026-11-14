@@ -331,6 +331,18 @@ struct BuildPanel: View {
 struct CraftPanel: View {
     @EnvironmentObject var model: GameModel
 
+    /// "Iron ore 2 + Wood 1 → Iron 1 · Furnace · 2 h", built in small steps (one long expression is too much for the type checker).
+    static func line(_ r: Recipe) -> String {
+        func list(_ l: [(String, Double)]) -> String {
+            var parts: [String] = []
+            for (g, n) in l { parts.append(Recipe.goodName(g, zh: GameModel.zh) + " " + String(format: "%g", n)) }
+            return parts.joined(separator: " + ")
+        }
+        let station: String = Content.shared.tile(Content.shared.tid(r.station)).map { GameModel.zh ? $0.nameZh : $0.nameEn } ?? r.station
+        let hours: String = String(format: L(" · %g 小时", " · %g h"), r.hours)
+        return list(r.inputs) + " → " + list(r.outputs) + " · " + station + hours
+    }
+
     var body: some View {
         GlassSheet(title: L("制造", "Craft"), subtitle: L("站在对应设施旁制作；投入的材料开工时扣除", "Stand next to the station; inputs are taken when work starts"), close: { model.showCraft = false }) {
             VStack(alignment: .leading, spacing: 8) {
@@ -340,11 +352,7 @@ struct CraftPanel: View {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.name(zh: GameModel.zh)).font(.system(size: 13, weight: .semibold, design: .rounded))
-                            Text(r.inputs.map { Recipe.goodName($0.0, zh: GameModel.zh) + " " + String(format: "%g", $0.1) }.joined(separator: " + ") + " → "
-                                 + r.outputs.map { Recipe.goodName($0.0, zh: GameModel.zh) + " " + String(format: "%g", $0.1) }.joined(separator: " + ")
-                                 + " · " + (Content.shared.tile(Content.shared.tid(r.station)).map { GameModel.zh ? $0.nameZh : $0.nameEn } ?? r.station)
-                                 + String(format: L(" · %g 小时", " · %g h"), r.hours))
-                                .font(.system(size: 10, design: .rounded)).opacity(0.8)
+                            Text(CraftPanel.line(r)).font(.system(size: 10, design: .rounded)).opacity(0.8)
                         }
                         Spacer(minLength: 4)
                         Chip(title: L("制作", "Make"), icon: "hammer.fill", id: "craft-" + r.key) { model.craft(r.key) }
