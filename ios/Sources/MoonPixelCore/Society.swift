@@ -317,7 +317,7 @@ public final class Society {
     ]
     /// Buildings a technology unlocks: (tech key, building type, minimum population).
     static let techBuildings: [(String, String, Int)] = [
-("masonry", "tavern", 12), ("masonry", "warehouse", 10), ("metalwork", "mine", 12), ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
+("masonry", "tavern", 12), ("masonry", "warehouse", 10), ("metalwork", "mine", 12), ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 14), ("ai", "ai_center", 14),
     ]
     /// Technology belongs to nations. `techCount` is the most advanced nation's level
     /// (what the HUD shows); inside settlement logic `has` asks the nation in charge.

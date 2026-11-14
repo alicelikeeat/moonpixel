@@ -77,8 +77,10 @@ final class WorldTests: XCTestCase {
         XCTAssertFalse(w.loaded(2, 2))
         XCTAssertEqual(w.tile(2, 70, 70), wall)
         w.chunk(100, 100)
+        let before = w.cache.count
         let dropped = w.purge(keep: [MP.chunkKey(100, 100)])
-        XCTAssertGreaterThan(dropped, 100)
+        XCTAssertEqual(dropped, before - w.cache.count, "everything not pinned or kept is dropped")
+        XCTAssertLessThanOrEqual(w.cache.count, 2 + 1)
         XCTAssertTrue(w.loaded(0, 0) && w.loaded(100, 100))
         // memory-only worlds keep unsaved edits
         let m = world(10)
