@@ -161,4 +161,23 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 8), "re-entered a saved world")
         shot("08-reopened")
     }
+
+    /// A save that fails keeps the world open (and paused); retrying and succeeding then leaves.
+    func testFailedSaveBlocksLeavingAndRetryLeaves() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--fail-saves", "2"]     // the first two commits fail
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "in the world")
+        sleep(3)
+        more(app, "Worlds"); sleep(3)
+        shot("20-exit-blocked")
+        XCTAssertTrue(app.otherElements["exit-blocked"].exists || app.buttons["retry-exit"].exists, "leaving was refused with an explanation")
+        XCTAssertTrue(app.buttons["Map"].exists, "the world is still open")
+        XCTAssertFalse(app.buttons["create-world"].exists, "not back at the world list")
+        app.buttons["retry-exit"].tap(); sleep(4)
+        XCTAssertTrue(app.buttons["create-world"].waitForExistence(timeout: 10), "after a good save it leaves")
+        XCTAssertTrue(app.buttons["Play"].firstMatch.exists, "and the world is listed")
+        shot("21-left-after-retry")
+    }
 }

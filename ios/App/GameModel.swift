@@ -197,6 +197,7 @@ final class GameModel: ObservableObject {
     func handleLaunchArguments() {
         refreshWorlds()
         let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "--fail-saves"), i + 1 < args.count { failSaves = Int(args[i + 1]) ?? 0 }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
         start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)
@@ -233,7 +234,6 @@ final class GameModel: ObservableObject {
                 }
             }
         }
-        if let i = args.firstIndex(of: "--fail-saves"), i + 1 < args.count { failSaves = Int(args[i + 1]) ?? 0 }
         if args.contains("--demo-war") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self else { return }
