@@ -89,6 +89,15 @@ public struct RealmConfig: Codable, Equatable {
     public var playerHP = 100.0, playerRegen = 2.0, soldierHit = 9.0, hostileRep = -0.5
     public var roadCost = 1.0, bridgeCost = 3.0, depotWood = 8.0, depotStone = 4.0
     // --- technical limits (never left to the war system)
+    // --- production
+    public var cityRadius = 30             // tiles around the square that count as the town
+    public var storeBase = 80.0, storePerChest = 60.0
+    public var artisansPer = 5             // adults per station crew
+    public var mineIron = 0.6, mineMoon = 0.05
+    public var toolBonus = 0.25, toolWear = 0.01
+    public var gearWeapons = 0.25, gearArmor = 0.2
+    public var playerCraftSpeed = 0.25
+    public var maxNetwork = 256            // tiles one switch network may span
     public var maxGraves = 24, maxLog = 60, maxRuinsPerTown = 40, maxEffects = 120
     public init() {}
 }
@@ -126,6 +135,8 @@ public final class Legion: Codable {
     public var pos = Vec2.zero
     public var supply = 1.0, supplyT = 0.0, lossAcc = 0.0, defLossAcc = 0.0
     public var startN = 0
+    /// Shared march route of the whole legion (waypoints), recomputed when roads or bridges change.
+    public var route: [Vec2]?
     public init() {}
 }
 
@@ -148,7 +159,16 @@ public struct PlayerState: Codable {
     public var cheated: Bool?
     public var partner: Int?
     public var flowers: Double?
+    /// Everything carried besides food, wood and stone: ores, ingots, tools, weapons...
+    public var goods: [String: Double]?
+    /// Build plans already carried out (so a plan sent twice is paid for once).
+    public var plans: [Int]?
+    public var craft: CraftJob?
+    /// 0 on the surface, 1 underground.
+    public var depth: Int?
 }
+
+public struct CraftJob: Codable, Equatable { public var recipe: String; public var done: Double }
 
 public struct Realm: Codable {
     public var cfg = RealmConfig()
@@ -202,7 +222,7 @@ extension Society {
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
         "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
         "resettled": ("New settlers begin again as three peoples", "新的移民以三国之名重新开始"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
-        "festival": ("%@ holds a festival", "%@ 举办了庆典"), "wedding_player": ("You and %@ are married", "你与 %@ 结为伴侣"), "tavern": ("tavern", "酒馆"),
+        "festival": ("%@ holds a festival", "%@ 举办了庆典"), "wedding_player": ("You and %@ are married", "你与 %@ 结为伴侣"), "tavern": ("tavern", "酒馆"), "warehouse": ("warehouse", "仓库"), "mine": ("mine", "矿井"),
         "courting": ("%@ and %@ are courting", "%@ 和 %@ 开始相恋"), "split_up": ("%@ and %@ parted ways", "%@ 和 %@ 分手了"),
         "t_festival": ("What a feast that was!", "那场庆典真热闹！"), "t_date": ("A lovely walk.", "一起散步真好。"), "t_breakup": ("My heart is heavy.", "心里很难受。"),
         "t_court": ("I keep thinking of %@.", "我总是想起 %@。"), "t_rejected": ("%@ loves another.", "%@ 心有所属。"), "t_revel": ("A fine evening at the tavern.", "酒馆的夜晚真快活。"), "soldier": ("soldier", "士兵"), "refugee": ("refugee", "难民"),
@@ -323,7 +343,7 @@ extension Society {
                 for mid in s.members {
                     guard let a = agents[mid] else { continue }
                     pop += 1
-                    if a.home < 0 { homeless += 1 }
+                    if a.home == -1 { homeless += 1 }
                     if a.legion != nil { soldiers += 1 } else if a.stage(now) == "adult" { workers += 1 }
                 }
             }
@@ -446,7 +466,7 @@ extension Society {
         var p = Double(lg.members.count) * (1 + cfg.techPower * Double(n.techCount)) * (1 - 0.3 * min(1, n.fatigue))
         if realm.active("general", lg.nation, world.time) { p *= cfg.generalPower }
         p *= defending ? cfg.fortify : lg.supply
-        p *= arsenalBonus(lg.nation)
+        p *= arsenalBonus(lg.nation) * gearBonus(lg.nation)
         return p
     }
 
@@ -1041,6 +1061,7 @@ extension Society {
         if realm.era == 1 { unity(dty) } else { diplomacy(dty) }
         events(dty)
         arsenalHourly()
+        economyHourly()
         weatherHourly()
         leisureHourly()
         petsHourly()

@@ -178,7 +178,7 @@ public final class Agent: Codable {
     }
     public var mood: Double {
         var m = 1.0 - hunger * 0.45 - (1 - energy) * 0.15 - social * 0.15 - grief * 0.3 - (fun ?? 0) * 0.08
-        if home < 0 { m -= 0.12 }
+        if home == -1 { m -= 0.12 }
         return min(1, max(0, m * health))
     }
     public func name(zh: Bool) -> String { zh ? clanZh + nameZh : nameEn + " " + clanEn }
@@ -215,6 +215,16 @@ public final class Settlement: Codable {
     public var nation: Int?
     /// 0...1+: how close the residents are to throwing the rulers out.
     public var unrest: Double?
+    /// Ores, ingots, tools, weapons and everything else beyond food, wood and stone.
+    public var goods: [String: Double]?
+    /// Hours of work done at each station, and why a station is waiting.
+    public var work: [String: Double]?
+    public var pause: [String: String]?
+    // refreshed by surveyTown
+    public var fixtures: [String: Int] = [:]
+    public var freeBeds: [TilePos] = []
+    public var gates: [TilePos] = []
+    public var walls: [TilePos] = []
     // transient
     public var nav: PathGrid?
     public var origin = TilePos(0, 0)
@@ -222,9 +232,9 @@ public final class Settlement: Codable {
     var claims: [TilePos: Int] = [:]
     var unreachable: Set<TilePos> = []
     var unreachT = 0.0
-    var resT = 0.0, planT = 0.0, aiAcc = 0.0
+    var resT = 0.0, planT = 0.0, aiAcc = 0.0, cityT = 0.0
 
-    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest }
+    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause }
     public init() {}
     public func inArea(_ t: TilePos) -> Bool { t.x >= origin.x && t.y >= origin.y && t.x < origin.x + Settlement.span && t.y < origin.y + Settlement.span }
     public func building(_ id: Int) -> Building? { buildings.first { $0.id == id } }
@@ -237,6 +247,7 @@ public final class Settlement: Codable {
 
 public struct SocietyStats: Codable {
     public var battle: Int?
+    public var crafted: Int?
     public var births = 0, deaths = 0, old = 0, hunger = 0, ill = 0, pairs = 0, buildings = 0, founded = 0, immigrants = 0, tilesPlaced = 0
 }
 
@@ -295,7 +306,7 @@ public final class Society {
     ]
     /// Buildings a technology unlocks: (tech key, building type, minimum population).
     static let techBuildings: [(String, String, Int)] = [
-("masonry", "tavern", 12), ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
+("masonry", "tavern", 12), ("masonry", "warehouse", 10), ("metalwork", "mine", 12), ("writing", "school", 10), ("metalwork", "workshop", 12), ("manufacturing", "factory", 14), ("computing", "lab", 16), ("ai", "ai_center", 18),
     ]
     /// Technology belongs to nations. `techCount` is the most advanced nation's level
     /// (what the HUD shows); inside settlement logic `has` asks the nation in charge.
@@ -377,6 +388,10 @@ public final class Society {
     /// Three nations, their wars and the player's standing (see Realm.swift).
     public var realm = Realm()
     var pendingFX: [WorldFX] = []
+    var pressed = Set<TilePos>()
+    var sprung: [TilePos] = []
+    /// The underground layer, once someone has gone down.
+    public internal(set) var under: OpenWorld?
     var wardActive = false
     /// Where the player is, so companions can follow. Set by the scene; never saved.
     public var viewer: Vec2?
@@ -644,7 +659,9 @@ public final class Society {
 
     struct RoomSpec { let w: Int, h: Int, wall: String, floor: String, items: [(Int, Int, String)] }
     static let roomSpecs: [String: RoomSpec] = [
-"tavern": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 2, "table"), (4, 2, "chair"), (4, 1, "barrel")]),
+"tavern": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 2, "table"), (4, 2, "chair"), (4, 1, "kitchen")]),
+        "warehouse": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "chest"), (2, 1, "chest"), (4, 1, "crate"), (1, 3, "crate"), (4, 3, "barrel")]),
+        "mine": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "stone_floor", items: [(2, 2, "stairs_down"), (4, 1, "crate"), (1, 1, "torch")]),
         "school": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "wood_floor", items: [(1, 1, "bookshelf"), (2, 2, "desk"), (4, 2, "desk")]),
         "workshop": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "stone_floor", items: [(1, 1, "anvil"), (4, 1, "workbench"), (3, 2, "furnace")]),
         "factory": RoomSpec(w: 8, h: 6, wall: "wall_brick", floor: "stone_floor", items: [(1, 1, "chimney"), (3, 1, "machine"), (5, 1, "machine"), (2, 3, "machine"), (6, 3, "crate")]),
@@ -692,11 +709,16 @@ public final class Society {
             }
             hb?.residents = members.map { $0.id }
         }
+        // beds anyone built on a proper floor take in those still without a house
+        var spare = s.freeBeds.count
+        for a in living where a.home == -2 { a.home = -1 }
+        for a in living where a.home == -1 && spare > 0 { a.home = -2; spare -= 1 }
+        let homeless = living.filter { $0.home == -1 }.count
         let open = s.buildings.filter { !$0.done }.count
         if open < 2 {
             let farmsWanted = Int((Double(pop) / (has("farming") ? 12 : 9)).rounded(.up))
             if s.count("farm") < farmsWanted && s.count("farm") * 3 <= s.count("house") { queue(s, "farm") }
-            else if houses.count < households.count { queue(s, "house") }
+            else if houses.count < households.count && homeless > 0 { queue(s, "house") }
             else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
             else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }
             else {
@@ -872,6 +894,7 @@ public final class Society {
         if (world.isNight && a.energy < 0.85) || a.energy < 0.15 {
             var spot = s.center + TilePos(a.id % 5 - 2, 3 + a.id % 2)
             if a.home >= 0, let hb = s.building(a.home), hb.done { spot = TilePos(hb.x + 2 + a.id % 2, hb.y + 2) }
+            else if a.home == -2, !s.freeBeds.isEmpty { spot = s.freeBeds[a.id % s.freeBeds.count] + TilePos(0, 1) }
             if go(a, s, spot, "sleep", 9999) { return }
         }
         if st == "child" { wander(a, s, 7, "play"); return }
@@ -1044,7 +1067,12 @@ public final class Society {
         case "eat":
             if s.food >= 1 { s.food -= 1; a.hunger = max(0, a.hunger - 0.6); if rng.unit() < 0.2 { a.think(now, "t_ate") } }
         case "deliver":
-            if !a.carryKind.isEmpty { s.addStock(a.carryKind, a.carryN) }
+            if !a.carryKind.isEmpty {
+                // good tools mean a fuller basket; they wear out with use
+                var n = a.carryN
+                if s.good("tools") >= 1 { n *= 1 + realm.cfg.toolBonus; s.addGood("tools", -realm.cfg.toolWear) }
+                s.addStock(a.carryKind, n)
+            }
             a.carryKind = ""; a.carryN = 0
         case "chop":
             let o = world.tile(2, t.x, t.y)
@@ -1218,7 +1246,7 @@ public final class Society {
             if p.sid != a.sid || now - a.lastBirth < 1.2 * MP.year || a.children.count >= 6 { continue }
             let fed = s.food >= Double(s.members.count) * 2.5 && a.hunger < 0.7
             let boost = agents.count < minPopulation ? 2.5 : 1.0
-            if fed && rng.unit() < 0.75 * dty * crowd * boost * (a.home >= 0 ? 1.0 : 0.35) {
+            if fed && rng.unit() < 0.75 * dty * crowd * boost * (a.home != -1 ? 1.0 : 0.35) {
                 a.pregnantDue = now + 0.7 * MP.year
                 a.birthFather = p.id
             }
@@ -1345,7 +1373,7 @@ public final class Society {
         else if a.grief > 0.5 { line = tx("s_grief") }
         else if a.pregnantDue > 0 || (agents[a.partner]?.pregnantDue ?? -1) > 0 { line = tx("s_preg") }
         else if a.energy < 0.2 { line = tx("s_tired") }
-        else if a.home < 0 { line = tx("s_nohome") }
+        else if a.home == -1 { line = tx("s_nohome") }
         else if a.stage(now) == "elder" { line = tx("s_elder", ["\(age)"]) }
         else if a.id % 2 == 0 { line = tx("s_town", [s.name(zh: zh), "\(s.members.count)", "\(s.count("house", done: true))"]) }
         info.name = a.name(zh: zh); info.age = age; info.female = a.female; info.job = jobLabel(a)

@@ -56,6 +56,7 @@ public final class Generator {
     public let seed: Int
     /// Climate shifts chosen when the world was created (see WorldRecipe).
     public var tempBias = 0.0, moistBias = 0.0, elevBias = 0.0
+    public var depth = 0
     let content = Content.shared
     let nElev, nTemp, nMoist, nRiver, nForest, nDetail: Noise
     var ground = [UInt8](), alt = [UInt8](), altCh = [Double](), density = [Double]()
@@ -98,7 +99,53 @@ public final class Generator {
         e >= Biome.sea && e < Biome.mountainLevel && abs(nRiver.get(Double(wx), Double(wy))) < 0.012
     }
 
+    /// The underground: rock everywhere, tunnels and caverns cut by noise, lakes
+    /// in the low places, ore in the walls, and now and then a ruin with a chest.
+    func generateCave(_ cx: Int, _ cy: Int) -> Chunk {
+        let c = Chunk(cx: cx, cy: cy)
+        let ct = Content.shared
+        let floor = ct.tid("cave_floor"), wall = ct.tid("cave_wall"), lake = ct.tid("cave_water")
+        let ores: [(UInt8, Double)] = [(ct.tid("ore_iron"), 0.05), (ct.tid("ore_copper"), 0.08), (ct.tid("ore_moon"), 0.09), (ct.tid("ore_gold"), 0.10)]
+        var g = [UInt8](repeating: floor, count: MP.chunkArea), st = [UInt8](repeating: 0, count: MP.chunkArea), ob = st, de = st
+        for ty in 0..<32 { for tx in 0..<32 {
+            let wx = cx * 32 + tx, wy = cy * 32 + ty
+            let x = Double(wx), y = Double(wy)
+            let tunnel = abs(nForest.get(x * 0.5, y * 0.5)), cavern = nMoist.get(x * 6, y * 6), wet = nRiver.get(x * 2, y * 2)
+            let open = tunnel < 0.16 || cavern > 0.22
+            let i = ty * 32 + tx
+            if !open {
+                let r = Double(MP.h2(seed &+ 31, wx, wy) & 0xffff) / 65536.0
+                ob[i] = ores.first { r < $0.1 }?.0 ?? wall
+            } else if cavern > 0.3 && wet > 0.25 {
+                g[i] = lake
+            } else if MP.h01(seed &+ 5, wx, wy) < 0.012 { de[i] = ct.tid("mushroom") }
+        } }
+        // one ruin in every 3x3 block of chunks
+        let rx = Int((Double(cx) / 3).rounded(.down)), ry = Int((Double(cy) / 3).rounded(.down))
+        let h = MP.h2(seed &+ 555, rx, ry)
+        if rx * 3 + Int(h % 3) == cx && ry * 3 + Int((h >> 8) % 3) == cy {
+            let rwall = ct.tid("ruin_wall"), rfloor = ct.tid("ruin_floor")
+            for y in 10...20 { for x in 10...20 {
+                let i = y * 32 + x
+                let edge = x == 10 || x == 20 || y == 10 || y == 20
+                g[i] = rfloor; de[i] = 0
+                ob[i] = edge && !(x == 15 && (y == 10 || y == 20)) ? rwall : 0
+            } }
+            ob[15 * 32 + 15] = ct.tid("chest")
+            for (x, y) in [(15, 9), (15, 8), (15, 21), (15, 22)] { ob[y * 32 + x] = 0; g[y * 32 + x] = floor }
+        }
+        c.layers = [g, st, ob, de]
+        return c
+    }
+
+    public func isUnderRuin(_ cx: Int, _ cy: Int) -> Bool {
+        let rx = Int((Double(cx) / 3).rounded(.down)), ry = Int((Double(cy) / 3).rounded(.down))
+        let h = MP.h2(seed &+ 555, rx, ry)
+        return rx * 3 + Int(h % 3) == cx && ry * 3 + Int((h >> 8) % 3) == cy
+    }
+
     public func generate(_ cx: Int, _ cy: Int) -> Chunk {
+        if depth > 0 { return generateCave(cx, cy) }
         let c = Chunk(cx: cx, cy: cy)
         var g = [UInt8](repeating: 0, count: MP.chunkArea), st = g, ob = g, de = g
         let bx = cx * 32, by = cy * 32
@@ -182,6 +229,7 @@ public final class Generator {
     /// One chunk in every 6x6 block of chunks holds an old maze - if it stands on
     /// land and is not near where the first villages are founded.
     public func isMaze(_ cx: Int, _ cy: Int) -> Bool {
+        if depth > 0 { return false }
         let rx = Int((Double(cx) / 6).rounded(.down)), ry = Int((Double(cy) / 6).rounded(.down))
         let h = MP.h2(seed &+ 77, rx, ry)
         if rx * 6 + Int(h % 6) != cx || ry * 6 + Int((h >> 8) % 6) != cy { return false }
@@ -306,15 +354,21 @@ public final class OpenWorld {
     public var onTileChanged: [(Int, Int, Int, UInt8, UInt8) -> Void] = []
     public var onChunkChanged: [(Int, Int) -> Void] = []
 
-    public init(seed: Int, budget: MemoryBudget) {
+    /// 0 is the surface; 1 is the underground layer with its own chunks and files.
+    public let depth: Int
+    var folder: String { depth == 0 ? "chunks" : "chunks_d\(depth)" }
+
+    public init(seed: Int, budget: MemoryBudget, depth: Int = 0) {
         self.seed = seed
         self.budget = budget
+        self.depth = depth
         gen = Generator(seed: seed)
+        gen.depth = depth
     }
 
     public func open(directory dir: URL) {
         directory = dir
-        let chunks = dir.appendingPathComponent("chunks")
+        let chunks = dir.appendingPathComponent(folder)
         try? FileManager.default.createDirectory(at: chunks, withIntermediateDirectories: true)
         for f in (try? FileManager.default.contentsOfDirectory(atPath: chunks.path)) ?? [] where f.hasSuffix(".json") {
             let p = f.dropLast(5).split(separator: "_")
@@ -328,7 +382,7 @@ public final class OpenWorld {
         }
     }
 
-    func path(_ cx: Int, _ cy: Int) -> URL? { directory?.appendingPathComponent("chunks/c_\(cx)_\(cy).json") }
+    func path(_ cx: Int, _ cy: Int) -> URL? { directory?.appendingPathComponent("\(folder)/c_\(cx)_\(cy).json") }
 
     // MARK: time
     public var year: Int { Int(time / MP.year) }
@@ -594,6 +648,14 @@ public final class OpenWorld {
             for f in onChunkChanged { f(cx, cy) }
         }
         return freed
+    }
+
+    /// Put the ground layer of one tile back to what the generator made.
+    public func restoreGround(_ wx: Int, _ wy: Int) {
+        let cx = wx >> 5, cy = wy >> 5
+        let k = MP.chunkKey(cx, cy)
+        if naturalKey != k { natural = gen.generate(cx, cy); naturalKey = k }
+        if let n = natural { setTile(0, wx, wy, n.layers[0][OpenWorld.idx(wx, wy)]) }
     }
 
     /// Put one tile back to what the generator made there (all four layers).

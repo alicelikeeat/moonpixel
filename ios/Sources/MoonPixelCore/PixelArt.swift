@@ -219,6 +219,42 @@ public enum PixelArt {
         case "desk":
             img.rect(bx + 1, by + 6, 14, 3, c1); img.rect(bx + 2, by + 9, 2, 6, c2); img.rect(bx + 12, by + 9, 2, 6, c2)
             img.rect(bx + 5, by + 3, 5, 3, c3); img.set(bx + 11, by + 5, RGBA(hex: "#e84a5a"))
+        case "citygate":
+            img.rect(bx, by - 6, 16, 22, c3.darkened(0.3)); img.rect(bx + 1, by - 2, 14, 18, c2); img.rect(bx + 2, by - 1, 12, 17, c1)
+            for x in [5, 10] { img.rect(bx + x, by - 1, 1, 17, c2) }
+            img.rect(bx + 7, by + 7, 2, 2, c3)
+        case "citygate_open":
+            img.rect(bx, by - 6, 3, 22, c3.darkened(0.3)); img.rect(bx + 13, by - 6, 3, 22, c3.darkened(0.3)); img.rect(bx, by - 6, 16, 3, c3.darkened(0.2))
+        case "stairs":
+            img.rect(bx + 1, by + 1, 14, 14, c2)
+            for i in 0..<4 { img.rect(bx + 2, by + 2 + i * 3, 12 - i * 2, 2, c1.lerp(c3, Double(i) / 4)) }
+        case "lever", "lever_on":
+            img.rect(bx + 4, by + 11, 8, 4, c1)
+            if kind == "lever" { img.rect(bx + 5, by + 4, 2, 8, c1.lightened(0.2)); img.rect(bx + 4, by + 2, 4, 3, c2) }
+            else { img.rect(bx + 9, by + 4, 2, 8, c1.lightened(0.2)); img.rect(bx + 8, by + 2, 4, 3, c2) }
+        case "plate":
+            img.rect(bx + 2, by + 6, 12, 8, c2); img.rect(bx + 3, by + 7, 10, 6, c1)
+        case "trap":
+            img.rect(bx + 2, by + 8, 12, 6, c1)
+            for x in [3, 6, 9, 12] { img.rect(bx + x, by + 3, 1, 6, c2) }
+        case "wire":
+            img.rect(bx + 7, by, 2, 16, c1); img.rect(bx, by + 7, 16, 2, c1); img.rect(bx + 7, by + 7, 2, 2, c2)
+        case "lamp":
+            img.rect(bx + 6, by + 6, 4, 10, c1); img.disc(Double(bx) + 8, Double(by) + 3, 4.5, c2)
+        case "banner":
+            img.rect(bx + 3, by - 14, 2, 30, RGBA(hex: "#6b4a2c")); img.rect(bx + 5, by - 13, 9, 11, c1); img.rect(bx + 5, by - 4, 9, 2, c2)
+            img.rect(bx + 8, by - 10, 3, 3, c1.lightened(0.45))
+        case "throne":
+            img.rect(bx + 3, by - 4, 10, 8, c2); img.rect(bx + 2, by + 4, 12, 11, c1); img.rect(bx + 4, by + 6, 8, 5, c2); img.rect(bx + 7, by - 6, 2, 3, c1)
+        case "tower":
+            img.rect(bx + 3, by - 12, 10, 28, c2); img.rect(bx + 2, by - 14, 12, 4, c1)
+            for x in [2, 6, 10] { img.rect(bx + x, by - 16, 3, 2, c1) }
+            img.rect(bx + 7, by - 4, 2, 4, RGBA(hex: "#2a2233"))
+        case "mill":
+            img.rect(bx + 4, by - 4, 8, 20, c1); img.rect(bx + 5, by + 9, 4, 7, c2)
+            img.rect(bx - 2, by - 8, 20, 2, c2); img.rect(bx + 7, by - 17, 2, 20, c2)
+        case "ballista":
+            img.rect(bx + 2, by + 8, 12, 4, c1); img.rect(bx + 7, by + 1, 2, 12, c1); img.rect(bx + 1, by + 3, 14, 1, c2); img.rect(bx + 4, by + 12, 2, 3, c1.darkened(0.3)); img.rect(bx + 10, by + 12, 2, 3, c1.darkened(0.3))
         case "ai_core":
             img.rect(bx + 2, by + 8, 12, 8, c1); img.rect(bx + 4, by + 5, 8, 3, c1.lightened(0.15))
             img.disc(Double(bx) + 8, Double(by) - 1, 6, c2); img.disc(Double(bx) + 8, Double(by) - 1, 3.2, c3)
