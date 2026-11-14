@@ -130,6 +130,7 @@ extension Society {
 
     /// Flags follow the owner: after a change of hands every banner in town is re-dyed.
     func reflag(_ s: Settlement) {
+        s.flagOf = s.nation
         guard let n = s.nation, n >= 1, n <= 3 else { return }
         let want = content.tid("banner_\(n)")
         let ids = Set((1...3).map { content.tid("banner_\($0)") })
@@ -343,6 +344,8 @@ extension Society {
         let cfg = realm.cfg
         let dty = Society.hour / MP.year
         for s in settlements.values.filter({ !$0.abandoned }).sorted(by: { $0.id < $1.id }) {
+            // whatever way a town changed hands (conquest, defection, submission, division), its banners follow
+            if s.flagOf != s.nation { reflag(s); s.flagOf = s.nation }
             let farms = Double(s.count("farm", done: true))
             if s.count("windmill", done: true) + s.fixture("mill") > 0 { s.food += cfg.millFood * farms }
             // markets move surplus towards same-nation towns that have less (never through a siege)

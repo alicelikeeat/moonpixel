@@ -229,6 +229,8 @@ public final class Settlement: Codable {
     public var formerCapital: Int?
     /// Legion besieging the city right now.
     public var siege: Int?
+    /// Nation whose banners currently fly here (to notice any change of hands).
+    public var flagOf: Int?
     // refreshed by surveyTown
     public var fixtures: [String: Int] = [:]
     public var freeBeds: [TilePos] = []
@@ -243,7 +245,7 @@ public final class Settlement: Codable {
     var unreachT = 0.0
     var resT = 0.0, planT = 0.0, aiAcc = 0.0, cityT = 0.0
 
-    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege }
+    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege, flagOf }
     public init() {}
     public func inArea(_ t: TilePos) -> Bool { t.x >= origin.x && t.y >= origin.y && t.x < origin.x + Settlement.span && t.y < origin.y + Settlement.span }
     public func building(_ id: Int) -> Building? { buildings.first { $0.id == id } }
@@ -732,6 +734,8 @@ public final class Society {
         if open < 2 {
             let farmsWanted = Int((Double(pop) / (has("farming") ? 12 : 9)).rounded(.up))
             if s.count("farm") < farmsWanted && s.count("farm") * 3 <= s.count("house") { queue(s, "farm") }
+            // a capital with a roof for most of its people raises its palace before more houses
+            else if isCapital(s) && s.count("palace") == 0 && has("masonry") && pop >= 12 && houses.count * 2 >= households.count && s.wood >= 20 { queue(s, "palace") }
             else if houses.count < households.count && homeless > 0 { queue(s, "house") }
             else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
             else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }

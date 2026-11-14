@@ -94,67 +94,89 @@ extension Society {
     /// bridge, cliffs and walls are closed. If no such way exists the army fords
     /// (a straight, slow line) and the route says so.
     public func marchRoute(from a: TilePos, to b: TilePos) -> (points: [Vec2], forded: Bool) {
-        let cell = 4
-        func pass(_ cx: Int, _ cy: Int) -> Double? {
-            let x = cx * cell + 2, y = cy * cell + 2
-            // country nobody has touched is judged from the generator alone, so planning a march never loads the map
-            if !world.touched(x >> 5, y >> 5) {
-                let c = world.gen.climate(x, y)
-                return c.0 < Biome.sea + 0.004 || c.0 > Biome.mountainLevel || world.gen.isRiver(x, y, c.0) ? nil : 1
-            }
-            let g = world.tile(0, x, y), st = world.tile(1, x, y)
-            if content.bridge[Int(st)] || st == T["cobble_road"] || st == T["path"] { return 0.5 }
-            if content.water[Int(g)] || content.solid[Int(st)] { return nil }
-            if let o = content.tile(world.tile(2, x, y)), o.solid, o.built, !o.natural { return nil }      // walls and gates
-            return 1
+        let margin = 40
+        let minX = min(a.x, b.x) - margin, minY = min(a.y, b.y) - margin
+        let w = abs(a.x - b.x) + 2 * margin + 1, h = abs(a.y - b.y) + 2 * margin + 1
+        if w * h > 90_000 { return ([a.center, b.center], true) }
+        // tile by tile; country nobody has touched is judged from the generator alone,
+        // so planning a march never loads or generates map chunks
+        var closed = [UInt8](repeating: 2, count: w * h)          // 2 unknown, 1 closed, 0 open
+        var touchedMemo: [Int64: Bool] = [:]
+        func open(_ x: Int, _ y: Int) -> Bool {
+            let k = (y - minY) * w + (x - minX)
+            if closed[k] != 2 { return closed[k] == 0 }
+            let ck = MP.chunkKey(x >> 5, y >> 5)
+            let touched = touchedMemo[ck] ?? { let t = world.touched(x >> 5, y >> 5); touchedMemo[ck] = t; return t }()
+            var ok: Bool
+            if touched { ok = !world.blocked(x, y) }
+            else { let c = world.gen.climate(x, y); ok = !(c.0 < Biome.sea || c.0 > Biome.mountainLevel || world.gen.isRiver(x, y, c.0)) }
+            closed[k] = ok ? 0 : 1
+            return ok
         }
-        let s0 = (Int((Double(a.x) / Double(cell)).rounded(.down)), Int((Double(a.y) / Double(cell)).rounded(.down)))
-        let g0 = (Int((Double(b.x) / Double(cell)).rounded(.down)), Int((Double(b.y) / Double(cell)).rounded(.down)))
-        let minX = min(s0.0, g0.0) - 10, minY = min(s0.1, g0.1) - 10
-        let w = abs(s0.0 - g0.0) + 21, h = abs(s0.1 - g0.1) + 21
-        if w * h > 40000 { return ([a.center, b.center], true) }
-        func idx(_ x: Int, _ y: Int) -> Int { (y - minY) * w + (x - minX) }
-        var cost = [Double](repeating: .infinity, count: w * h)
+        let roadIDs: Set<UInt8> = [T["cobble_road"]!, T["path"]!, content.tid("bridge_wood"), content.tid("bridge_stone")]
+        func step(_ x: Int, _ y: Int) -> Double { world.touched(x >> 5, y >> 5) && roadIDs.contains(world.tile(1, x, y)) ? 0.6 : 1 }
+        var cost = [Float](repeating: .infinity, count: w * h)
         var from = [Int32](repeating: -1, count: w * h)
-        var open: [(Double, Int, Int)] = [(0, s0.0, s0.1)]
-        cost[idx(s0.0, s0.1)] = 0
-        var expanded = 0
-        var found = false
-        while !open.isEmpty && expanded < 3500 {
-            var bi = 0
-            for i in 1..<open.count where open[i].0 < open[bi].0 { bi = i }
-            let cur = open.remove(at: bi)
-            expanded += 1
-            if cur.1 == g0.0 && cur.2 == g0.1 { found = true; break }
-            let base = cost[idx(cur.1, cur.2)]
-            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
-                let nx = cur.1 + dx, ny = cur.2 + dy
-                if nx < minX || ny < minY || nx >= minX + w || ny >= minY + h { continue }
-                // the two ends are always enterable (a town square, a camp)
-                let end = (nx == g0.0 && ny == g0.1)
-                guard let c = end ? 1 : pass(nx, ny) else { continue }
-                let nc = base + c * (dx != 0 && dy != 0 ? 1.41 : 1)
-                let k = idx(nx, ny)
-                if nc < cost[k] {
-                    cost[k] = nc; from[k] = Int32(idx(cur.1, cur.2))
-                    let hx = Double(abs(nx - g0.0)), hy = Double(abs(ny - g0.1))
-                    open.append((nc + 0.5 * max(hx, hy), nx, ny))
+        // binary heap of (f, index)
+        var heap: [(Float, Int32)] = []
+        func push(_ e: (Float, Int32)) {
+            heap.append(e); var c = heap.count - 1
+            while c > 0 { let p = (c - 1) / 2; if heap[p].0 <= heap[c].0 { break }; heap.swapAt(p, c); c = p }
+        }
+        func pop() -> (Float, Int32) {
+            let top = heap[0]; let last = heap.removeLast()
+            if !heap.isEmpty {
+                heap[0] = last; var c = 0
+                while true {
+                    let l = 2 * c + 1, r = l + 1; var m = c
+                    if l < heap.count && heap[l].0 < heap[m].0 { m = l }
+                    if r < heap.count && heap[r].0 < heap[m].0 { m = r }
+                    if m == c { break }; heap.swapAt(m, c); c = m
                 }
             }
+            return top
         }
-        if !found { return ([a.center, b.center], true) }
+        func hdist(_ x: Int, _ y: Int) -> Float { let dx = Float(abs(x - b.x)), dy = Float(abs(y - b.y)); return max(dx, dy) + 0.41 * min(dx, dy) }
+        let s0 = (a.y - minY) * w + (a.x - minX), g0 = (b.y - minY) * w + (b.x - minX)
+        cost[s0] = 0
+        push((hdist(a.x, a.y), Int32(s0)))
+        var best = s0, bestH = hdist(a.x, a.y)
+        var expanded = 0
+        var found = false
+        while !heap.isEmpty && expanded < 30_000 {
+            let (_, ci) = pop()
+            let c = Int(ci)
+            expanded += 1
+            if c == g0 { found = true; break }
+            let cx = c % w + minX, cy = c / w + minY
+            let hc = hdist(cx, cy)
+            if hc < bestH { bestH = hc; best = c }
+            let base = cost[c]
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+                let nx = cx + dx, ny = cy + dy
+                if nx < minX || ny < minY || nx >= minX + w || ny >= minY + h { continue }
+                let k = (ny - minY) * w + (nx - minX)
+                if k != g0 && !open(nx, ny) { continue }
+                // no squeezing diagonally between two blocked tiles
+                if dx != 0 && dy != 0 && (!open(cx + dx, cy) || !open(cx, cy + dy)) { continue }
+                let nc = base + Float(step(nx, ny) * (dx != 0 && dy != 0 ? 1.414 : 1))
+                if nc < cost[k] { cost[k] = nc; from[k] = Int32(c); push((nc + hdist(nx, ny), Int32(k))) }
+            }
+        }
+        // a walled city cannot be walked into: an army that gets up to its walls has still arrived by road
+        var end = g0
+        if !found {
+            if bestH > 18 { return ([a.center, b.center], true) }
+            end = best
+        }
         var pts: [Vec2] = []
-        var k = idx(g0.0, g0.1)
-        while k >= 0 {
-            let x = k % w + minX, y = k / w + minY
-            pts.append(TilePos(x * cell + 2, y * cell + 2).center)
-            k = Int(from[k])
-        }
+        var k = end
+        while k >= 0 { pts.append(TilePos(k % w + minX, k / w + minY).center); k = Int(from[k]) }
         pts.reverse()
-        // every third waypoint is enough to march by
         var thin: [Vec2] = []
-        for (i, p) in pts.enumerated() where i % 3 == 0 || i == pts.count - 1 { thin.append(p) }
-        thin[0] = a.center; thin[thin.count - 1] = b.center
+        for (i, p) in pts.enumerated() where i % 6 == 0 || i == pts.count - 1 { thin.append(p) }
+        thin[0] = a.center
+        if found { thin[thin.count - 1] = b.center } else { thin.append(b.center) }
         return (thin, false)
     }
 

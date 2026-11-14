@@ -36,8 +36,13 @@ final class CityWarTests: XCTestCase {
         XCTAssertLessThanOrEqual(all.count, s.realm.cfg.maxNews + s.realm.cfg.maxHistory)
         XCTAssertEqual(s.events(after: s.lastEventID - 3).count, 3)
         XCTAssertTrue(all.contains { $0.kind == "capital_named" && $0.city != nil && !$0.cause.isEmpty })
-        let info = s.cityInfo(s.capital(of: 1)!.id)!
-        XCTAssertTrue(info.capital); XCTAssertFalse(info.landmarks.isEmpty); XCTAssertFalse(info.stocks.isEmpty)
+        // (a nation may be between capitals or in exile at this moment: take one that has a seat)
+        guard let seat = s.realm.nations.compactMap({ s.capital(of: $0.id) }).first, let info = s.cityInfo(seat.id) else { return XCTFail("no capital anywhere") }
+        print("CAPINFO \(info.name) landmarks=\(info.landmarks.map { $0.type }) stocks=\(info.stocks.count)")
+        XCTAssertTrue(info.capital); XCTAssertFalse(info.stocks.isEmpty)
+        let palaces = s.realm.nations.compactMap { s.capital(of: $0.id) }.filter { c in c.buildings.contains { $0.type == "palace" } }
+        XCTAssertFalse(palaces.isEmpty)
+        for c in palaces { XCTAssertTrue(s.cityInfo(c.id)!.landmarks.contains { $0.type == "palace" }, "the palace is listed among the landmarks") }
         XCTAssertTrue(s.cityLabels(far: true).allSatisfy { $0.capital || s.settlements[$0.id]!.members.count >= 30 }, "from afar only capitals and big cities are named")
         XCTAssertEqual(s.audit(), [])
     }
@@ -45,7 +50,12 @@ final class CityWarTests: XCTestCase {
     func testCapitalLostMovedExiledUnifiedDividedAndDeleted() {
         let s = makeSociety(7)
         hours(s, 3)
-        let cap2 = s.capital(of: 2)!
+        // nation 2 needs a second town to move its court to
+        if s.towns(of: 2).count < 2, let spare = s.towns(of: 1).first(where: { $0.id != s.realm.nations[0].capital }) ?? s.towns(of: 3).first(where: { $0.id != s.realm.nations[2].capital }) {
+            s.flip(spare, to: 2)
+            hours(s, 1)
+        }
+        guard let cap2 = s.capital(of: 2) else { return XCTFail("nation 2 has no capital") }
         XCTAssertEqual(s.governance(2), s.realm.cfg.govNoPalace, accuracy: 0.001, "a capital without a palace governs a little less well")
         XCTAssertGreaterThan(s.towns(of: 2).count, 1)
         // the capital falls, the nation lives on
@@ -58,7 +68,7 @@ final class CityWarTests: XCTestCase {
         XCTAssertEqual(s.world.tile(2, cap2.center.x, cap2.center.y - 3), s.content.tid("banner_1"), "flags change with the owner")
         XCTAssertFalse(cap2.buildings.isEmpty == false && cap2.abandoned, "buildings stay")
         // the move needs time and stores
-        let seat = s.settlements[s.realm.nation(2)!.moving!.to]!
+        guard let mv = s.realm.nation(2)?.moving, let seat = s.settlements[mv.to] else { return XCTFail("no move under way") }
         seat.wood = 0
         hours(s, Int(s.realm.cfg.capitalMoveYears * 24) + 4)
         XCTAssertNil(s.capital(of: 2), "no stores, no move")
@@ -75,7 +85,7 @@ final class CityWarTests: XCTestCase {
         hours(s, 1)
         XCTAssertEqual(s.capital(of: 2)?.id, seat.id); XCTAssertNil(s.realm.nation(2)?.exileSince)
         // unity keeps the old capitals as memories; division gives three seats again
-        let cap3 = s.capital(of: 3)!
+        guard let cap3 = s.capital(of: 3) else { return XCTFail("nation 3 has no capital") }
         for t in s.settlements.values where !t.abandoned { t.nation = 1 }
         for lg in s.realm.legions { lg.nation = 1 }
         s.landCheck(); hours(s, 1)
@@ -86,7 +96,7 @@ final class CityWarTests: XCTestCase {
         XCTAssertEqual(Set(capitals(s)).count, 3, "three nations, three different capitals")
         for n in s.realm.nations { XCTAssertEqual(s.capital(of: n.id)?.nation, n.id) }
         // a world law wipes a capital off the map
-        let doomed = s.capital(of: 1)!
+        guard let doomed = s.capital(of: 1) else { return XCTFail("nation 1 has no capital") }
         s.realm.nations[0].capital = doomed.id
         let run = s.beginLaw(LawPlan(mode: .guixu, seed: 1, towns: [doomed.id], region: [doomed.center.x >> 5, doomed.center.y >> 5, doomed.center.x >> 5, doomed.center.y >> 5]))
         while !run.step(64) {}
@@ -177,7 +187,7 @@ final class CityWarTests: XCTestCase {
         runYears(s, 1.2)                                   // houses to damage, stores to draw on
         let target = s.towns(of: 2)[0]
         wallIn(s, target)
-        XCTAssertGreaterThanOrEqual(target.walls.count, 40)
+        XCTAssertGreaterThanOrEqual(target.walls.count, s.realm.cfg.wallMin, "the town is walled")
         strengthen(s, 1, soldiers: 16); strengthen(s, 2, soldiers: 4)
         for t in s.towns(of: 1) { t.addGood("engines", 4); t.food = 800 }
         s.refreshNations()
