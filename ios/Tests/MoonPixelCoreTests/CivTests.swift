@@ -87,17 +87,17 @@ final class CivTests: XCTestCase {
         w.saveAll()
         let full = w.diskBytes
         XCTAssertGreaterThan(full, 40 * 4000, "size on disk is tracked (\(full) bytes)")
-        var onDisk = 0
-        for f in try! FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent("chunks").path) {
-            onDisk += ((try! FileManager.default.attributesOfItem(atPath: dir.appendingPathComponent("chunks/\(f)").path)[.size]) as! NSNumber).intValue
-        }
-        XCTAssertEqual(full, onDisk, "tracked size matches the real files")
+        XCTAssertNoThrow(try w.store!.commit(index: Data("{}".utf8), meta: Data()))
+        XCTAssertEqual(full, w.store!.chunks(depth: 0).reduce(0) { $0 + w.store!.size(WorldStore.key(0, $1)) }, "tracked size matches the stored chunks")
+        XCTAssertGreaterThanOrEqual(w.store!.diskBytes(), full, "and the files on disk")
         w.purge()
         w.diskLimitBytes = full / 2
         let removed = w.enforceDiskLimit()
         XCTAssertGreaterThan(removed, 10)
         XCTAssertLessThanOrEqual(w.diskBytes, full / 2)
         XCTAssertEqual(w.tile(2, 5, 5), wall, "the pinned (inhabited) chunk is never pruned")
+        XCTAssertNoThrow(try w.store!.commit(index: Data("{}".utf8), meta: Data()))
+        XCTAssertNoThrow(try w.store!.collectGarbage(purge: true))
         // a fresh world over the same directory sees the same size
         let w2 = OpenWorld(seed: 3, budget: MemoryBudget(overrideMB: 96))
         w2.open(directory: dir)

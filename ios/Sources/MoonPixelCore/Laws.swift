@@ -47,13 +47,24 @@ public struct LawResult: Codable, Equatable {
 public struct LawJournal: Codable {
     public var plan: LawPlan
     public var started: Double
+    /// Generation that was HEAD when the law began. If HEAD is past it on restart, the law was already
+    /// committed and must not run again; if not, it is replayed from the saved state.
+    public var baseGen: Int?
     public static func url(_ dir: URL) -> URL { dir.appendingPathComponent("law-journal.json") }
     public static func read(_ dir: URL) -> LawJournal? { (try? Data(contentsOf: url(dir))).flatMap { try? JSONDecoder().decode(LawJournal.self, from: $0) } }
-    @discardableResult public static func write(_ plan: LawPlan, _ dir: URL) -> Bool {
-        guard let data = try? JSONEncoder().encode(LawJournal(plan: plan, started: Date().timeIntervalSince1970)) else { return false }
+    @discardableResult public static func write(_ plan: LawPlan, _ dir: URL, baseGen: Int? = nil) -> Bool {
+        guard let data = try? JSONEncoder().encode(LawJournal(plan: plan, started: Date().timeIntervalSince1970, baseGen: baseGen)) else { return false }
         do { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true); try data.write(to: url(dir), options: .atomic); return true } catch { return false }
     }
     public static func clear(_ dir: URL) { try? FileManager.default.removeItem(at: url(dir)) }
+
+    /// What to do with a journal found when a world is opened.
+    public enum Recovery: Equatable { case none, replay(LawPlan), alreadyCommitted }
+    public static func recovery(_ dir: URL, store: WorldStore) -> Recovery {
+        guard let j = read(dir) else { return .none }
+        if let base = j.baseGen, store.headGen > base { return .alreadyCommitted }
+        return .replay(j.plan)
+    }
 }
 
 /// Three ways to stay inside the storage limit. Destruction is only automatic
@@ -261,7 +272,7 @@ extension Society {
         let w = OpenWorld(seed: plan.newSeed, budget: old.world.budget)
         w.diskLimitBytes = old.world.diskLimitBytes
         w.gen.tempBias = old.world.gen.tempBias; w.gen.moistBias = old.world.gen.moistBias; w.gen.elevBias = old.world.gen.elevBias
-        if let d = dir { w.open(directory: d) }
+        if let st = old.world.store { w.open(store: st) } else if let d = dir { w.open(directory: d) }
         let s = Society(world: w, seed: plan.newSeed)
         s.zh = old.zh
         s.minPopulation = old.minPopulation

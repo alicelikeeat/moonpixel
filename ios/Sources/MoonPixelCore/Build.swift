@@ -278,7 +278,7 @@ extension Society {
         if let u = under { return u }
         let u = OpenWorld(seed: world.seed, budget: world.budget, depth: 1)
         u.diskLimitBytes = world.diskLimitBytes
-        if let d = world.directory { u.open(directory: d) }
+        if let st = world.store { u.open(store: st) }          // one store, one commit for both layers
         under = u
         return u
     }

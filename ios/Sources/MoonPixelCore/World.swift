@@ -337,8 +337,10 @@ public final class OpenWorld {
     public var time = 0.3 * MP.daySeconds
     public var nextPropID = 1
     public var directory: URL?
+    /// Transactional storage shared by the surface and the underground of one world (see Store.swift).
+    public private(set) var store: WorldStore?
     var saved: Set<Int64> = []
-    /// Size on disk of every saved chunk file (bytes), kept up to date on every write.
+    /// Size of every stored chunk (bytes) in the current view, kept up to date on every change.
     private var fileSizes: [Int64: Int] = [:]
     public private(set) var diskBytes = 0
     /// Hard cap for the saved map. Default 5 GB.
@@ -356,7 +358,6 @@ public final class OpenWorld {
 
     /// 0 is the surface; 1 is the underground layer with its own chunks and files.
     public let depth: Int
-    var folder: String { depth == 0 ? "chunks" : "chunks_d\(depth)" }
 
     public init(seed: Int, budget: MemoryBudget, depth: Int = 0) {
         self.seed = seed
@@ -366,23 +367,22 @@ public final class OpenWorld {
         gen.depth = depth
     }
 
-    public func open(directory dir: URL) {
-        directory = dir
-        let chunks = dir.appendingPathComponent(folder)
-        try? FileManager.default.createDirectory(at: chunks, withIntermediateDirectories: true)
-        for f in (try? FileManager.default.contentsOfDirectory(atPath: chunks.path)) ?? [] where f.hasSuffix(".json") {
-            let p = f.dropLast(5).split(separator: "_")
-            if p.count == 3, let x = Int(p[1]), let y = Int(p[2]) {
-                let k = MP.chunkKey(x, y)
-                saved.insert(k)
-                let size = ((try? FileManager.default.attributesOfItem(atPath: chunks.appendingPathComponent(f).path)[.size]) as? NSNumber)?.intValue ?? 0
-                fileSizes[k] = size
-                diskBytes += size
-            }
+    /// Open a world folder with a fresh store (as on app start). Use `open(store:)` to share a store.
+    public func open(directory dir: URL) { open(store: WorldStore(directory: dir)) }
+
+    public func open(store st: WorldStore) {
+        store = st
+        directory = st.dir
+        saved = []; fileSizes = [:]; diskBytes = 0
+        for k in st.chunks(depth: depth) {
+            saved.insert(k)
+            let n = st.size(WorldStore.key(depth, k))
+            fileSizes[k] = n
+            diskBytes += n
         }
     }
 
-    func path(_ cx: Int, _ cy: Int) -> URL? { directory?.appendingPathComponent("\(folder)/c_\(cx)_\(cy).json") }
+    func skey(_ k: Int64) -> String { WorldStore.key(depth, k) }
 
     // MARK: time
     public var year: Int { Int(time / MP.year) }
@@ -411,7 +411,7 @@ public final class OpenWorld {
         clock += 1
         if let c = cache[k] { c.lastUsed = clock; return c }
         var c: Chunk?
-        if saved.contains(k), let url = path(cx, cy), let data = try? Data(contentsOf: url) { c = Chunk.decode(data) }
+        if saved.contains(k), let data = store?.read(skey(k)) { c = Chunk.decode(data) }
         if c == nil { c = gen.generate(cx, cy); generated += 1 }
         let ch = c!
         cache[k] = ch
@@ -430,10 +430,11 @@ public final class OpenWorld {
         if let n = pins[k] { if n <= 1 { pins[k] = nil } else { pins[k] = n - 1 } }
     }
 
+    /// Hand a changed chunk to the store. It becomes durable with the next commit.
     func write(_ c: Chunk) -> Bool {
-        guard let url = path(c.cx, c.cy) else { return !c.modified }
+        guard let st = store else { return !c.modified }
         let data = c.encoded()
-        do { try data.write(to: url, options: .atomic) } catch { writeFailures += 1; return false }
+        st.stage(skey(c.key), data)
         c.dirty = false
         saved.insert(c.key)
         diskBytes += data.count - (fileSizes[c.key] ?? 0)
@@ -449,26 +450,20 @@ public final class OpenWorld {
     /// are not pinned (no living settlement there) and not currently loaded are
     /// removed; those areas return to their natural, regenerated state.
     @discardableResult public func enforceDiskLimit() -> Int {
-        guard let dir = directory, diskBytes > diskLimitBytes else { return 0 }
+        guard let st = store, diskBytes > diskLimitBytes else { return 0 }
         let target = diskLimitBytes * 9 / 10
-        var cands: [(Int64, Date)] = []
-        for k in saved where pins[k] == nil && cache[k] == nil {
-            guard let url = path(MP.keyCX(k), MP.keyCY(k)) else { continue }
-            let date = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date) ?? .distantPast
-            cands.append((k, date))
-        }
+        var cands: [(Int64, Double)] = []
+        for k in saved where pins[k] == nil && cache[k] == nil { cands.append((k, st.stamp(skey(k)))) }
         cands.sort { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 < $1.0 }
         var removed = 0
         for (k, _) in cands {
             if diskBytes <= target { break }
-            guard let url = path(MP.keyCX(k), MP.keyCY(k)) else { continue }
-            try? FileManager.default.removeItem(at: url)
+            st.remove(skey(k))
             diskBytes -= fileSizes[k] ?? 0
             fileSizes[k] = nil
             saved.remove(k)
             removed += 1
         }
-        _ = dir
         prunedFiles += removed
         return removed
     }
@@ -625,7 +620,7 @@ public final class OpenWorld {
     /// Decode a stored chunk without putting it in the cache.
     public func peekStored(_ key: Int64) -> Chunk? {
         if let c = cache[key] { return c }
-        guard saved.contains(key), let url = path(MP.keyCX(key), MP.keyCY(key)), let data = try? Data(contentsOf: url) else { return nil }
+        guard saved.contains(key), let data = store?.read(skey(key)) else { return nil }
         return Chunk.decode(data)
     }
 
@@ -635,7 +630,7 @@ public final class OpenWorld {
         let k = MP.chunkKey(cx, cy)
         var freed = 0
         if saved.contains(k) {
-            if let url = path(cx, cy) { try? FileManager.default.removeItem(at: url) }
+            store?.remove(skey(k))
             freed = fileSizes[k] ?? 0
             diskBytes -= freed
             fileSizes[k] = nil
@@ -673,7 +668,7 @@ public final class OpenWorld {
     /// Delete every chunk file and forget the whole map (used by Genesis).
     @discardableResult public func wipe() -> Int {
         let freed = diskBytes
-        for k in saved { if let url = path(MP.keyCX(k), MP.keyCY(k)) { try? FileManager.default.removeItem(at: url) } }
+        for k in saved { store?.remove(skey(k)) }
         saved.removeAll(); fileSizes.removeAll(); diskBytes = 0
         cache.removeAll(); pins.removeAll(); regions.removeAll(); ring.removeAll()
         surveyed = 0

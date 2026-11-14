@@ -165,9 +165,11 @@ final class BuildTests: XCTestCase {
         XCTAssertFalse(u.blocked(wallAt.x, wallAt.y))
         // saved and reopened: the same map, the same hole
         u.saveAll(); s.world.saveAll()
+        XCTAssertNoThrow(try s.world.store!.commit(index: Data("{}".utf8), meta: Data()), "one commit holds both layers")
         let u2 = OpenWorld(seed: 7, budget: MemoryBudget(overrideMB: 256), depth: 1); u2.open(directory: dir)
         XCTAssertEqual(u2.tile(2, wallAt.x, wallAt.y), 0); XCTAssertEqual(u2.tile(2, o.x, o.y), s.content.tid("stairs_up"))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("chunks_d1").path), "its chunks are stored apart from the surface")
+        XCTAssertFalse(u2.storedChunks.isEmpty, "its chunks are stored apart from the surface")
+        XCTAssertTrue(Set(u2.storedChunks).isDisjoint(with: Set(s.world.storedChunks)) || u2.tile(2, o.x, o.y) != s.world.tile(2, o.x, o.y), "under its own keys")
         // back up the stairs
         guard let up = s.useStairs(at: o.center) else { return XCTFail("could not come up") }
         XCTAssertEqual(up.depth, 0); XCTAssertFalse(s.world.blocked(up.pos.tile.x, up.pos.tile.y))

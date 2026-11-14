@@ -142,6 +142,9 @@ final class LawTests: XCTestCase {
         let (s, dir) = worldWithStoredChunks(10)
         defer { try? FileManager.default.removeItem(at: dir) }
         XCTAssertGreaterThan(s.world.storedChunks.count, 0)
+        let st = s.world.store!
+        XCTAssertNoThrow(try st.commit(index: Data("{}".utf8), meta: Data()))
+        let oldBlobs = Set(st.head!.chunks.values.map { $0.o })
         let plan = s.planLaw(.genesis, seed: 3)
         XCTAssertNotEqual(plan.newSeed, s.world.seed)
         var same = LawOptions(); same.newSeed = false
@@ -151,8 +154,13 @@ final class LawTests: XCTestCase {
         XCTAssertEqual(g.result.agents, oldPeople)
         XCTAssertEqual(g.world.seed, plan.newSeed)
         XCTAssertEqual(g.world.storedChunks.count, 0, "every old chunk file is gone")
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent("chunks").path)) ?? []
-        XCTAssertEqual(files.count, 0)
+        // committed and cleaned as after a permanent deletion: no blob of the old map is left on disk
+        g.world.saveAll()
+        XCTAssertNoThrow(try st.commit(index: Data("{}".utf8), meta: Data()))
+        XCTAssertNoThrow(try st.collectGarbage(purge: true))
+        let now = Set(st.head!.chunks.values.map { $0.o })
+        let left = oldBlobs.subtracting(now).filter { FileManager.default.fileExists(atPath: st.blobURL($0).path) }
+        XCTAssertEqual(left.count, 0, "the old world takes no hidden storage")
         XCTAssertEqual(g.society.agents.count, 80)
         XCTAssertEqual(g.society.realm.nations.filter { $0.exileSince == nil }.count, 3)
         XCTAssertEqual(g.society.realm.counts, RealmCounts(), "history starts over")
