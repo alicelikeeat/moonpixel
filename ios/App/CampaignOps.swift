@@ -488,3 +488,27 @@ struct WarPanel: View {
         .onAppear { model.refreshWar() }
     }
 }
+
+/// Everything that does not fit on the tab bar, as one glass sheet (a menu overflowed in landscape).
+struct MorePanel: View {
+    @EnvironmentObject var model: GameModel
+
+    var body: some View {
+        GlassSheet(title: L("更多", "More"), subtitle: "", close: { model.showMore = false }) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Chip(title: L("法则", "Laws"), icon: "flame.fill", id: "Laws") { model.showMore = false; model.showLaws = true }
+                    Chip(title: L("作弊", "Cheats"), icon: "wand.and.rays", id: "Cheats") { model.showMore = false; model.showCheats = true }
+                    Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
+                    Chip(title: L("形象", "Photo"), icon: "person.crop.circle.badge.plus", id: "Photo") { model.showMore = false; model.pick = .player }
+                }
+                HStack(spacing: 6) {
+                    Chip(title: L("素材", "Import"), icon: "photo.badge.plus", id: "Import") { model.showMore = false; model.pick = .asset }
+                    Chip(title: L("清理", "Clean"), icon: "sparkles", id: "Clean") { model.showMore = false; model.cleanMemory(announce: true) }
+                    Chip(title: L("保存", "Save"), icon: "square.and.arrow.down.fill", id: "Save") { model.showMore = false; model.save(announce: true) }
+                    Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
+                }
+            }
+        }
+    }
+}

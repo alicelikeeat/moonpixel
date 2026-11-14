@@ -171,7 +171,9 @@ final class GameScene: SKScene {
         switch model.watch {
         case .none: viewPos = player
         case .point(let p): viewPos = p
-        case .legion(let id): if let lg = society.realm.legion(id) { viewPos = lg.pos } else { model.watch = .none; viewPos = player }
+        case .legion(let id):
+            // when the army is gone (destroyed, or disbanded after the war) the camera stays where it last was
+            if let lg = society.realm.legion(id) { viewPos = lg.pos } else { model.watch = .point(viewPos) }
         }
         if model.watch == .none && zoom < 1 { zoom = 1 }
         cam.position = pt(viewPos)

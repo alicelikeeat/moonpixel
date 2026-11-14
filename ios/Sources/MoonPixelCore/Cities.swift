@@ -235,8 +235,8 @@ extension Society {
                 continue
             }
             // a palace in ruins is its own misfortune, apart from losing the city
-            if let c = capital(of: id), c.count("palace") > 0, !hasPalace(c), ready("palace_ruined", id) {
-                fire("palace_ruined", id)
+            if let c = capital(of: id), c.count("palace") > 0, !hasPalace(c), world.time >= (realm.cool["palace_ruined:\(id)"] ?? 0) {
+                realm.cool["palace_ruined:\(id)"] = world.time + 2 * MP.year          // reported once, not every hour while it is rebuilt
                 emit("palace_ruined", [cityName(c)], c.center.center, nations: [id], city: c.id, cause: "damage", result: "governance reduced")
             }
             // a nation may move its seat to a clearly greater city in peacetime

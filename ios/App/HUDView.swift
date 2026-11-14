@@ -56,6 +56,7 @@ struct HUDView: View {
         .overlay { if model.showCities { CitiesPanel() } }
         .overlay { if model.showChronicle { ChroniclePanel() } }
         .overlay { if model.showWar { WarPanel() } }
+        .overlay { if model.showMore { MorePanel() } }
         .overlay { if model.showCheats { CheatPanel() } }
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .any(of: [.images, .videos]))
         .onChange(of: model.pick) { _, v in
@@ -297,23 +298,8 @@ struct HUDView: View {
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
             tab("", "plus.magnifyingglass") { model.scene?.zoomBy(0.5) }
             tab("", "minus.magnifyingglass") { model.scene?.zoomBy(-0.5) }
-            Menu {
-                Button { model.showLaws = true } label: { Label(L("法则", "Laws"), systemImage: "flame.fill") }
-                Button { model.showCheats = true } label: { Label(L("作弊", "Cheats"), systemImage: "wand.and.rays") }
-                Button { model.nextVillage() } label: { Label(L("村落", "Village"), systemImage: "house.fill") }
-                Button { model.pick = .player } label: { Label(L("形象", "Photo"), systemImage: "person.crop.circle.badge.plus") }
-                Button { model.pick = .asset } label: { Label(L("素材", "Import"), systemImage: "photo.badge.plus") }
-                Button { model.cleanMemory(announce: true) } label: { Label(L("清理", "Clean"), systemImage: "sparkles") }
-                Button { model.save(announce: true) } label: { Label(L("保存", "Save"), systemImage: "square.and.arrow.down.fill") }
-                Button { model.exitToMenu() } label: { Label(L("世界", "Worlds"), systemImage: "globe.asia.australia.fill") }
-            } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "ellipsis.circle.fill").font(.system(size: 17, weight: .medium))
-                    Text(L("更多", "More")).font(.system(size: 10, weight: .medium, design: .rounded))
-                }
-                .frame(minWidth: 52, minHeight: 44)
-            }
-            .accessibilityIdentifier("more")
+            tab(L("更多", "More"), "ellipsis.circle.fill") { model.showMore = true }
+                .accessibilityIdentifier("more")
         }
         .padding(.horizontal, 8).padding(.vertical, 5)
         .glass(Capsule())

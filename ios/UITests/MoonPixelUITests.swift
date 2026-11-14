@@ -115,7 +115,7 @@ final class MoonPixelUITests: XCTestCase {
         more(app, "Cheats"); sleep(1)
         app.buttons["cheat-war"].tap(); sleep(3)
         XCTAssertTrue(text(app, containing: "Following").waitForExistence(timeout: 4), "the camera follows the army")
-        app.buttons["64×"].tap(); sleep(10)
+        app.buttons["4×"].tap(); sleep(6)
         shot("15-war-march")
         app.buttons["War"].tap(); sleep(2)
         shot("16-war-panel")

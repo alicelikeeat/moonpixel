@@ -102,6 +102,7 @@ final class GameModel: ObservableObject {
     @Published var showCities = false
     @Published var showChronicle = false
     @Published var showWar = false
+    @Published var showMore = false
     @Published var pendingPlan: BuildPlan?
     @Published var previewText = ""
     var planSeq = Int(Date().timeIntervalSince1970) % 1_000_000 * 1000
@@ -221,7 +222,7 @@ final class GameModel: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self else { return }
                 self.startDemoWar()
-                self.speedIndex = 3
+                self.speedIndex = 2          // 4x: slow enough to see the march, the walls, the breach and the storming
                 self.scene?.zoom = 0.8
             }
         }
