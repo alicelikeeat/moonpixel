@@ -10,7 +10,7 @@ final class GameScene: SKScene {
     var moving = false
     var zoom: CGFloat = 2
     var chunkNodes: [Int64: SKSpriteNode] = [:]
-    private var dirty: Set<Int64> = []
+    var dirty: Set<Int64> = []
     var agentNodes: [Int: SKSpriteNode] = [:]
     var texCache: [String: SKTexture] = [:]
     let cam = SKCameraNode()
@@ -27,8 +27,19 @@ final class GameScene: SKScene {
     private var joyVec = CGVector.zero
     private var tapStart: [ObjectIdentifier: CGPoint] = [:]
     var lastTime: TimeInterval = 0
+    private var lastTile = TilePos(Int.max, 0)
     private var hudAcc = 0.0, maintAcc = 0.0, saveAcc = 0.0, walkT = 0.0, attackT = 0.0
     private var hooked = false
+    private var hookedUnder = false
+    /// Where the camera looks: the player, or a battle / city / army being watched.
+    var viewPos = Vec2.zero
+    var dragStart: TilePos?
+    var dragTouch: UITouch?
+    var previewNodes: [SKSpriteNode] = []
+    var legionNodes: [Int: SKNode] = [:]
+    var frameAvg = 1.0 / 60
+    var effectBudget = 120
+    var simDebt = 0.0
     private var badgeNodes: [TilePos: SKNode] = [:]
     private var otherTouches: [UITouch] = []
     private var pinchDist: CGFloat = 0
@@ -79,7 +90,9 @@ final class GameScene: SKScene {
     /// After a photo is applied, turn the player towards the camera so the new face is visible.
     func faceCameraOnce() { facing = Vec2(0, 1) }
 
-    func zoomBy(_ d: CGFloat) { zoom = min(5, max(1, zoom + d)) }
+    func zoomBy(_ d: CGFloat) { zoom = min(5, max(minZoom, zoom + d)) }
+    /// Far view is allowed while watching a battle or a city.
+    var minZoom: CGFloat { model?.watch == Watch.none ? 1 : 0.35 }
 
     @discardableResult func clearTextureCache() -> Int {
         let n = texCache.count
@@ -91,29 +104,47 @@ final class GameScene: SKScene {
 
     // MARK: frame
     override func update(_ currentTime: TimeInterval) {
-        guard let model = model, let world = model.world, let society = model.society else { return }
+        guard let model = model, model.world != nil, let society = model.society else { return }
+        let world = model.activeWorld
+        let under = model.depth > 0
+        if under && !hookedUnder {
+            hookedUnder = true
+            world.onChunkChanged.append { [weak self] cx, cy in if self?.model?.depth ?? 0 > 0 { self?.dirty.insert(MP.chunkKey(cx, cy)) } }
+        }
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
+        frameAvg = frameAvg * 0.95 + dt * 0.05
+        // under load, fewer decorative effects and weather particles
+        effectBudget = frameAvg > 1.0 / 40 ? 40 : (frameAvg > 1.0 / 50 ? 80 : 120)
         if model.lawBusy {
             model.stepLaw()                      // a world law is being carried out: the simulation waits for it
+        } else if model.lawSavePending {
+            // a law is done but not saved: nothing moves until it is, so the save matches the plan
         } else {
-            var sim = dt * GameModel.speeds[model.speedIndex]
-            while sim > 0 { let step = min(sim, 1.0); society.tick(step); sim -= step }
+            // the simulation gets a fixed slice of each frame; what does not fit is dropped, and the
+            // speed actually reached is shown, so high speeds never freeze the screen
+            let want = dt * GameModel.speeds[model.speedIndex]
+            var sim = want
+            let budgetEnd = CACurrentMediaTime() + 0.009
+            var done = 0.0
+            while sim > 0 && CACurrentMediaTime() < budgetEnd { let step = min(sim, 1.0); society.tick(step); sim -= step; done += step }
+            if want > 0 { model.actualSpeed = model.actualSpeed * 0.9 + (done / dt) * 0.1 }
             // wards last by the real clock; companions and animals need to know where the traveller is
             society.playerWarded = CACurrentMediaTime() < (society.realm.player.wardUntil ?? 0)
             society.viewer = player
             society.playerRest(dt)
-            let threat = society.playerThreat(at: player, dt: dt)
-            let here = player.tile
-            let bite = society.faunaTick(dt, viewer: player, mazeHere: world.gen.isMaze(here.x >> 5, here.y >> 5))
+            let threat = under ? Society.Threat() : society.playerThreat(at: player, dt: dt)
             var hurt = threat.died
+            let here = player.tile
+            let bite = under ? 0 : society.faunaTick(dt, viewer: player, mazeHere: world.gen.isMaze(here.x >> 5, here.y >> 5))
+            for t in society.takeSprung() where t == player.tile { var tr = Society.Threat(); tr.damage = 25; if society.harmPlayer(tr).died { hurt = true } }
             if bite > 0 { var t = Society.Threat(); t.damage = bite; if society.harmPlayer(t).died { hurt = true } }
             playerNode.color = .red
             playerNode.colorBlendFactor = (threat.attackers > 0 || bite > 0) && !society.playerWarded ? 0.35 : 0
             if hurt { model.playerDied() }
             for fx in society.takeFX() { worldFX(fx) }
             updateAnimals(society)
-            updateWeather(society, dt)
+            if under { for n in weatherNodes { n.removeFromParent() }; weatherNodes = []; weatherFall = -1 } else { updateWeather(society, dt) }
         }
         if flashOnAppear { flashOnAppear = false; genesisFX() }
 
@@ -134,20 +165,31 @@ final class GameScene: SKScene {
             walkT += dt * 8
         }
         if model.following, let a = society.agents[model.selectedID] { player = a.pos }
-        cam.position = pt(player)
+        // pressure plates notice who stands on them
+        let here = player.tile
+        if here != lastTile { society.press(lastTile, down: false, in: world); society.press(here, down: true, in: world); lastTile = here }
+        switch model.watch {
+        case .none: viewPos = player
+        case .point(let p): viewPos = p
+        case .legion(let id): if let lg = society.realm.legion(id) { viewPos = lg.pos } else { model.watch = .none; viewPos = player }
+        }
+        if model.watch == .none && zoom < 1 { zoom = 1 }
+        cam.position = pt(viewPos)
         cam.setScale(1 / zoom)
-        night.alpha = CGFloat((1 - world.daylight) * 0.55)
+        night.alpha = under ? 0.42 : CGFloat((1 - world.daylight) * 0.55)
         layoutJoystick()
         updateChunks(world, model)
         updateActors(world, society, model)
 
         hudAcc += dt
         if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }
+        updateLegions(society, model)
         maintAcc += dt
         if maintAcc > 2 {
             maintAcc = 0
-            world.survey(center: TilePos(Int((player.x / 512).rounded(.down)), Int((player.y / 512).rounded(.down))), count: 16)
+            if !under { world.survey(center: TilePos(Int((viewPos.x / 512).rounded(.down)), Int((viewPos.y / 512).rounded(.down))), count: 16) }
             world.maintain()
+            if under { model.world.maintain() } else { society.under?.maintain() }
             model.tickHousekeeping(2)
             if model.showMap { model.rebuildMap() }
         }
@@ -166,8 +208,8 @@ final class GameScene: SKScene {
 
     private func updateChunks(_ world: OpenWorld, _ model: GameModel) {
         let half = CGSize(width: size.width / zoom / 2, height: size.height / zoom / 2)
-        let c0x = Int(((player.x - Double(half.width)) / 512).rounded(.down)) - 1, c1x = Int(((player.x + Double(half.width)) / 512).rounded(.down)) + 1
-        let c0y = Int(((player.y - Double(half.height)) / 512).rounded(.down)) - 1, c1y = Int(((player.y + Double(half.height)) / 512).rounded(.down)) + 1
+        let c0x = Int(((viewPos.x - Double(half.width)) / 512).rounded(.down)) - 1, c1x = Int(((viewPos.x + Double(half.width)) / 512).rounded(.down)) + 1
+        let c0y = Int(((viewPos.y - Double(half.height)) / 512).rounded(.down)) - 1, c1y = Int(((viewPos.y + Double(half.height)) / 512).rounded(.down)) + 1
         var made = 0
         for cy in c0y...c1y { for cx in c0x...c1x {
             let k = MP.chunkKey(cx, cy)
@@ -219,7 +261,8 @@ final class GameScene: SKScene {
         let halfW = Double(size.width / zoom / 2) + 40, halfH = Double(size.height / zoom / 2) + 56
         var seen = Set<Int>()
         // at most 50 characters on screen; everyone else becomes a number on their building
-        let split = society.crowdSplit(center: player, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters)
+        // nobody from the surface is drawn underground
+        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters)
         updateBadges(split.badges)
         for a in split.shown {
             seen.insert(a.id)
@@ -243,6 +286,7 @@ final class GameScene: SKScene {
             let working = a.task.map { $0.stage == 1 && ["chop", "mine", "build", "forage", "reap", "sow", "plant"].contains($0.act) } ?? false
             var held = st == "elder" ? "cane" : (GameScene.jobTool[a.job] ?? "")
             if working && a.task?.act == "build" { held = "hammer" }
+            if a.legion != nil { held = ["sword", "bow", "sword", "hammer", "basket"][min(4, a.unit ?? 0)] }
             let tex: SKTexture
             if let fr = look.anim.flatMap({ model.anims[$0] }), !fr.isEmpty {
                 tex = fr[a.sleeping ? 0 : (phase + a.id) % fr.count]      // GIF / video character: its own frames are the animation
@@ -264,6 +308,15 @@ final class GameScene: SKScene {
                 flag.isHidden = a.legion == nil
                 if a.legion != nil { flag.color = nationColor(society.side(of: a), society) }
             }
+            // cavalry ride
+            let rides = a.legion != nil && a.unit == Unit.cavalry
+            var horse = node.childNode(withName: "horse") as? SKSpriteNode
+            if rides && horse == nil {
+                let tex = horseTexture()
+                let h = SKSpriteNode(texture: tex); h.name = "horse"; h.anchorPoint = CGPoint(x: 0.5, y: 0.1); h.position = CGPoint(x: 0, y: -4); h.zPosition = -0.5
+                node.addChild(h); horse = h
+            }
+            horse?.isHidden = !rides
             if let carry = node.childNode(withName: "carry") as? SKSpriteNode {
                 carry.isHidden = a.carryN <= 0
                 carry.color = a.carryKind == "wood" ? UIColor(red: 0.66, green: 0.44, blue: 0.23, alpha: 1) : (a.carryKind == "stone" ? .gray : UIColor(red: 0.8, green: 0.2, blue: 0.3, alpha: 1))
@@ -321,9 +374,15 @@ final class GameScene: SKScene {
 
     // MARK: weapons and magic (visual)
     func attack(toward target: Vec2) {
-        guard attackT <= 0, let model = model, !model.lawBusy else { return }
+        guard attackT <= 0, let model = model, !model.worldLocked else { return }
         var dir = (target - player).normalized
         if dir == .zero { dir = facing }
+        if GameModel.weapons[model.weaponIndex] == "pick" || model.depth > 0 {
+            facing = dir; attackT = 0.3
+            let t = (player + dir * 16).tile
+            if model.dig(at: t) { dust(at: CGPoint(x: t.center.x, y: -(t.center.y - 8)), color: UIColor(white: 0.7, alpha: 1)); return }
+            if model.depth > 0 { return }
+        }
         if !model.activePower.isEmpty {
             facing = dir
             let cast = model.society.playerCast(model.activePower, from: player, target: target, clock: CACurrentMediaTime())
@@ -396,7 +455,8 @@ final class GameScene: SKScene {
         var seen = Set<Int>()
         for s in society.settlements.values where !s.abandoned {
             let c = s.center.center
-            if abs(c.x - player.x) > 900 || abs(c.y - player.y) > 600 { continue }
+            if model?.depth ?? 0 > 0 || abs(c.x - viewPos.x) > 900 / Double(min(1, zoom)) || abs(c.y - viewPos.y) > 600 / Double(min(1, zoom)) { continue }
+            if zoom < 0.8 && !society.isCapital(s) && s.members.count < 30 { continue }      // far away only the capitals and big cities are named
             seen.insert(s.id)
             let label = townLabels[s.id] ?? {
                 let l = SKLabelNode(fontNamed: "AvenirNext-Bold")
@@ -406,7 +466,11 @@ final class GameScene: SKScene {
                 return l
             }()
             let nation = society.realm.nation(s.nation ?? 0)
-            label.text = s.name(zh: GameModel.zh) + " · " + (nation?.name(zh: GameModel.zh) ?? "")
+            let cap = society.isCapital(s)
+            let kind = Society.kindNames[society.cityKind(s)].map { GameModel.zh ? $0.1 : $0.0 } ?? ""
+            label.text = (cap ? "★ " : "") + society.cityName(s) + " · " + (nation?.name(zh: GameModel.zh) ?? "") + (cap ? L(" 首都", " capital") : (kind.isEmpty ? "" : " · " + kind)) + (s.siege != nil ? " ⚔" : "")
+            label.fontSize = cap ? 12 : 9
+            label.setScale(1 / max(0.5, min(1, zoom)))
             label.fontColor = nationColor(s.nation ?? 0, society)
             label.position = CGPoint(x: c.x, y: -(c.y - 44))
         }
@@ -418,7 +482,7 @@ final class GameScene: SKScene {
     /// A few pixels that drift up and fade. Capped, so mass deletions never flood the scene.
     func dust(at p: CGPoint, color: UIColor, count: Int = 9) {
         for n in 0..<count {
-            if effects >= GameScene.maxEffects { return }
+            if effects >= effectBudget { return }
             effects += 1
             let s = SKSpriteNode(color: color, size: CGSize(width: 2, height: 2))
             s.position = CGPoint(x: p.x + CGFloat(n % 3) * 4 - 4, y: p.y + CGFloat(n / 3) * 6)
@@ -430,7 +494,7 @@ final class GameScene: SKScene {
     }
 
     func hitFX(at p: CGPoint, damage: Double, dead: Bool) {
-        if effects < GameScene.maxEffects {
+        if effects < effectBudget {
             effects += 1
             let l = SKLabelNode(fontNamed: "AvenirNext-Bold")
             l.text = "-\(Int(damage))"; l.fontSize = 9; l.fontColor = UIColor(red: 1, green: 0.35, blue: 0.3, alpha: 1); l.position = p; l.zPosition = 820
@@ -493,6 +557,13 @@ final class GameScene: SKScene {
         for t in touches {
             let p = t.location(in: v)
             if joyTouch == nil && otherTouches.isEmpty && inJoyZone(p) { joyTouch = t; joyOrigin = p; joyVec = .zero }
+            else if let m = model, Piece.byKey[m.buildMode] != nil, dragTouch == nil, otherTouches.isEmpty {
+                // building: the finger lays out a line of tiles; nothing is placed until it is confirmed
+                dragTouch = t
+                let sp = t.location(in: self)
+                dragStart = Vec2(Double(sp.x), Double(-sp.y)).tile
+                m.planCells([dragStart!])
+            }
             else {
                 tapStart[ObjectIdentifier(t)] = p
                 otherTouches.append(t)
@@ -504,7 +575,12 @@ final class GameScene: SKScene {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let v = view else { return }
         if pinching && otherTouches.count >= 2 {
-            zoom = min(5, max(1, (pinchZoom * touchDistance() / pinchDist * 2).rounded() / 2))
+            zoom = min(5, max(minZoom, (pinchZoom * touchDistance() / pinchDist * 4).rounded() / 4))
+        }
+        if let dt = dragTouch, touches.contains(dt), let a = dragStart, let m = model {
+            let sp = dt.location(in: self)
+            let b = Vec2(Double(sp.x), Double(-sp.y)).tile
+            m.planCells(GameScene.line(a, b))
         }
         guard let jt = joyTouch, touches.contains(jt) else { return }
         let p = jt.location(in: v)
@@ -518,6 +594,7 @@ final class GameScene: SKScene {
         guard let v = view, let model = model else { return }
         for t in touches {
             if t === joyTouch { joyTouch = nil; joyVec = .zero; continue }
+            if t === dragTouch { dragTouch = nil; dragStart = nil; continue }          // the plan waits for the confirm button
             let wasPinch = pinching
             otherTouches.removeAll { $0 === t }
             if otherTouches.isEmpty { pinching = false }
@@ -526,8 +603,10 @@ final class GameScene: SKScene {
             if hypot(p.x - start.x, p.y - start.y) > 14 { continue }
             let sp = t.location(in: self)
             let wp = Vec2(Double(sp.x), Double(-sp.y))
-            if !model.buildMode.isEmpty { model.build(at: wp.tile); continue }
-            if model.tapWorld(wp.tile) { continue }                 // treasure chests and flowers within reach
+            if model.buildMode == "demolish" { model.demolish(at: wp.tile); continue }
+            if model.buildMode == "depot" { model.build(at: wp.tile); continue }
+            if model.reach(wp.tile) { continue }                     // levers, gates, stairs, chests and flowers within reach
+            if model.watch != .none { model.stopWatching(); continue }   // a tap while watching brings the camera home
             if let id = model.placingAsset {
                 model.world.addProp(key: "asset:" + id, at: wp)
                 model.placingAsset = nil
@@ -542,6 +621,7 @@ final class GameScene: SKScene {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
             if t === joyTouch { joyTouch = nil; joyVec = .zero }
+            if t === dragTouch { dragTouch = nil; dragStart = nil }
             tapStart.removeValue(forKey: ObjectIdentifier(t))
             otherTouches.removeAll { $0 === t }
         }

@@ -1074,6 +1074,17 @@ extension Society {
             if settlements[lg.home] == nil { out.append("legion \(lg.id): home \(lg.home)") }
         }
         for n in realm.nations where n.leader != 0 && agents[n.leader] == nil { out.append("nation \(n.id): leader \(n.leader)") }
+        for n in realm.nations {
+            if let c = n.capital { if settlements[c] == nil || settlements[c]!.abandoned { out.append("nation \(n.id): capital \(c)") } }
+            if let m = n.moving, settlements[m.to] == nil { out.append("nation \(n.id): moving to \(m.to)") }
+        }
+        let capitals = realm.nations.compactMap { $0.capital }
+        if Set(capitals).count != capitals.count { out.append("two nations share a capital") }
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            if let g = s.siege, realm.legion(g) == nil { out.append("settlement \(s.id): besieged by \(g)") }
+        }
+        for lg in realm.legions where lg.state != 0 && lg.target != 0 && settlements[lg.target] == nil { out.append("legion \(lg.id): target \(lg.target)") }
+        if let p = realm.player.partner, agents[p] == nil { out.append("player: partner \(p)") }
         return out
     }
 
@@ -1111,6 +1122,15 @@ extension Society {
         let before = realm.legions.count
         realm.legions.removeAll { settlements[$0.home] == nil || ($0.members.isEmpty && $0.state != 0) }
         fixed += before - realm.legions.count
+        for k in realm.nations.indices {
+            if let c = realm.nations[k].capital, settlements[c] == nil || settlements[c]!.abandoned { realm.nations[k].capital = nil; fixed += 1 }
+            if let m = realm.nations[k].moving, settlements[m.to] == nil || settlements[m.to]!.abandoned { realm.nations[k].moving = nil; fixed += 1 }
+        }
+        var seenCap = Set<Int>()
+        for k in realm.nations.indices { if let c = realm.nations[k].capital { if seenCap.contains(c) { realm.nations[k].capital = nil; fixed += 1 } else { seenCap.insert(c) } } }
+        for s in settlements.values { if let g = s.siege, realm.legion(g) == nil || s.abandoned { endSiege(s); fixed += 1 } }
+        for lg in realm.legions where lg.state != 0 && lg.target != 0 && settlements[lg.target] == nil { lg.target = 0; if lg.state == 1 || lg.state == 2 { lg.state = 3; lg.route = nil }; fixed += 1 }
+        if let p = realm.player.partner, agents[p] == nil { realm.player.partner = nil; fixed += 1 }
         for k in realm.nations.indices where realm.nations[k].leader != 0 && agents[realm.nations[k].leader] == nil {
             realm.nations[k].leader = pickLeader(realm.nations[k].id); fixed += 1
         }

@@ -10,6 +10,12 @@ final class MoonPixelUITests: XCTestCase {
         add(a)
     }
 
+    /// Lesser used actions live in the More menu.
+    private func more(_ app: XCUIApplication, _ name: String) {
+        app.buttons["more"].tap(); sleep(1)
+        app.buttons[name].firstMatch.tap()
+    }
+
     private func text(_ app: XCUIApplication, containing s: String) -> XCUIElement {
         app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", s)).firstMatch
     }
@@ -39,13 +45,13 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "of 5 GB").exists || text(app, containing: "/ 5 GB").exists, "map size is shown against the 5 GB cap")
         XCTAssertTrue(text(app, containing: "Tech:").exists, "technology line is shown")
         status.tap(); sleep(1)
-        app.buttons["Clean"].tap(); sleep(1)
+        more(app, "Clean"); sleep(1)
         XCTAssertTrue(text(app, containing: "Cleaned").waitForExistence(timeout: 3), "clean toast shown")
         app.buttons["64×"].tap(); sleep(8)
         shot("05-fast")
         // cheats unlock every power; the arsenal lists five schools; a storm is called
-        app.buttons["Cheats"].tap(); sleep(1)
-        app.buttons["cheat-powers"].tap(); app.buttons["weather-3"].tap(); app.buttons["cheat-animals"].tap(); sleep(1)
+        more(app, "Cheats"); sleep(1)
+        app.buttons["cheat-rich"].tap(); app.buttons["cheat-powers"].tap(); app.buttons["weather-3"].tap(); app.buttons["cheat-animals"].tap(); sleep(1)
         shot("05f-cheats")
         app.buttons["close-panel"].tap(); sleep(1)
         XCTAssertTrue(text(app, containing: "cheated").exists, "the save is marked as cheated")
@@ -76,8 +82,53 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["join-1"].tap(); sleep(1)
         XCTAssertTrue(text(app, containing: "Azure · HP").exists, "the player joined a nation")
         app.buttons["close-panel"].tap(); sleep(1)
+        // free building: choose a piece, drag a line, confirm
+        app.buttons["Build"].tap(); sleep(2)
+        shot("09-build-panel")
+        XCTAssertTrue(app.buttons["piece-wall_stone"].exists && app.buttons["piece-furnace"].exists && app.buttons["piece-lever"].exists, "pieces to build")
+        app.buttons["piece-floor_wood"].tap(); sleep(1)
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.56, dy: 0.30)), to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.30))
+        from.press(forDuration: 0.1, thenDragTo: to); sleep(1)
+        shot("10-build-preview")
+        XCTAssertTrue(app.buttons["build-confirm"].waitForExistence(timeout: 3), "a preview waits for confirmation")
+        XCTAssertTrue(text(app, containing: "tiles").exists, "the preview tells how many tiles and what it costs")
+        app.buttons["build-confirm"].tap(); sleep(1)
+        XCTAssertTrue(text(app, containing: "Placed").waitForExistence(timeout: 3) || text(app, containing: "Nothing can be placed").exists, "the plan was carried out")
+        shot("11-built")
+        app.buttons["build-done"].tap(); sleep(1)
+        // crafting
+        app.buttons["Craft"].tap(); sleep(2)
+        shot("12-craft")
+        XCTAssertTrue(text(app, containing: "Smelt iron").exists && text(app, containing: "Siege engine").exists, "recipes listed")
+        app.buttons["close-panel"].tap(); sleep(1)
+        // cities and capitals
+        app.buttons["Cities"].tap(); sleep(2)
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'city-'")).firstMatch.tap(); sleep(2)
+        shot("13-cities")
+        XCTAssertTrue(text(app, containing: "people").exists && text(app, containing: "governance").exists, "a city's state is shown")
+        XCTAssertTrue(text(app, containing: "★").exists, "capitals are marked")
+        app.buttons["city-locate"].tap(); sleep(2)
+        XCTAssertTrue(app.buttons["stop-watching"].waitForExistence(timeout: 3), "the camera went to the city, apart from the character")
+        shot("14-city-view")
+        app.buttons["stop-watching"].tap(); sleep(1)
+        // a war, followed with the camera
+        more(app, "Cheats"); sleep(1)
+        app.buttons["cheat-war"].tap(); sleep(3)
+        XCTAssertTrue(text(app, containing: "Following").waitForExistence(timeout: 4), "the camera follows the army")
+        app.buttons["64×"].tap(); sleep(10)
+        shot("15-war-march")
+        app.buttons["War"].tap(); sleep(2)
+        shot("16-war-panel")
+        XCTAssertTrue(text(app, containing: "morale").exists, "armies with morale and rations")
+        app.buttons["close-panel"].tap(); sleep(1)
+        app.buttons["History"].tap(); sleep(2)
+        shot("17-chronicle")
+        XCTAssertTrue(text(app, containing: "#").exists && text(app, containing: "declared war").exists, "numbered history, with the war in it")
+        app.buttons["close-panel"].tap(); sleep(1)
+        if app.buttons["stop-watching"].exists { app.buttons["stop-watching"].tap(); sleep(1) }
+        app.buttons["1×"].tap(); sleep(1)
         // world laws: one tap really deletes
-        app.buttons["Laws"].tap(); sleep(2)
+        more(app, "Laws"); sleep(2)
         shot("05c-laws")
         XCTAssertTrue(app.buttons["law-thanos"].exists && app.buttons["law-annihilation"].exists && app.buttons["law-genesis"].exists && app.buttons["law-guixu"].exists, "four laws")
         app.buttons["law-thanos"].tap(); sleep(4)
@@ -91,7 +142,7 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["close-panel"].tap(); sleep(1)
         XCTAssertTrue(app.buttons["Map"].exists, "the game goes on in the new world")
         // back to the world list, then a second world
-        app.buttons["Worlds"].tap(); sleep(2)
+        more(app, "Worlds"); sleep(2)
         shot("06-world-list")
         XCTAssertTrue(app.buttons["Play"].firstMatch.waitForExistence(timeout: 5), "the saved world is listed")
         // second world from one sentence: a suggestion fills the composer, the analysis shows live
@@ -101,7 +152,7 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Industrial age").exists, "the sentence was analysed (era)")
         app.buttons["create-world"].tap(); sleep(6)
         shot("06c-sentence-world")
-        app.buttons["Worlds"].tap(); sleep(2)
+        more(app, "Worlds"); sleep(2)
         shot("07-two-worlds")
         XCTAssertGreaterThanOrEqual(app.buttons.matching(identifier: "Play").count, 2, "two worlds side by side")
         app.buttons["Play"].firstMatch.tap(); sleep(4)

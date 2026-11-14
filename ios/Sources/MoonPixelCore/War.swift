@@ -501,6 +501,45 @@ extension Society {
         return false
     }
 
+    // MARK: a war on purpose (cheat panel, demonstrations)
+    /// Raise armies on both sides, give the defender's nearest town a wall with a gate,
+    /// and declare war. Marks the save as cheated. Returns the attacking legion's id.
+    @discardableResult public func stageCampaign(attacker: Int, defender: Int, walls: Bool = true) -> Int? {
+        guard attacker != defender, realm.nation(attacker)?.exileSince == nil, realm.nation(defender)?.exileSince == nil,
+              let r = realm.ri(attacker, defender) else { return nil }
+        realm.player.cheated = true
+        let now = world.time
+        func raise(_ nation: Int, _ per: Int) {
+            for t in towns(of: nation) {
+                guard let g = garrison(t, create: true) else { continue }
+                g.nation = nation
+                for a in t.members.compactMap({ agents[$0] }).sorted(by: { $0.id < $1.id }) where a.legion == nil && a.stage(now) == "adult" && a.refugee == nil && g.members.count < per { enlist(a, g) }
+            }
+        }
+        raise(attacker, 16); raise(defender, 5)
+        for t in towns(of: attacker) { t.addGood("engines", 3); t.food = max(t.food, 600); t.addGood("weapons", 10) }
+        if walls, let home = towns(of: attacker).first,
+           let target = towns(of: defender).min(by: { ($0.center - home.center).lengthSquared < ($1.center - home.center).lengthSquared }) {
+            let rad = 7
+            for d in -rad...rad {
+                for p in [TilePos(target.center.x + d, target.center.y - rad), TilePos(target.center.x + d, target.center.y + rad),
+                          TilePos(target.center.x - rad, target.center.y + d), TilePos(target.center.x + rad, target.center.y + d)] {
+                    let gate = d == 0 && p.y == target.center.y + rad
+                    world.setTile(1, p.x, p.y, 0)
+                    world.setTile(2, p.x, p.y, content.tid(gate ? "gate_open" : "wall_stone"))
+                    displace(from: p, in: world)
+                }
+            }
+            surveyTown(target)
+        }
+        if realm.relations[r].state != 0 { realm.relations[r].state = 0 }
+        realm.relations[r].since = -1e9
+        refreshNations()
+        if let k = realm.ni(attacker) { realm.nations[k].fatigue = 0 }
+        declare(attacker, on: defender)
+        return realm.legions.first { $0.nation == attacker && $0.state == 1 }?.id
+    }
+
     // MARK: what the player can do for an army
     /// Hand food to a friendly army in the field. Returns how much was given.
     @discardableResult public func playerFeedLegion(near pos: Vec2, amount: Double = 20) -> Double {
@@ -521,6 +560,8 @@ extension Society {
         public var morale = 0.0, food = 0.0, supply = 0.0
         public var pos = Vec2.zero, route: [Vec2] = [], convoy: Vec2?
         public var phase = -1, forded = false
+        public var foe: Vec2?
+        public var targetPos: Vec2?
     }
 
     public func legionInfos() -> [LegionInfo] {
@@ -535,6 +576,8 @@ extension Society {
             i.count = lg.members.count; i.units = units(lg); i.engines = lg.engines ?? 0
             i.morale = lg.morale ?? 0; i.food = lg.food ?? 0; i.supply = lg.supply
             i.pos = lg.pos; i.route = lg.route ?? []; i.phase = lg.phase ?? -1; i.forded = lg.forded == true
+            i.foe = lg.foe.flatMap { realm.legion($0) }?.pos
+            i.targetPos = settlements[lg.target]?.center.center
             if let at = lg.convoyAt, let h = settlements[lg.home] { i.convoy = point(on: [h.center.center] + (lg.route ?? [lg.pos]).prefix(max(1, (lg.routeI ?? 0) + 1)) + [lg.pos], at: at) }
             return i
         }

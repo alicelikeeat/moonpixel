@@ -14,7 +14,7 @@ concurrency:
 jobs:
   ipa:
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
@@ -66,7 +66,7 @@ jobs:
       - name: Smoke test in the iOS Simulator
         working-directory: ios
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 35
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -100,6 +100,15 @@ jobs:
           xcrun simctl terminate "$UDID" org.moonpixel.game
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --storm; sleep 13; shot sim-storm1.png; sleep 2; shot sim-storm2.png; sleep 2; shot sim-storm3.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
+          # recordings of building, cities and a war (simulator, not a device)
+          rec() { xcrun simctl io "$UDID" recordVideo --codec h264 --force "$1" > /dev/null 2>&1 & RPID=$!; sleep "$2"; kill -INT $RPID; wait $RPID 2>/dev/null; }
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-build; rec rec-build.mp4 42; shot sim-build.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-city; rec rec-city.mp4 16; shot sim-city.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-war; rec rec-war.mp4 60; shot sim-war.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          ls -la rec-*.mp4 || true
           echo "===== UI test: tap the HUD buttons ====="
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
             -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
@@ -115,5 +124,5 @@ jobs:
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
           TAG="v${MP_VERSION}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png ui-result.txt ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png sim-build.png sim-city.png sim-war.png rec-*.mp4 ui-result.txt ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png

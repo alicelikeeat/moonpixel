@@ -35,10 +35,14 @@ struct HUDView: View {
                     Spacer(minLength: 0)
                     VStack(alignment: .trailing, spacing: 8) {
                         speedBar
+                        noticeStack
                         if let info = model.selected { agentCard(info) }
                     }
                 }
+                if model.lawSavePending { savePendingBar }
                 Spacer(minLength: 0)
+                if model.watch != .none { watchBar }
+                if model.pendingPlan != nil || !model.buildMode.isEmpty { buildBar }
                 tabBar
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -47,6 +51,11 @@ struct HUDView: View {
         .overlay { if model.showRealm { RealmPanel() } }
         .overlay { if model.showLaws { LawsPanel() } }
         .overlay { if model.showArsenal { ArsenalPanel() } }
+        .overlay { if model.showBuild { BuildPanel() } }
+        .overlay { if model.showCraft { CraftPanel() } }
+        .overlay { if model.showCities { CitiesPanel() } }
+        .overlay { if model.showChronicle { ChroniclePanel() } }
+        .overlay { if model.showWar { WarPanel() } }
         .overlay { if model.showCheats { CheatPanel() } }
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .any(of: [.images, .videos]))
         .onChange(of: model.pick) { _, v in
@@ -90,8 +99,81 @@ struct HUDView: View {
         }
     }
 
+    /// Clickable news of war: tap one to look at where it happened.
+    private var noticeStack: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            ForEach(model.notices) { n in
+                Button { model.look(at: n.pos); model.notices.removeAll { $0.id == n.id } } label: {
+                    Label(n.text, systemImage: "scope").font(.system(size: 11, weight: .semibold, design: .rounded)).lineLimit(1)
+                        .padding(.horizontal, 10).frame(height: 30).frame(maxWidth: 330, alignment: .trailing)
+                        .background(Color.red.opacity(0.28), in: Capsule())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityIdentifier("notice")
+            }
+        }
+    }
+
+    private var savePendingBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+            Text(L("世界法则已执行，但保存失败；在保存成功前世界暂停，不能修改", "A world law ran but could not be saved; the world is paused until it is"))
+                .font(.system(size: 12, weight: .semibold, design: .rounded)).lineLimit(2)
+            Button { model.retryLawSave() } label: {
+                Label(L("重试保存", "Retry save"), systemImage: "arrow.clockwise").font(.system(size: 12, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12).frame(height: 34).background(Color.white.opacity(0.22), in: Capsule())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("retry-save")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8).glass(Capsule())
+    }
+
+    /// While watching, it is always clear that the camera is not the character.
+    private var watchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "video.fill")
+            Text(model.watchLabel).font(.system(size: 12, weight: .semibold, design: .rounded)).lineLimit(1)
+            Button { model.scene?.zoomBy(-0.25) } label: { Image(systemName: "minus.magnifyingglass").frame(width: 32, height: 32) }.buttonStyle(PressStyle())
+            Button { model.scene?.zoomBy(0.25) } label: { Image(systemName: "plus.magnifyingglass").frame(width: 32, height: 32) }.buttonStyle(PressStyle())
+            Button { model.stopWatching() } label: {
+                Label(L("回到角色", "Back to me"), systemImage: "person.fill").font(.system(size: 12, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12).frame(height: 32).background(Color.white.opacity(0.22), in: Capsule())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("stop-watching")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 6).glass(Capsule())
+    }
+
+    private var buildBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: model.buildMode == "demolish" ? "hammer.fill" : "square.grid.3x3.fill")
+            Text(model.pendingPlan != nil ? model.previewText : (model.buildMode == "demolish" ? L("拆除：点击建筑格", "Demolish: tap a built tile") : L("点按或拖动选择位置", "Tap or drag to choose where")))
+                .font(.system(size: 12, weight: .semibold, design: .rounded)).lineLimit(1)
+            if model.pendingPlan != nil {
+                Button { model.confirmBuild() } label: {
+                    Label(L("确认", "Confirm"), systemImage: "checkmark").font(.system(size: 12, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 12).frame(height: 32).background(Color.green.opacity(0.45), in: Capsule())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityIdentifier("build-confirm")
+            }
+            Button { model.stopBuilding() } label: {
+                Label(L("结束", "Done"), systemImage: "xmark").font(.system(size: 12, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12).frame(height: 32).background(Color.white.opacity(0.18), in: Capsule())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("build-done")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 6).glass(Capsule())
+    }
+
     private var speedBar: some View {
         HStack(spacing: 2) {
+            if model.speedIndex > 1 && model.actualSpeed < GameModel.speeds[model.speedIndex] * 0.8 {
+                Text(String(format: L("实际 %.0f×", "real %.0f×"), model.actualSpeed)).font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.orange).padding(.horizontal, 4)
+            }
             ForEach(0..<GameModel.speeds.count, id: \.self) { i in
                 Button { model.speedIndex = i } label: {
                     Group {
@@ -205,19 +287,33 @@ struct HUDView: View {
     private var tabBar: some View {
         HStack(spacing: 2) {
             tab(L("地图", "Map"), "map.fill") { model.toggleMap() }
+            tab(L("建造", "Build"), "square.grid.3x3.fill") { model.showBuild = true }
+            tab(L("制造", "Craft"), "hammer.fill") { model.showCraft = true }
+            tab(L("城市", "Cities"), "building.columns.fill") { model.showCities = true }
+            tab(L("战争", "War"), "shield.lefthalf.filled") { model.showWar = true }
+            tab(L("纪事", "History"), "book.closed.fill") { model.showChronicle = true }
             tab(L("三国", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
-            tab(L("法则", "Laws"), "flame.fill") { model.showLaws = true }
             tab(L("能力", "Powers"), "bolt.fill") { model.showArsenal = true }
-            tab(L("作弊", "Cheats"), "wand.and.rays") { model.showCheats = true }
-            tab(L("村落", "Village"), "house.fill") { model.nextVillage() }
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
-            tab(L("形象", "Photo"), "person.crop.circle.badge.plus") { model.pick = .player }
-            tab(L("素材", "Import"), "photo.badge.plus") { model.pick = .asset }
-            tab(L("清理", "Clean"), "sparkles") { model.cleanMemory(announce: true) }
-            tab(L("保存", "Save"), "square.and.arrow.down.fill") { model.save(announce: true) }
             tab("", "plus.magnifyingglass") { model.scene?.zoomBy(0.5) }
             tab("", "minus.magnifyingglass") { model.scene?.zoomBy(-0.5) }
-            tab(L("世界", "Worlds"), "globe.asia.australia.fill") { model.exitToMenu() }
+            Menu {
+                Button { model.showLaws = true } label: { Label(L("法则", "Laws"), systemImage: "flame.fill") }
+                Button { model.showCheats = true } label: { Label(L("作弊", "Cheats"), systemImage: "wand.and.rays") }
+                Button { model.nextVillage() } label: { Label(L("村落", "Village"), systemImage: "house.fill") }
+                Button { model.pick = .player } label: { Label(L("形象", "Photo"), systemImage: "person.crop.circle.badge.plus") }
+                Button { model.pick = .asset } label: { Label(L("素材", "Import"), systemImage: "photo.badge.plus") }
+                Button { model.cleanMemory(announce: true) } label: { Label(L("清理", "Clean"), systemImage: "sparkles") }
+                Button { model.save(announce: true) } label: { Label(L("保存", "Save"), systemImage: "square.and.arrow.down.fill") }
+                Button { model.exitToMenu() } label: { Label(L("世界", "Worlds"), systemImage: "globe.asia.australia.fill") }
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "ellipsis.circle.fill").font(.system(size: 17, weight: .medium))
+                    Text(L("更多", "More")).font(.system(size: 10, weight: .medium, design: .rounded))
+                }
+                .frame(minWidth: 52, minHeight: 44)
+            }
+            .accessibilityIdentifier("more")
         }
         .padding(.horizontal, 8).padding(.vertical, 5)
         .glass(Capsule())

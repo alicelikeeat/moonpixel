@@ -244,6 +244,7 @@ struct CheatPanel: View {
                     Chip(title: L("召唤宠物", "Summon pets"), icon: "pawprint.fill", id: "cheat-animals") { model.cheat("animals") }
                     Chip(title: L("跳到清晨", "Skip to dawn"), icon: "sunrise.fill", id: "cheat-dawn") { model.cheat("dawn") }
                     Chip(title: L("探明地图", "Reveal map"), icon: "map.fill", id: "cheat-reveal") { model.cheat("reveal") }
+                    Chip(title: L("立即开战", "Start a war"), icon: "flag.2.crossed.fill", id: "cheat-war") { model.startDemoWar() }
                 }
                 Text(L("天气", "Weather")).font(.system(size: 13, weight: .bold, design: .rounded))
                 HStack(spacing: 6) {

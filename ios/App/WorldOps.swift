@@ -34,13 +34,17 @@ extension GameModel {
     func setLimit(_ mb: Int) { limitMB = mb; saveSettings(); refreshStorage() }
 
     // MARK: storage
+    /// Asset sizes, counted from the folder at most once a minute (or after a change), never every frame.
     func assetBytes() -> (images: Int, portraits: Int) {
+        if Date().timeIntervalSince(assetCacheAt) < 60 { return assetCache }
         var images = 0, portraits = 0
         for f in (try? FileManager.default.contentsOfDirectory(atPath: assetsDir.path)) ?? [] {
             let size = ((try? FileManager.default.attributesOfItem(atPath: assetsDir.appendingPathComponent(f).path)[.size]) as? NSNumber)?.intValue ?? 0
             if f.hasPrefix("face_") || f.hasPrefix("portrait_") || f.hasPrefix("anim_") { portraits += size } else { images += size }
         }
-        return (images, portraits)
+        assetCache = (images, portraits)
+        assetCacheAt = Date()
+        return assetCache
     }
 
     /// Everything this world occupies on disk.
@@ -66,7 +70,7 @@ extension GameModel {
 
     /// Automatic destruction happens only when the player chose such a policy.
     func checkPolicy() {
-        guard society != nil, !lawBusy, policy.mode != .cacheFirst else { return }
+        guard society != nil, !lawBusy, !lawSavePending, policy.mode != .cacheFirst else { return }
         guard let d = policy.decide(used: totalBytes(), limit: limitBytes, clock: Date().timeIntervalSince1970) else { return }
         saveSettings()
         guard save(announce: false) else { return }
@@ -144,7 +148,7 @@ extension GameModel {
     }
 
     func build(at t: TilePos) {
-        guard let sc = scene else { return }
+        guard let sc = scene, !worldLocked else { return }
         if (t - sc.player.tile).lengthSquared > 64 { showToast(L("太远了，走近一些", "Too far away, walk closer")); return }
         if let why = society.playerBuild(buildMode, at: t) {
             let msg: [String: String] = ["water": L("这里是水面，请改用桥", "That is water: use a bridge"), "land": L("桥只能建在水面上", "Bridges go on water"),
@@ -182,6 +186,7 @@ extension GameModel {
     /// One tap: plan, journal, execute. No item-by-item choice, no second confirmation.
     func runLaw(_ mode: LawMode) {
         guard let s = society, !lawBusy else { return }
+        if lawSavePending { showToast(L("上一次世界法则还没有保存成功，请先重试保存", "The last world law has not been saved yet: retry saving first")); return }
         guard save(announce: false) else { return }                            // never start from an unsaved state
         var o = LawOptions()
         o.ratio = lawRatio
@@ -228,12 +233,13 @@ extension GameModel {
         r.assetsRemoved = collectAssets()
         let ok = save(announce: false)
         if ok { LawJournal.clear(saveDir) }                                    // the plan is the only recovery data; it goes once committed
+        else { lawSavePending = true }                                         // the journal stays; nothing else may change the world until it is saved
         r.bytesBefore = lawBefore
         r.bytesAfter = totalBytes()
         lawBusy = false
-        lawReport = describe(r) + (ok ? "" : L("（保存失败，下次启动会继续完成）", " (saving failed; it will be completed at the next start)"))
+        lawReport = describe(r) + (ok ? "" : L("（保存失败：请重试保存；若此时退出，下次启动会按同一计划继续完成）", " (saving failed: retry saving; if the app closes now, the same plan is finished at the next start)"))
         showToast(lawReport)
-        lastLogCount = society.log.count
+        lastSeenEvent = society.lastEventID
         refreshStorage()
         refreshRealm()
     }
@@ -302,13 +308,14 @@ extension GameModel {
         sc.player = start
         sc.flashOnAppear = true
         scene = sc
-        lastLogCount = society.log.count
+        lastSeenEvent = society.lastEventID
         let ok = save(announce: false)
-        if ok { LawJournal.clear(saveDir) }
+        if ok { LawJournal.clear(saveDir) } else { lawSavePending = true }
         r.bytesBefore = lawBefore
         r.bytesAfter = totalBytes()
         lawBusy = false
         lawReport = describe(r) + String(format: L(" · 新种子 %d", " · new seed %d"), plan.newSeed)
+            + (ok ? "" : L("（保存失败：请重试保存）", " (saving failed: retry saving)"))
         showToast(lawReport)
         refreshStorage()
         refreshRealm()
@@ -317,13 +324,12 @@ extension GameModel {
     /// Finish a law whose journal was still on disk when the world was opened.
     func recoverLaw(_ plan: LawPlan) {
         lawBefore = totalBytes()
-        if plan.mode == .genesis { doGenesis(plan) }
-        else {
-            let run = society.beginLaw(plan)
-            while !run.step(400) {}
-            finishLaw(run.result, plan: plan)
-        }
-        showToast(L("已完成上次被中断的世界法则：", "Finished the world law that was interrupted: ") + lawReport)
+        // the same plan as before, never a new random choice; carried out a batch per frame
+        if plan.mode == .genesis { doGenesis(plan); showToast(L("已完成上次被中断的世界法则：", "Finished the world law that was interrupted: ") + lawReport); return }
+        lawRun = society.beginLaw(plan)
+        lawBusy = true
+        lawProgress = 0
+        showToast(L("正在完成上次被中断的世界法则…", "Finishing the world law that was interrupted…"))
     }
 }
 

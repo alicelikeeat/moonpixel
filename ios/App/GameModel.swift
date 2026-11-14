@@ -95,12 +95,39 @@ final class GameModel: ObservableObject {
     var anims: [String: [SKTexture]] = [:]
     var recipe: WorldRecipe?
     var lastLogCount = 0
+    var lastSeenEvent = 0
+    // v1.3: building, crafting, cities, chronicle, war watching
+    @Published var showBuild = false
+    @Published var showCraft = false
+    @Published var showCities = false
+    @Published var showChronicle = false
+    @Published var showWar = false
+    @Published var pendingPlan: BuildPlan?
+    @Published var previewText = ""
+    var planSeq = Int(Date().timeIntervalSince1970) % 1_000_000 * 1000
+    @Published var packLine = ""
+    @Published var craftLine = ""
+    @Published var cityRows: [CityRow] = []
+    @Published var cityDetailID: Int?
+    @Published var cityDetail: Society.CityInfo?
+    @Published var chronRows: [ChronRow] = []
+    @Published var chronMajorOnly = true
+    @Published var notices: [Notice] = []
+    @Published var watch: Watch = .none
+    @Published var warRows: [WarRow] = []
+    @Published var lawSavePending = false
+    @Published var actualSpeed = 1.0
+    var assetCacheAt = Date.distantPast
+    var assetCache = (images: 0, portraits: 0)
     var cleanCooldown = 0.0
     private var memObserver: NSObjectProtocol?
 
     static var defaultLook: Look { var l = Look(); l.hair = "#f0e8d0"; l.shirt = "#f4f0e0"; l.pants = "#5a5a78"; l.style = 3; return l }
 
+    /// Save format: 3 = v1.3 (cities, campaigns, building). Absent in older saves.
+    static let saveFormat = 3
     struct Index: Codable {
+        var format: Int?
         var world: OpenWorld.Snapshot
         var society: Society.Snapshot
         var px: Double, py: Double
@@ -190,6 +217,53 @@ final class GameModel: ObservableObject {
                 }
             }
         }
+        if args.contains("--demo-war") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self = self else { return }
+                self.startDemoWar()
+                self.speedIndex = 3
+                self.scene?.zoom = 0.8
+            }
+        }
+        if args.contains("--demo-build") {
+            // lay out a small house with a workbench and furnace, smelt iron, go down a mine and come back
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self = self, let s = self.society, let sc = self.scene else { return }
+                for g in ["wood", "stone", "iron", "parts", "iron_ore"] { s.carry(g, 200) }
+                let o = sc.player.tile + TilePos(3, -2)
+                var steps: [(String, [TilePos])] = []
+                steps.append(("floor_wood", (0..<5).flatMap { y in (0..<6).map { TilePos(o.x + $0, o.y + y) } }))
+                steps.append(("wall_stone", (0..<6).map { TilePos(o.x + $0, o.y - 1) }))
+                steps.append(("bed", [TilePos(o.x + 1, o.y + 1), TilePos(o.x + 3, o.y + 1)]))
+                steps.append(("workbench", [TilePos(o.x + 1, o.y + 3)]))
+                steps.append(("furnace", [TilePos(o.x + 3, o.y + 3)]))
+                steps.append(("lever", [TilePos(o.x - 2, o.y + 5)]))
+                steps.append(("wire", [TilePos(o.x - 1, o.y + 5), TilePos(o.x, o.y + 5)]))
+                steps.append(("lamp", [TilePos(o.x + 1, o.y + 5)]))
+                steps.append(("stairs", [TilePos(o.x + 7, o.y + 2)]))
+                for (i, st) in steps.enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 1.6) {
+                        self.buildMode = st.0
+                        self.planCells(st.1)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.confirmBuild() }
+                    }
+                }
+                let t = Double(steps.count) * 1.6 + 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + t) { self.stopBuilding(); sc.player = TilePos(o.x + 2, o.y + 4).center; _ = self.reach(TilePos(o.x - 2, o.y + 5)) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + t + 1) { self.craft("iron"); self.showCraft = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + t + 4) { self.showCraft = false; sc.player = TilePos(o.x + 7, o.y + 3).center; _ = self.reach(TilePos(o.x + 7, o.y + 2)) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + t + 7) { for k in 1...4 { _ = self.dig(at: sc.player.tile + TilePos(k, 0)) } }
+                DispatchQueue.main.asyncAfter(deadline: .now() + t + 10) { _ = self.reach(TilePos(o.x + 7, o.y + 2)) }
+            }
+        }
+        if args.contains("--demo-city") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                guard let self = self, let s = self.society else { return }
+                self.showCities = true
+                self.cityDetailID = s.realm.nations.compactMap { s.capital(of: $0.id)?.id }.first
+                self.refreshCities()
+            }
+        }
         if args.contains("--realm") { DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.showRealm = true; self?.refreshRealm() } }
         if args.contains("--laws") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.showLaws = true }
@@ -236,9 +310,16 @@ final class GameModel: ObservableObject {
         var index: Index?
         epoch += 1
         var corrupt = false
+        var migrated = false
         let indexURL = saveDir.appendingPathComponent("index.json")
         if load, let data = try? Data(contentsOf: indexURL) {
             index = try? JSONDecoder().decode(Index.self, from: data)
+            // an older save is copied aside before it is migrated, so the original can always be recovered
+            if let ix = index, (ix.format ?? 2) < GameModel.saveFormat {
+                let keep = saveDir.appendingPathComponent("index.v\(ix.format ?? 2)-backup.json")
+                if !FileManager.default.fileExists(atPath: keep.path) { try? FileManager.default.copyItem(at: indexURL, to: keep) }
+                migrated = true
+            }
             if index == nil {
                 // never overwrite a save we could not read: keep it beside the new one
                 corrupt = true
@@ -280,6 +361,8 @@ final class GameModel: ObservableObject {
         sc.player = start
         scene = sc
         lastLogCount = s.log.count
+        lastSeenEvent = s.lastEventID
+        notices = []; watch = .none; pendingPlan = nil; buildMode = ""; lawSavePending = false
         if memObserver == nil {
             memObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.cleanMemory(announce: true) }
@@ -287,6 +370,7 @@ final class GameModel: ObservableObject {
         }
         refreshHUD()
         if !load { save(announce: false) }
+        if migrated { showToast(L("旧存档已迁移到 1.3，原文件已另存为 index.v2-backup.json", "This save was migrated to 1.3; the original is kept as index.v2-backup.json")) }
         if corrupt { showToast(L("存档已损坏，原文件已另存为 index.corrupt，未被覆盖；世界已重新生成", "The save was damaged. It was kept as index.corrupt and not overwritten; the world was regenerated")) }
         // a world law that was interrupted (app killed, power lost) is finished now
         if load, index != nil, let j = LawJournal.read(saveDir) { recoverLaw(j.plan) }
@@ -296,10 +380,11 @@ final class GameModel: ObservableObject {
     /// the previous save file is left intact in that case because writes are atomic.
     @discardableResult func save(announce: Bool) -> Bool {
         guard let w = world, let s = society, let sc = scene else { return false }
-        let failures = w.writeFailures
+        let failures = w.writeFailures, underFailures = s.under?.writeFailures ?? 0
         w.saveAll()
-        var ok = w.writeFailures == failures
-        let ix = Index(world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook, recipe: recipe)
+        s.under?.saveAll()
+        var ok = w.writeFailures == failures && (s.under?.writeFailures ?? 0) == underFailures
+        let ix = Index(world: w.snapshot(), society: s.snapshot(), format: GameModel.saveFormat, px: sc.player.x, py: sc.player.y, look: playerLook, recipe: recipe)
         let tech = s.techCount > 0 ? s.techName(s.techCount - 1) : ""
         let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count, diskBytes: totalBytes(), tech: tech)
         do {
@@ -347,10 +432,8 @@ final class GameModel: ObservableObject {
         guard let w = world, let s = society else { return }
         let h = w.hour
         status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
-        if s.log.count != lastLogCount, let last = s.log.last {
-            lastLogCount = s.log.count
-            showToast(last.text)
-        }
+        pollEvents()
+        expireNotices()
         if showDetails {
             let st = s.stats
             let houses = s.settlements.values.reduce(0) { $0 + $1.count("house", done: true) }

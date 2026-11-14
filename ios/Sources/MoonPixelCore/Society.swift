@@ -784,8 +784,9 @@ public final class Society {
             let age = a.age(now)
             if age < 17 || age > 42 || a.travelling || a.legion != nil || group.contains(where: { $0 === a }) { continue }
             add(a)
-            if let p = agents[a.partner] { add(p) }
-            for cid in a.children { if let c = agents[cid], c.age(now) < 14 { add(c) } }
+            // family goes along only if they live in this town and are free to leave
+            if let p = agents[a.partner], p.sid == s.id, p.legion == nil, !p.travelling { add(p) }
+            for cid in a.children { if let c = agents[cid], c.age(now) < 14, c.sid == s.id, c.legion == nil { add(c) } }
         }
         if group.count < 5 { return }
         let ns = foundSettlement(site)
@@ -794,10 +795,7 @@ public final class Society {
         s.food -= food; s.wood -= wood
         ns.food = food + Double(group.count) * 3; ns.wood = wood + 10
         for a in group {
-            leaveHome(a, s)
-            s.members.removeAll { $0 == a.id }
-            ns.members.append(a.id)
-            a.sid = ns.id
+            move(a, to: ns)
             a.task = nil; a.path = []
             a.travelling = true
             a.travelTo = world.findFree(near: site + TilePos(rng.int(-4, 4), rng.int(2, 5)), maxR: 6).center

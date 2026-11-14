@@ -257,6 +257,7 @@ extension Society {
         let dir = old.world.directory
         for s in old.settlements.values where !s.abandoned { old.detach(s) }
         old.world.wipe()
+        old.underworld().wipe()                  // the underground of the old world goes with it
         let w = OpenWorld(seed: plan.newSeed, budget: old.world.budget)
         w.diskLimitBytes = old.world.diskLimitBytes
         w.gen.tempBias = old.world.gen.tempBias; w.gen.moistBias = old.world.gen.moistBias; w.gen.elevBias = old.world.gen.elevBias
@@ -328,6 +329,9 @@ public final class LawRun {
                 let had = s.world.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || s.world.loaded(c.cx, c.cy)
                 s.world.revertChunk(c.cx, c.cy)
                 if had { result.chunks += 1 }
+                // the land returns to nature all the way down: mines, ruins dug out and stairs under it go too
+                if plan.mode == .guixu { let u = s.underworld(); if u.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || u.loaded(c.cx, c.cy) { u.revertChunk(c.cx, c.cy); result.chunks += 1 } }
+                s.pressed = s.pressed.filter { $0.x >> 5 != c.cx || $0.y >> 5 != c.cy }
                 i += 1; left -= 2; doneItems += 1
             case 5:     // history
                 let n = min(plan.logLines, s.log.count)
@@ -390,6 +394,8 @@ public final class LawRun {
         result.refsFixed = s.repairReferences()
         if plan.mode == .thanos { s.realm.immigrationHold = s.world.time + plan.options.thanosHold * MP.year }
         s.realm.depots.removeAll { s.world.tile(2, $0.x, $0.y) != s.content.tid("crate") }
+        // anyone left standing inside something solid is moved to free ground
+        for a in s.agents.values where s.world.blocked(a.pos.tile.x, a.pos.tile.y) && a.legion == nil { a.pos = s.world.findFree(near: a.pos.tile, maxR: 8).center; a.task = nil; a.path = [] }
         if s.agents.isEmpty { s.restart(); result.restart = true }
         else { s.landCheck(); s.refreshNations() }
         result.bytesAfter = s.world.diskBytes

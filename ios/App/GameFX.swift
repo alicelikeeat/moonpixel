@@ -6,7 +6,7 @@ import MoonPixelCore
 extension GameScene {
     // MARK: building blocks
     func fx(_ node: SKNode, _ actions: [SKAction], on parent: SKNode? = nil) {
-        if effects >= GameScene.maxEffects { return }
+        if effects >= effectBudget { return }
         effects += 1
         (parent ?? self).addChild(node)
         node.run(.sequence(actions + [.run { [weak self] in self?.effects -= 1 }, .removeFromParent()]))
@@ -262,16 +262,18 @@ extension GameScene {
         switch e.kind {
         case "lightning": lightning(from: CGPoint(x: p.x + 30, y: p.y + 420), to: p, forks: 3); skyFlash(0.4)
         case "firework": firework(at: p)
+        case "volley", "charge", "rout", "breach": warFX(e)
         default: break
         }
     }
 
     // MARK: animals
     func updateAnimals(_ society: Society) {
+        if model?.depth ?? 0 > 0 { for n in animalNodes.values { n.removeFromParent() }; animalNodes = [:]; return }
         var seen = Set<Int>()
         let frame = Int(CACurrentMediaTime() * 5)
         for a in society.realm.fauna.animals {
-            if abs(a.pos.x - player.x) > 700 || abs(a.pos.y - player.y) > 460 { continue }
+            if abs(a.pos.x - viewPos.x) > 700 / Double(min(1, zoom)) || abs(a.pos.y - viewPos.y) > 460 / Double(min(1, zoom)) { continue }
             seen.insert(a.id)
             let node = animalNodes[a.id] ?? {
                 let n = SKSpriteNode()
