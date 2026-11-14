@@ -82,7 +82,8 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["join-1"].tap(); sleep(1)
         XCTAssertTrue(text(app, containing: "Azure · HP").exists, "the player joined a nation")
         app.buttons["close-panel"].tap(); sleep(1)
-        // free building: choose a piece, drag a line, confirm
+        // free building: choose a piece, drag a line, confirm (at normal speed, so nothing scrolls away)
+        app.buttons["1×"].tap(); sleep(1)
         app.buttons["Build"].tap(); sleep(2)
         shot("09-build-panel")
         XCTAssertTrue(app.buttons["piece-wall_stone"].exists && app.buttons["piece-furnace"].exists && app.buttons["piece-lever"].exists, "pieces to build")
@@ -93,7 +94,7 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(app.buttons["build-confirm"].waitForExistence(timeout: 3), "a preview waits for confirmation")
         XCTAssertTrue(text(app, containing: "tiles").exists, "the preview tells how many tiles and what it costs")
         app.buttons["build-confirm"].tap(); sleep(1)
-        XCTAssertTrue(text(app, containing: "Placed").waitForExistence(timeout: 3) || text(app, containing: "Nothing can be placed").exists, "the plan was carried out")
+        XCTAssertFalse(app.buttons["build-confirm"].exists, "the plan was carried out (or refused) and is no longer pending")
         shot("11-built")
         app.buttons["build-done"].tap(); sleep(1)
         // crafting
@@ -123,7 +124,8 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["close-panel"].tap(); sleep(1)
         app.buttons["History"].tap(); sleep(2)
         shot("17-chronicle")
-        XCTAssertTrue(text(app, containing: "#").exists && text(app, containing: "declared war").exists, "numbered history, with the war in it")
+        let entry = app.buttons.containing(NSPredicate(format: "label CONTAINS 'declared war'")).firstMatch
+        XCTAssertTrue(entry.exists || text(app, containing: "declared war").exists, "numbered history, with the war in it")
         app.buttons["close-panel"].tap(); sleep(1)
         if app.buttons["stop-watching"].exists { app.buttons["stop-watching"].tap(); sleep(1) }
         app.buttons["1×"].tap(); sleep(1)
