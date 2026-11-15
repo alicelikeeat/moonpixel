@@ -1,9 +1,9 @@
 # MoonPixel
 
-iOS 原生的 2D 像素开放世界：自主 NPC 社会、三国轮回、无限地图、离线运行，MIT 开源。
+iOS 原生的像素开放世界（2D 与 3D 两种视角）：自主 NPC 社会、三国轮回、无限地图、离线运行，MIT 开源。
 *A native iOS pixel world where three nations of autonomous villagers rise, fight, unite and break apart again.*
 
-技术栈只有一套：**Swift 核心逻辑（`MoonPixelCore`）+ SpriteKit 渲染 + SwiftUI 界面**。iOS 26 使用系统 Liquid Glass，更低版本回退为毛玻璃材质。
+技术栈只有一套：**Swift 核心逻辑（`MoonPixelCore`）+ SpriteKit（2D）/ RealityKit（3D）渲染 + SwiftUI 界面**。iOS 26 使用系统 Liquid Glass，更低版本回退为毛玻璃材质。
 
 ## 构建与测试
 
@@ -22,12 +22,14 @@ brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 
 | 路径 | 内容 |
 | --- | --- |
 | `ios/Sources/MoonPixelCore` | 纯 Swift 逻辑：分代提交的存档（`Store.swift`）、帧时间工具（`Frame.swift`）、大战绘制与阵亡账本（`Battle.swift`）、玩家贡献（`Contrib.swift`）、世界与地下层（`World.swift`）、NPC 社会、三国（`Realm.swift`）、战役（`War.swift`）、城市与首都（`Cities.swift`）、建造与机关（`Build.swift`）、生产（`Economy.swift`）、玩家行动、世界法则与容量策略（`Laws.swift`）、像素美术与照片处理 |
-| `ios/App` | SpriteKit 场景与 SwiftUI 界面 |
+| `ios/App` | SpriteKit 场景、RealityKit 3D 视角（`Solid3D.swift`）与 SwiftUI 界面 |
 | `ios/Tests`、`ios/UITests` | 核心测试与模拟器界面测试 |
 | `content/` + `tools/gen_swift_content.py` | 地块与群系数据（JSON），生成 `ContentData.swift` |
 | `docs/` | [迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、多种子运行记录（[v1.6](docs/runs/seeds-v1.6.txt)、[v1.3](docs/runs/seeds-v1.3.txt)） |
 
 ## 功能
+
+- **3D 视角**：“更多 → 3D 视角”把同一个正在运行的世界改用 RealityKit 画成立体的：地形按生成器的海拔分级起伏，每种地块都有自己的立体形状，人物、动物、屋顶、军旗都是模型；拖动旋转镜头、捏合缩放、摇杆按镜头方向行走。模拟、存档和 2D 视角完全不变，随时可以切回。网格由核心里的 `Solid.swift` 生成（不依赖任何图形框架，在 Linux 上测试），`tools/preview3d.py` 可以不用苹果设备把网格画成图片。局限见 [docs/TESTING.md](docs/TESTING.md)。
 
 - **自主 NPC 社会**：村民按饥饿、精力、社交和职业自己决定做什么；采集、建造、成家、生育、衰老、死亡；每户一栋房；自动研究科技直到人工智能。
 - **三国轮回**：世界始终有三个国家，各有领土、居民、城镇、资源、军队、科技、领袖和国家认同。

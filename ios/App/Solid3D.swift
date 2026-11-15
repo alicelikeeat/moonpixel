@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import RealityKit
 import Metal
+import simd
 import Combine
 import SpriteKit
 import MoonPixelCore
@@ -655,10 +656,10 @@ final class SolidRenderer {
         while rainAcc >= 1 && particles.count < 200 {
             rainAcc -= 1
             let e = cube(c, size: 1)
-            e.scale = fall == 1 ? [0.03, 0.5, 0.03] : [0.07, 0.07, 0.07]
+            e.scale = fall == 1 ? SIMD3<Float>(0.03, 0.5, 0.03) : SIMD3<Float>(0.07, 0.07, 0.07)
             let r = distance * 0.9
             e.position = target + SIMD3<Float>(Float.random(in: -r...r), Float.random(in: 5...9), Float.random(in: -r...r))
-            particles.append(Particle(entity: e, v: SIMD3(fall == 1 ? -1 : Float.random(in: -0.6...0.6), fall == 1 ? -14 : -2.5, 0), life: fall == 1 ? 0.6 : 2.6, age: -1, gravity: 0, to: nil, onEnd: nil))
+            particles.append(Particle(entity: e, v: SIMD3<Float>(fall == 1 ? -1 : Float.random(in: -0.6...0.6), fall == 1 ? -14 : -2.5, 0), life: fall == 1 ? 0.6 : 2.6, age: -1, gravity: 0, to: nil, onEnd: nil))
         }
         if rainAcc > 4 { rainAcc = 0 }
     }
