@@ -74,6 +74,8 @@ final class GameModel: ObservableObject {
     @Published var perfLines: [String] = []
     /// `--perf-log N`: write a diagnostics reading to Documents/perf.json every N seconds (simulator runs in CI).
     var perfLogEvery = 0.0
+    /// `--plain-render`: draw without the v1.6 roofs, gate crests and soldier view (same-machine A/B measurements)
+    var plainRender = false
     private var perfLogAcc = 0.0
     @Published var mapPick: TilePos?
     @Published var mapZoom = 1.0
@@ -210,6 +212,7 @@ final class GameModel: ObservableObject {
         if let i = args.firstIndex(of: "--fail-exit-saves"), i + 1 < args.count { failExitSaves = Int(args[i + 1]) ?? 0 }
         if let i = args.firstIndex(of: "--perf-log"), i + 1 < args.count { perfLogEvery = Double(args[i + 1]) ?? 0 }
         if args.contains("--perf") { showPerf = true }
+        if args.contains("--plain-render") { plainRender = true }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
         start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)

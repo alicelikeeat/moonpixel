@@ -208,8 +208,10 @@ final class GameScene: SKScene {
         layoutJoystick()
         model.perf.time("chunks") { updateChunks(world, model) }
         model.perf.time("actors") { updateActors(world, society, model) }
-        model.perf.time("soldiers") { updateSoldiers(society, model) }
-        model.perf.time("roofs") { updateRoofs(society, model) }
+        if !model.plainRender {
+            model.perf.time("soldiers") { updateSoldiers(society, model) }
+            model.perf.time("roofs") { updateRoofs(society, model) }
+        }
 
         hudAcc += dt
         if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }
@@ -330,7 +332,7 @@ final class GameScene: SKScene {
         var seen = Set<Int>()
         // at most 50 characters on screen; everyone else becomes a number on their building
         // nobody from the surface is drawn underground
-        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters, soldiersApart: true)
+        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters, soldiersApart: !model.plainRender)
         updateBadges(split.badges)
         for a in split.shown {
             seen.insert(a.id)
