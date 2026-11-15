@@ -25,6 +25,7 @@ struct Solid3DView: UIViewRepresentable {
     static func dismantleUIView(_ v: SolidInputView, coordinator: ()) { v.renderer.stop() }
 }
 
+@MainActor
 final class SolidRenderer {
     let view: ARView
     weak var model: GameModel?
@@ -90,7 +91,10 @@ final class SolidRenderer {
         playerRing.model = model3D(key: "ring-player") { Figure3D.plate(color: RGBA(hex: "#7fe6ff"), w: 0.9, d: 0.9, h: 0.04) }
         selectRing.model = model3D(key: "ring-select") { Figure3D.plate(color: RGBA(hex: "#fff266"), w: 1.0, d: 1.0, h: 0.05) }
         selectRing.isEnabled = false
-        update = view.scene.subscribe(to: SceneEvents.Update.self) { [weak self] e in self?.frame(Float(e.deltaTime)) }
+        update = view.scene.subscribe(to: SceneEvents.Update.self) { [weak self] e in
+            let dt = Float(e.deltaTime)
+            MainActor.assumeIsolated { self?.frame(dt) }           // RealityKit calls this on the main thread
+        }
     }
 
     func stop() {
