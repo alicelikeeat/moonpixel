@@ -41,7 +41,9 @@ final class SolidRenderer {
     private var distance: Float = 12
 
     // chunks
-    private struct ChunkEntry { var entity: ModelEntity; var key: BakeKey; var heights: [Float]; var ground: TextureResource; var props: [Entity] }
+    private struct ChunkEntry { var entity: ModelEntity; var key: BakeKey; var heights: [Float]; var ground: TextureResource; var groundHash: UInt64; var builtAt: Double; var props: [Entity] }
+    /// When a chunk already on screen was last sent to be re-meshed (see `updateChunks`).
+    private var lastRefresh = 0.0
     private var chunks: [Int64: ChunkEntry] = [:]
     private let queue = BakeQueue(maxInFlight: 2)
     private let work = DispatchQueue(label: "moonpixel.mesh", qos: .userInitiated, attributes: .concurrent)
@@ -240,26 +242,40 @@ final class SolidRenderer {
         let r = min(3, Int(distance * 1.3 / 32) + 1)
         let ccx = Int((target.x / 32).rounded(.down)), ccy = Int((target.z / 32).rounded(.down))
         let wid = model.epoch, ep = world.mapEpoch, depth = model.depth
+        let now = CACurrentMediaTime()
         var visible = Set<Int64>()
         for cy in (ccy - r)...(ccy + r) { for cx in (ccx - r)...(ccx + r) {
             let k = MP.chunkKey(cx, cy)
             visible.insert(k)
             let key = BakeKey(world: wid, epoch: ep, depth: depth, chunk: k, revision: world.revision(cx, cy))
             if chunks[k]?.key == key { continue }
+            // a chunk that is already drawn and has changed (crops grow, walls go up; at 64x this is
+            // constant) is re-meshed at most every two seconds, so the picture never starves the game
+            if let shown = chunks[k], now - shown.builtAt < 2 { continue }
             let dx = Float(cx * 32 + 16) - target.x, dz = Float(cy * 32 + 16) - target.z
-            queue.want(key, priority: Double(dx * dx + dz * dz))
+            queue.want(key, priority: Double(dx * dx + dz * dz) + (chunks[k] != nil ? 1e6 : 0))      // missing chunks first
         } }
         queue.drop { !visible.contains($0.chunk) || $0.world != wid || $0.epoch != ep || $0.depth != depth }
         for key in queue.next() {
+            // refreshes of chunks already on screen are also spaced out as a whole: four a second at most
+            let had = chunks[key.chunk]
+            if had != nil {
+                if now - lastRefresh < 0.25 { _ = queue.finished(key, current: nil); continue }
+                lastRefresh = now
+            }
             // the snapshot is taken here, on the main thread; the mesh and the ground picture are made elsewhere
             let input = ChunkInput3D(world: world, cx: MP.keyCX(key.chunk), cy: MP.keyCY(key.chunk))
             let gen = world.gen
+            let oldHash = had?.groundHash
             work.async { [weak self] in
                 let t0 = CACurrentMediaTime()
                 let mesh = Mesher3D.build(input, gen: gen)
-                let cg = PixelArt.bakeGround(layers: input.layers).cgImage
+                // the ground picture only depends on the two flat layers: when they are the same, the old texture stays
+                var hash: UInt64 = 1469598103934665603
+                for l in 0..<2 { for v in input.layers[l] { hash = (hash ^ UInt64(v)) &* 1099511628211 } }
+                let cg = hash == oldHash ? nil : PixelArt.bakeGround(layers: input.layers).cgImage
                 let took = CACurrentMediaTime() - t0
-                DispatchQueue.main.async { self?.built(key, mesh, cg, took) }
+                DispatchQueue.main.async { self?.built(key, mesh, cg, hash, took) }
             }
         }
         for (k, e) in chunks {
@@ -272,19 +288,23 @@ final class SolidRenderer {
         }
     }
 
-    private func built(_ key: BakeKey, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ took: Double) {
+    private func built(_ key: BakeKey, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ groundHash: UInt64, _ took: Double) {
         guard let model = model, model.world != nil, model.render3D else { _ = queue.finished(key, current: nil); return }
         let world = model.activeWorld
         let cx = MP.keyCX(key.chunk), cy = MP.keyCY(key.chunk)
         let current = BakeKey(world: model.epoch, epoch: world.mapEpoch, depth: model.depth, chunk: key.chunk, revision: world.revision(cx, cy))
-        guard queue.finished(key, current: current), let cg = cg else { return }
+        // a result for an older revision is still better than what is shown, unless the place itself changed
+        let fits = key.world == current.world && key.epoch == current.epoch && key.depth == current.depth
+        _ = queue.finished(key, current: current)
+        guard fits else { return }
         model.perf.phase("mesh", took)
         let t0 = CACurrentMediaTime()
-        guard let tex = try? TextureResource.generate(from: cg, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)) else { return }
+        let old = chunks[key.chunk]
+        let made = cg.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)) }
+        guard let tex = made ?? (old?.groundHash == groundHash ? old?.ground : nil) else { return }
         var parts = [descriptor(mesh.ground, material: 0)]
         if !mesh.solid.isEmpty { parts.append(descriptor(mesh.solid, material: 1)) }
         guard let res = try? MeshResource.generate(from: parts) else { return }
-        let old = chunks[key.chunk]
         let entity = old?.entity ?? {
             let e = ModelEntity()
             e.name = "chunk"
@@ -296,7 +316,7 @@ final class SolidRenderer {
             for p in old.props { p.removeFromParent() }
             billboards.removeAll { b in old.props.contains { $0 === b } }
         }
-        var entry = ChunkEntry(entity: entity, key: key, heights: mesh.heights, ground: tex, props: [])
+        var entry = ChunkEntry(entity: entity, key: key, heights: mesh.heights, ground: tex, groundHash: groundHash, builtAt: CACurrentMediaTime(), props: [])
         entity.model = ModelComponent(mesh: res, materials: mesh.solid.isEmpty ? [material(tex)] : [material(tex), solidMaterial])
         // imported pictures placed in the world stand upright and turn to the camera
         for p in world.chunk(cx, cy).props {
