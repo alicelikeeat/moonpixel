@@ -53,7 +53,7 @@ extension GameModel {
             return
         }
         // injected failures for the UI test (`--fail-saves N`): the next N commits fail at the manifest
-        if failSaves > 0 { failSaves -= 1; st.failAt = [.manifestWrite] } else { st.failAt = [] }
+        if failSaves > 0 || failNextSave { if failNextSave { failNextSave = false } else { failSaves -= 1 }; st.failAt = [.manifestWrite] } else { st.failAt = [] }
         let batch = st.beginCommit(index: ixData, meta: metaData)
         let prepared = CACurrentMediaTime() - t0
         let dir = saveDir
@@ -113,6 +113,7 @@ extension GameModel {
     func exitToMenu() {
         if exitRequested { return }
         exitRequested = true
+        if failExitSaves > 0 { failExitSaves -= 1; failNextSave = true }      // test hook: the save for this exit fails
         save(announce: false) { [weak self] ok, message in
             guard let self = self else { return }
             self.exitRequested = false

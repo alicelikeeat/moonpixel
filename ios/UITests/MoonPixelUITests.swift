@@ -50,6 +50,8 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["64×"].tap(); sleep(8)
         shot("05-fast")
         // cheats unlock every power; the arsenal lists five schools; a storm is called
+        // (at 1x, so the storm is still there when it is checked: at 64x it can pass within a second)
+        if app.buttons["1×"].exists { app.buttons["1×"].tap(); sleep(1) }
         more(app, "Cheats"); sleep(1)
         app.buttons["cheat-rich"].tap(); app.buttons["cheat-powers"].tap(); app.buttons["weather-3"].tap(); app.buttons["cheat-animals"].tap(); sleep(1)
         shot("05f-cheats")
@@ -166,7 +168,7 @@ final class MoonPixelUITests: XCTestCase {
     func testFailedSaveBlocksLeavingAndRetryLeaves() {
         continueAfterFailure = true
         let app = XCUIApplication()
-        app.launchArguments = ["--autostart", "7", "--fail-saves", "2"]     // the first two commits fail
+        app.launchArguments = ["--autostart", "7", "--fail-exit-saves", "1"]     // the save made for leaving fails once; the retry succeeds
         app.launch()
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "in the world")
         sleep(3)

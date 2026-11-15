@@ -13,19 +13,19 @@ swift test -c release -Xswiftc -enable-testing     # 核心逻辑测试，Linux 
 brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 macOS）
 ```
 
-每次推送由 GitHub Actions（`.github/workflows/ios.yml`）运行核心测试、编译真机版本、打出**未签名 ipa** 并发布到
-[Releases](https://github.com/alicelikeeat/moonpixel/releases)，随后在 iOS 模拟器里启动、截图并运行界面测试，截图附在同一个 Release 下。
-未签名 ipa 需要自行签名后才能安装。
+每次推送由 GitHub Actions（`.github/workflows/ios.yml`）依次运行核心测试、真机编译（打出**未签名 ipa**）和模拟器界面测试，三者都通过才发布到
+[Releases](https://github.com/alicelikeeat/moonpixel/releases)。之后由不阻塞发布的任务在模拟器里截图、录像、记录帧时间（含 50/100/200/400 人压力战斗），附在同一个 Release 下。
+30 种子 × 50 年的长跑在单独的 `.github/workflows/seeds.yml` 里运行。未签名 ipa 需要自行签名后才能安装。
 
 ## 目录
 
 | 路径 | 内容 |
 | --- | --- |
-| `ios/Sources/MoonPixelCore` | 纯 Swift 逻辑：世界与地下层（`World.swift`）、NPC 社会、三国（`Realm.swift`）、战役（`War.swift`）、城市与首都（`Cities.swift`）、建造与机关（`Build.swift`）、生产（`Economy.swift`）、玩家行动、世界法则与容量策略（`Laws.swift`）、像素美术与照片处理 |
+| `ios/Sources/MoonPixelCore` | 纯 Swift 逻辑：分代提交的存档（`Store.swift`）、帧时间工具（`Frame.swift`）、大战绘制与阵亡账本（`Battle.swift`）、玩家贡献（`Contrib.swift`）、世界与地下层（`World.swift`）、NPC 社会、三国（`Realm.swift`）、战役（`War.swift`）、城市与首都（`Cities.swift`）、建造与机关（`Build.swift`）、生产（`Economy.swift`）、玩家行动、世界法则与容量策略（`Laws.swift`）、像素美术与照片处理 |
 | `ios/App` | SpriteKit 场景与 SwiftUI 界面 |
 | `ios/Tests`、`ios/UITests` | 核心测试与模拟器界面测试 |
 | `content/` + `tools/gen_swift_content.py` | 地块与群系数据（JSON），生成 `ContentData.swift` |
-| `docs/` | [迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、[多种子运行记录](docs/runs/seeds-v1.3.txt) |
+| `docs/` | [迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、多种子运行记录（[v1.6](docs/runs/seeds-v1.6.txt)、[v1.3](docs/runs/seeds-v1.3.txt)） |
 
 ## 功能
 
@@ -48,6 +48,11 @@ brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 
 - **城市与首都**（1.3）：首都、军事重镇、工业城市、农业城市、商贸城市，由城中实际建成的地标决定；王宫、要塞、军营、瞭望塔、粮仓、风车、市场都有实际作用。每国只有一座首都，失守后迁都、流亡时无首都、统一后为帝国首都、分裂后按控制与认同重新定都。玩家建的区域满足条件可登记为城市，并可申请为首都。三国建筑用不同的墙体材料，旗帜随归属更换。
 - **大型战争**（1.3）：集结（从真实人口征兵、从真实库存领军粮）→ 沿道路桥梁行军 → 野战或围城 → 攻城器械破墙 → 强攻 → 占领广场 → 停战与重建。步兵、远程兵、骑兵、攻城单位、补给车队各有作用；士气受伤亡、饥饿和主将阵亡影响，会动摇和溃退。可观战、跟随军团、点击战报定位。
 - **纪事**（1.3）：所有事件带递增编号、时间、国家、城市、位置、起因和结果；地点消失后仍可阅读。
+- **可靠存档**（v1.6）：一次保存是一代，区块、地下层、索引一起提交，任何一步失败或中途被杀都只会看到完整的旧档或完整的新档；损坏时自动回到最近完整的一次；退出世界时保存失败会留在原地，可重试。
+- **帧时间**（v1.6）：固定模拟步长、城镇重任务分摊、后台生成区块位图、按字节计的纹理缓存；“更多 → 性能”显示帧时间分位数、各阶段耗时、节点、纹理、内存和实际速度。
+- **行军与大战**（v1.6）：军队只走合法地面，深水要桥、城墙要攻；桥、门、墙一变路线自动重算。同屏按 50/100/200/400 档绘制真实士兵，前线优先，其余在军旗旁计数；阵亡由唯一的账本记录，观战与否结果完全相同。
+- **城市与国家外观**（v1.6）：按城市类型布局；三国的旗帜纹章、屋顶、城门徽记各不相同；攻占先换旗。
+- **玩家贡献**（v1.6）：修桥恢复通路、送粮解除饥荒、护送或截击车队、收复旧都、接纳难民，按真实前后变化记入纪事，同一件事只记一次。
 - **多世界**、**一句话创建世界**、**照片 / GIF / 视频生成像素角色**（Apple Vision 本机识别）、**素材导入**、**内存预算与一键清理**。
 
 哪些内容经过了验证、哪些没有，见 [docs/TESTING.md](docs/TESTING.md)。目前只在 CI 的 iOS 模拟器里运行过，没有真机验证。

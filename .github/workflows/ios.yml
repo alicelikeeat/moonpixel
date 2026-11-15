@@ -116,6 +116,7 @@ jobs:
           for t in json.load(open('uishots/manifest.json')):
               for a in t.get('attachments', []):
                   name = a.get('suggestedHumanReadableName','x').split('_')[0].split('.')[0]
+                  name = ''.join(ch if ch.isalnum() or ch in '-' else '-' for ch in name)[:60]
                   shutil.copy('uishots/' + a['exportedFileName'], 'ui-' + name + '.png')
           " 2>/dev/null; ls ui-*.png 2>/dev/null
           exit $rc
