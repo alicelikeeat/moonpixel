@@ -42,10 +42,10 @@ final class SeedRunTests: XCTestCase {
             let c = s.realm.counts
             let landed = s.realm.nations.filter { $0.exileSince == nil }.count
             let caps = s.realm.nations.filter { s.capital(of: $0.id) != nil }.count
-            let line = String(format: "seed=%d years=%d wars=%d truces=%d unify=%d split=%d captures=%d defect=%d battleDead=%d pop10y=%@ towns10y=%@ landed=%d capitals=%d era=%d longestUnity=%.1f minTruceToWar=%.1f empty=%d audit=%d tech=%@ secs=%.0f",
+            let line = String(format: "seed=%d years=%d wars=%d truces=%d unify=%d split=%d captures=%d defect=%d battleDead=%d pop10y=%@ towns10y=%@ landed=%d capitals=%d era=%d longestUnity=%.1f minTruceToWar=%.1f empty=%d audit=%d tech=%@ ledger=%d contrib=%d heavyDeferred=%d secs=%.0f",
                               seed, years, c.wars, c.truces, c.unifications, c.splits, c.captures, c.defections, s.stats.battle ?? 0,
                               pops.map(String.init).joined(separator: "/"), towns.map(String.init).joined(separator: "/"), landed, caps, s.realm.era, longestUnity, minGap,
-                              emptyYears, auditFails, s.realm.nations.map { String($0.techCount) }.joined(separator: "/"), Date().timeIntervalSince(started))
+                              emptyYears, auditFails, s.realm.nations.map { String($0.techCount) }.joined(separator: "/"), s.realm.ledger.total, s.realm.contrib.list.count, s.heavyDeferred, Date().timeIntervalSince(started))
             print("SEEDRUN " + line)
             if let o = out {
                 if let h = try? FileHandle(forWritingTo: o) { h.seekToEndOfFile(); h.write((line + "\n").data(using: .utf8)!); try? h.close() }
@@ -54,6 +54,7 @@ final class SeedRunTests: XCTestCase {
             XCTAssertLessThanOrEqual(longestUnity, s.realm.cfg.unityMax + 0.5, "seed \(seed): unity never locks")
             if minGap < 999 { XCTAssertGreaterThanOrEqual(minGap, s.realm.cfg.minTruce + s.realm.cfg.peaceCooldown - 0.1, "seed \(seed): no war right after a truce") }
             XCTAssertEqual(auditFails, 0, "seed \(seed): references stay whole")
+            XCTAssertEqual(s.realm.ledger.total, s.stats.battle ?? 0, "seed \(seed): every battle death is in the casualty ledger exactly once")
         }
     }
 }

@@ -54,5 +54,27 @@ law = ["", "## 世界法则与容量策略", "", "`LawOptions`（`Laws.swift`）
        "| `mode` | cacheFirst | 缓存优先（不删除）/ 自动湮灭 / 区域轮回 |", "| `high` / `low` | 0.85 / 0.70 | 超过上限的 85% 开始自动执行，目标降到 70% |",
        "| `cooldown` | 300 | 两次自动执行之间的现实秒数 |"]
 out += law
+# frame time, drawing budgets and bookkeeping limits (read from the sources so this table cannot drift)
+def grab(path, pattern, default="?"):
+    m = re.search(pattern, open(os.path.join(root, path)).read())
+    return m.group(1) if m else default
+fr = "ios/Sources/MoonPixelCore/Frame.swift"; bt = "ios/Sources/MoonPixelCore/Battle.swift"; gs = "ios/App/GameScene.swift"; ct = "ios/Sources/MoonPixelCore/Contrib.swift"; wa = "ios/Sources/MoonPixelCore/War.swift"; so = "ios/Sources/MoonPixelCore/Society.swift"
+out += ["", "## 帧时间、绘制预算与记录上限", "", "这些不随存档保存，属于引擎常量。", "", "| 参数 | 值 | 位置 | 说明 |", "| --- | --- | --- | --- |",
+        "| `GameScene.simSteps` | %s | `App/GameScene.swift` | 每档速度（暂停、1×、4×、16×、64×）的固定模拟步长（游戏秒）；同一档速度永远是同样的步长 |" % grab(gs, r"static let simSteps: \[Double\] = (\[[^\]]*\])"),
+        "| 积压上限 | 步长 × 8 | `App/GameScene.swift` | 超过的游戏时间被丢弃并计入“丢弃”，界面显示实际速度 |",
+        "| 每帧模拟时间片 | %s 秒 | `App/GameScene.swift` | 一帧内用于模拟的最长现实时间 |" % grab(gs, r"let budgetEnd = CACurrentMediaTime\(\) \+ ([\d.]+)"),
+        "| 城镇规划 / 资源扫描每步上限 | max(2, ⌈dt·城镇数/6·1.5⌉) / max(1, ⌈dt·城镇数/25·1.5⌉) | `Society.tick` | 同时到期的重任务分到后续几步，最久未做的优先；上限高于平均需求 |",
+        "| 后台烘焙并发 | %s | `App/GameScene.swift` | 同时在后台生成的区块位图数 |" % grab(gs, r"BakeQueue\(maxInFlight: (\d+)\)"),
+        "| 区块纹理缓存 | %s 字节 | `App/GameScene.swift` | 按字节计的 LRU；屏幕上的永不淘汰；内存警告时清到只剩屏幕上的 |" % grab(gs, r"ByteLRU<BakeKey, SKTexture>\(budget: ([^)]+)\)"),
+        "| 空间索引格子 | %s 像素 | `Frame.swift` | 屏幕内人物查询只看视野下的格子；每个模拟步最多重建一次 |" % grab(fr, r"static let cell = ([\d.]+)"),
+        "| 士兵绘制档位 | %s | `Battle.swift` | 由实测 p95 帧时间选择 |" % grab(bt, r"static let tiers = (\[[^\]]*\])"),
+        "| 特效档位 | %s | `Battle.swift` | 先降特效，后降士兵数 |" % grab(bt, r"static let effects = (\[[^\]]*\])"),
+        "| 降档 / 升档阈值 | p95 > %s ms 持续 %s 秒 / p95 < %s ms 持续 %s 秒 | `Battle.swift` | 降得快、升得慢，不闪烁 |" % (grab(bt, r"public var slow = ([\d.]+)"), grab(bt, r"public var downAfter = ([\d.]+)"), grab(bt, r"fast = ([\d.]+)"), grab(bt, r"upAfter = ([\d.]+)")),
+        "| 细节层级 | 远 < 0.8 ≤ 中 < 1.6 ≤ 近（缩放） | `Battle.swift` | 远：只有军旗与人数；中：士兵身形；近：加马、小旗和交战动作 |",
+        "| 阵亡账本保留战斗数 | %s | `Battle.swift` | 总数与各国合计不受此限 |" % grab(bt, r"static let keep = (\d+)"),
+        "| 玩家贡献保留条数 | %s | `Contrib.swift` | 去重键全部保留 |" % grab(ct, r"static let keep = (\d+)"),
+        "| 行军寻路预算 | %s 次扩展 | `War.swift` | 用尽时返回“部分”路线，不是“不可达” |" % grab(wa, r"budget: Int = ([\d_]+)").replace("_", ""),
+        "| 道路代价 / 最小步价 | %s | `War.swift` | 启发函数按最便宜地面计算，保持可采纳 |" % grab(wa, r"static let minStep: Float = ([\d.]+)"),
+        ]
 open(os.path.join(root, "docs/PARAMETERS.md"), "w").write("\n".join(out) + "\n")
 print("%d settings, %d events" % (len(rows), len(ev)))

@@ -1,6 +1,16 @@
 name: iOS unsigned IPA
 # Native Swift app (SpriteKit + SwiftUI Liquid Glass). Builds an UNSIGNED .ipa:
 # sign it yourself (Xcode, AltStore, Sideloadly, ...) before installing.
+#
+# Blocking (a release is only published when all of these pass):
+#   core   - every MoonPixelCore test (swift test)
+#   build  - device build and unsigned IPA
+#   ui     - simulator build and the UI tests (a failed UI test fails the run)
+# Then:
+#   release - publishes the IPA as v1.N (N = last published + 1; failed runs take no number)
+# Auxiliary (never blocks, uploads to the release it belongs to):
+#   media  - screenshots, recordings and frame-time readings from the simulator (not a device)
+# Every job keeps its full log as an artifact, pass or fail.
 on:
   workflow_dispatch:
   push:
@@ -12,22 +22,39 @@ concurrency:
   group: ios-ipa-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  ipa:
+  core:
     runs-on: macos-latest
-    timeout-minutes: 70
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core tests
+        working-directory: ios
+        run: |
+          set -o pipefail
+          swift test -c release -Xswiftc -enable-testing > core-tests.log 2>&1; rc=$?
+          grep -E "error|failed|Executed|CYCLE|REPEAT|BENCH|STRESS" core-tests.log | cut -c1-300 | tail -60
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: log-core-tests, path: ios/core-tests.log }
+
+  build:
+    runs-on: macos-latest
+    needs: core
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: |
           xcodebuild -version
           brew install xcodegen
-      - name: Core tests
-        working-directory: ios
-        run: swift test -c release -Xswiftc -enable-testing 2>&1 | grep -E "error|failed|Executed|CYCLE|REPEAT|BENCH" | cut -c1-300 | tail -40; test ${PIPESTATUS[0]} -eq 0
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
       - name: Version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -35,6 +62,7 @@ jobs:
           LAST=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' | sed -n 's/^v1\.\([0-9][0-9]*\)$/\1/p' | sort -n | tail -1)
           NEXT=$(( ${LAST:-0} + 1 ))
           echo "MP_VERSION=1.$NEXT" >> "$GITHUB_ENV"
+          echo "version=1.$NEXT" >> "$GITHUB_OUTPUT"
           echo "version 1.$NEXT (last published v1.${LAST:-0})"
       - name: Build for device without code signing
         working-directory: ios
@@ -49,7 +77,6 @@ jobs:
         run: |
           APP=$(find build/dd/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           test -n "$APP"
-          ls -la "$APP" | head -12
           mkdir -p Payload && cp -R "$APP" Payload/
           zip -qry MoonPixel-${MP_VERSION}-unsigned.ipa Payload
           ls -la MoonPixel-${MP_VERSION}-unsigned.ipa
@@ -58,72 +85,28 @@ jobs:
           name: MoonPixel-unsigned-ipa
           path: ios/MoonPixel-${{ env.MP_VERSION }}-unsigned.ipa
           if-no-files-found: error
-      - name: Publish GitHub release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: log-device-build, path: ios/build.log }
+
+  ui:
+    runs-on: macos-latest
+    needs: core
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: brew install xcodegen
+      - name: Generate Xcode project
         working-directory: ios
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="v${MP_VERSION}"
-          gh release create "$TAG" MoonPixel-${MP_VERSION}-unsigned.ipa --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)" \
-            --notes "原生 Swift 版（SpriteKit + SwiftUI Liquid Glass）。未签名 ipa，需自行签名后安装。 Native Swift build, unsigned: sign it yourself before installing. Commit ${GITHUB_SHA}."
-      - name: Smoke test in the iOS Simulator
+        run: xcodegen generate
+      - name: Simulator build and UI tests (blocking)
         working-directory: ios
-        continue-on-error: true
-        timeout-minutes: 35
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set +e
-          xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO MARKETING_VERSION="${MP_VERSION}" build > simbuild.log 2>&1
-          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | cut -c1-300 | sort -u | head -20
-          APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
-          echo "device: $UDID app: $APP"
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
-          xcrun simctl install "$UDID" "$APP"
-          shot() { xcrun simctl io "$UDID" screenshot "$1" > /dev/null 2>&1; }
-          xcrun simctl launch "$UDID" org.moonpixel.game; sleep 14; shot sim-menu.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --select; sleep 30; shot sim-game.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --map; sleep 30; shot sim-map.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --test-photo; sleep 22; shot sim-photo.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --test-anim; sleep 26; shot sim-anim.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --realm; sleep 24; shot sim-realm.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --laws; sleep 24; shot sim-laws.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --powers; sleep 22; shot sim-powers.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --storm; sleep 13; shot sim-storm1.png; sleep 2; shot sim-storm2.png; sleep 2; shot sim-storm3.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          # recordings of building, cities and a war (simulator, not a device)
-          rec() { xcrun simctl io "$UDID" recordVideo --codec h264 --force "$1" > /dev/null 2>&1 & RPID=$!; sleep "$2"; kill -INT $RPID; wait $RPID 2>/dev/null; }
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-build; rec rec-build.mp4 42; shot sim-build.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-city; rec rec-city.mp4 16; shot sim-city.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-war; rec rec-war.mp4 60; shot sim-war.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          ls -la rec-*.mp4 || true
-          echo "===== the three nations' capitals (screenshots of the running game) ====="
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --tour-cities; sleep 54; shot sim-nation1.png; sleep 8; shot sim-nation2.png; sleep 8; shot sim-nation3.png
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          echo "===== frame-time diagnostics (simulator on a CI Mac, not a device) ====="
-          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-war --perf --perf-log 10; sleep 45; shot sim-perf.png
-          cp "$(xcrun simctl get_app_container "$UDID" org.moonpixel.game data)/Documents/perf.json" perf-sim.json 2>/dev/null || echo '{"missing":true}' > perf-sim.json
-          xcrun simctl terminate "$UDID" org.moonpixel.game
-          cat perf-sim.json
-          echo "===== UI test: tap the HUD buttons ====="
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
-            -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
+            -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
           grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -60 | tee ui-result.txt
           mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
           python3 -c "
@@ -133,8 +116,107 @@ jobs:
                   name = a.get('suggestedHumanReadableName','x').split('_')[0].split('.')[0]
                   shutil.copy('uishots/' + a['exportedFileName'], 'ui-' + name + '.png')
           " 2>/dev/null; ls ui-*.png 2>/dev/null
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-tests
+          path: |
+            ios/uitest.log
+            ios/ui-result.txt
+            ios/ui-*.png
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [core, build, ui]
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: MoonPixel-unsigned-ipa }
+      - uses: actions/download-artifact@v4
+        with: { name: ui-tests, path: ui }
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MP_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          TAG="v${MP_VERSION}"
+          gh release create "$TAG" MoonPixel-${MP_VERSION}-unsigned.ipa ui/ui-result.txt $(ls ui/ui-*.png 2>/dev/null) --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)" \
+            --notes "原生 Swift 版（SpriteKit + SwiftUI Liquid Glass）。未签名 ipa，需自行签名后安装。核心测试、真机构建与模拟器 UI 测试均通过后发布；截图、录像与帧时间数据来自模拟器，不是真机。 Native Swift build, unsigned: sign it yourself before installing. Published only after core tests, device build and simulator UI tests passed; screenshots, recordings and frame times come from the simulator, not a device. Commit ${GITHUB_SHA}."
+
+  media:
+    runs-on: macos-latest
+    needs: release
+    continue-on-error: true
+    timeout-minutes: 50
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MP_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: brew install xcodegen
+      - name: Screenshots, recordings and frame times (simulator)
+        working-directory: ios
+        run: |
+          set +e
+          xcodegen generate
+          xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO MARKETING_VERSION="${MP_VERSION}" build > simbuild.log 2>&1
+          echo "===== simulator build ====="; grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | cut -c1-300 | sort -u | head -20
+          APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')" 2> device.txt)
+          echo "device: $(cat device.txt) $UDID app: $APP"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
+          xcrun simctl install "$UDID" "$APP"
+          shot() { xcrun simctl io "$UDID" screenshot "$1" > /dev/null 2>&1; }
+          run() { xcrun simctl terminate "$UDID" org.moonpixel.game > /dev/null 2>&1; xcrun simctl launch "$UDID" org.moonpixel.game "$@"; }
+          run; sleep 14; shot sim-menu.png
+          run --autostart 7 --select; sleep 30; shot sim-game.png
+          run --autostart 7 --map; sleep 30; shot sim-map.png
+          run --autostart 7 --test-photo; sleep 22; shot sim-photo.png
+          run --autostart 7 --test-anim; sleep 26; shot sim-anim.png
+          run --autostart 7 --realm; sleep 24; shot sim-realm.png
+          run --autostart 7 --laws; sleep 24; shot sim-laws.png
+          run --autostart 7 --powers; sleep 22; shot sim-powers.png
+          run --autostart 7 --storm; sleep 13; shot sim-storm1.png; sleep 2; shot sim-storm2.png; sleep 2; shot sim-storm3.png
+          rec() { xcrun simctl io "$UDID" recordVideo --codec h264 --force "$1" > /dev/null 2>&1 & RPID=$!; sleep "$2"; kill -INT $RPID; wait $RPID 2>/dev/null; }
+          run --autostart 7 --demo-build; rec rec-build.mp4 42; shot sim-build.png
+          run --autostart 7 --demo-city; rec rec-city.mp4 16; shot sim-city.png
+          run --autostart 7 --demo-war; rec rec-war.mp4 60; shot sim-war.png
+          echo "===== the three nations' capitals (screenshots of the running game) ====="
+          run --autostart 7 --tour-cities; sleep 54; shot sim-nation1.png; sleep 8; shot sim-nation2.png; sleep 8; shot sim-nation3.png
+          echo "===== frame-time diagnostics (simulator on a CI Mac, not a device) ====="
+          DATA() { xcrun simctl get_app_container "$UDID" org.moonpixel.game data; }
+          run --autostart 7 --demo-war --perf --perf-log 10; sleep 45; shot sim-perf.png
+          cp "$(DATA)/Documents/perf.json" perf-sim.json 2>/dev/null || echo '{"missing":true}' > perf-sim.json
+          for n in 50 100 200 400; do
+            rm -f "$(DATA)/Documents/perf.json"
+            run --autostart 7 --stress-battle $n --perf --perf-log 10; sleep 40; shot sim-stress-$n.png
+            cp "$(DATA)/Documents/perf.json" perf-stress-$n.json 2>/dev/null || echo '{"missing":true}' > perf-stress-$n.json
+          done
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          python3 - <<'PY' | tee perf-summary.txt
+          import json, glob
+          for f in ["perf-sim.json"] + sorted(glob.glob("perf-stress-*.json"), key=lambda s: int(s.split("-")[2].split(".")[0])):
+              d = json.load(open(f))
+              if d.get("missing"): print(f, "missing"); continue
+              ph = d.get("phases", {})
+              print(f"{f}: {d['device']} p50 {d['p50']:.1f} p95 {d['p95']:.1f} p99 {d['p99']:.1f} ms, long {d['longFrames']}/{d['frames']}, "
+                    f"sim {ph.get('sim',0):.2f} soldiers {ph.get('soldiers',0):.2f} actors {ph.get('actors',0):.2f} ms, nodes {d['nodes']}, mem {d['memoryMB']} MB, speed {d['speedReal']:.1f}/{d['speedWanted']:.0f}")
+          PY
+          cat device.txt >> perf-summary.txt
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
-          TAG="v${MP_VERSION}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png sim-build.png sim-city.png sim-war.png sim-nation1.png sim-nation2.png sim-nation3.png sim-perf.png perf-sim.json rec-*.mp4 ui-result.txt ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "v${MP_VERSION}" sim-*.png perf-*.json perf-summary.txt rec-*.mp4 --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: media
+          path: |
+            ios/simbuild.log
+            ios/perf-*.json
+            ios/perf-summary.txt

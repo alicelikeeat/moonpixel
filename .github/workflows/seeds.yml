@@ -1,0 +1,55 @@
+name: Long-run seeds
+# 30 fixed seeds x 50 game years, no player. Auxiliary: never gates a release (the iOS workflow does).
+# Weekly and on demand; the per-seed lines are kept as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      seeds: { description: "seeds, e.g. 1-30 or 4,9", default: "1-30" }
+      years: { description: "game years per seed", default: "50" }
+  schedule:
+    - cron: "17 3 * * 0"
+permissions:
+  contents: read
+jobs:
+  seeds:
+    runs-on: macos-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tests
+        working-directory: ios
+        run: swift build -c release -Xswiftc -enable-testing --build-tests
+      - name: Run the seeds in parallel shards
+        working-directory: ios
+        env:
+          SEEDS: ${{ github.event.inputs.seeds || '1-30' }}
+          YEARS: ${{ github.event.inputs.years || '50' }}
+        run: |
+          set -o pipefail
+          python3 - "$SEEDS" > shards.txt <<'PY'
+          import sys
+          seeds = []
+          for p in sys.argv[1].split(","):
+              a = [int(x) for x in p.split("-")]
+              seeds += list(range(a[0], a[-1] + 1))
+          n = 4
+          for i in range(n):
+              part = seeds[i::n]
+              if part: print(",".join(map(str, part)))
+          PY
+          rm -f seeds.txt; pids=""
+          while read -r sh; do
+            MP_SEEDS="$sh" MP_YEARS="$YEARS" MP_OUT="$PWD/seeds.txt" swift test -c release -Xswiftc -enable-testing --skip-build --filter SeedRunTests > "log-${sh%%,*}.txt" 2>&1 &
+            pids="$pids $!"
+          done < shards.txt
+          rc=0; for p in $pids; do wait $p || rc=1; done
+          sort -t= -k2 -n seeds.txt | tee seeds-sorted.txt
+          grep -h -E "error:|SEEDAUDIT" log-*.txt | head -40
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seed-runs
+          path: |
+            ios/seeds-sorted.txt
+            ios/log-*.txt
