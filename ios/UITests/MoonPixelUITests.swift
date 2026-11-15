@@ -11,9 +11,18 @@ final class MoonPixelUITests: XCTestCase {
     }
 
     /// Lesser used actions live in the More menu.
+    /// The panel slides in: on a slow simulator a tap made while it moves can land beside the button, so
+    /// wait until the button is there and can be hit before tapping it.
     private func more(_ app: XCUIApplication, _ name: String) {
-        app.buttons["more"].tap(); sleep(1)
-        app.buttons[name].firstMatch.tap()
+        let open = app.buttons["more"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10), "the More button is there")
+        open.tap()
+        let b = app.buttons[name].firstMatch
+        XCTAssertTrue(b.waitForExistence(timeout: 10), "\(name) is in the More panel")
+        let until = Date().addingTimeInterval(8)
+        while !b.isHittable && Date() < until { usleep(200_000) }
+        usleep(600_000)                                   // let the slide finish
+        b.tap()
     }
 
     private func text(_ app: XCUIApplication, containing s: String) -> XCUIElement {
@@ -46,7 +55,7 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Tech:").exists, "technology line is shown")
         status.tap(); sleep(1)
         more(app, "Clean"); sleep(1)
-        XCTAssertTrue(text(app, containing: "Cleaned").waitForExistence(timeout: 3), "clean toast shown")
+        XCTAssertTrue(text(app, containing: "Cleaned").waitForExistence(timeout: 10), "clean toast shown")
         app.buttons["64×"].tap(); sleep(8)
         shot("05-fast")
         // cheats unlock every power; the arsenal lists five schools; a storm is called
@@ -172,7 +181,8 @@ final class MoonPixelUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "in the world")
         sleep(3)
-        more(app, "Worlds"); sleep(3)
+        more(app, "Worlds")
+        _ = app.buttons["retry-exit"].waitForExistence(timeout: 15)      // the failing save runs on a background queue first
         shot("20-exit-blocked")
         XCTAssertTrue(app.otherElements["exit-blocked"].exists || app.buttons["retry-exit"].exists, "leaving was refused with an explanation")
         XCTAssertTrue(app.buttons["Map"].exists, "the world is still open")
