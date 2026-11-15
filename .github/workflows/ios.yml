@@ -7,7 +7,8 @@ name: iOS unsigned IPA
 #   build  - device build and unsigned IPA
 #   ui     - simulator build and the UI tests (a failed UI test fails the run)
 # Then:
-#   release - publishes the IPA as v1.N (N = last published + 1; failed runs take no number)
+#   release - publishes the IPA as vMAJOR.N: N = last published MAJOR.N + 1, starting at 0 for a new
+#             major (2.0, 2.1, ...); failed runs take no number. 1.x ended at v1.9; 2.0 is the 3D view.
 # Auxiliary (never blocks, uploads to the release it belongs to):
 #   media  - screenshots, recordings and frame-time readings from the simulator (not a device)
 # Every job keeps its full log as an artifact, pass or fail.
@@ -59,12 +60,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # every published release gets the next minor version: 1.1, 1.2, 1.3 ... (failed runs take no number)
-          LAST=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' | sed -n 's/^v1\.\([0-9][0-9]*\)$/\1/p' | sort -n | tail -1)
-          NEXT=$(( ${LAST:-0} + 1 ))
-          echo "MP_VERSION=1.$NEXT" >> "$GITHUB_ENV"
-          echo "version=1.$NEXT" >> "$GITHUB_OUTPUT"
-          echo "version 1.$NEXT (last published v1.${LAST:-0})"
+          # every published release gets the next minor version of the current major: 2.0, 2.1, 2.2 ...
+          # (the first of a major is .0; failed runs take no number)
+          MAJOR=2
+          LAST=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' | sed -n "s/^v${MAJOR}\\.\\([0-9][0-9]*\\)$/\\1/p" | sort -n | tail -1)
+          if [ -z "$LAST" ]; then NEXT=0; else NEXT=$(( LAST + 1 )); fi
+          echo "MP_VERSION=$MAJOR.$NEXT" >> "$GITHUB_ENV"
+          echo "version=$MAJOR.$NEXT" >> "$GITHUB_OUTPUT"
+          echo "version $MAJOR.$NEXT (last published v$MAJOR.${LAST:-none})"
       - name: Build for device without code signing
         working-directory: ios
         run: |
