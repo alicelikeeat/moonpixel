@@ -219,7 +219,7 @@ CI_RESULT_PLACEHOLDER
 | 模拟器构建（Release） | 通过 |
 | 启动 `--autostart 7 --3d` 及城市、战争、雷暴演示并截图 | 5 张截图在 `docs/media/3d/`；没有崩溃报告 |
 | App 错误日志 | 只有模拟器里 RealityKit 自身的消息（AR 相关内置材质找不到、阴影管线在模拟器上编译失败）；没有来自本项目代码的错误 |
-| 界面测试（原有两个 2D 测试 + 3D 切换） | 写这一行时还在运行，结果待补 |
+| 界面测试 | 3 个全部通过：原有的 `testMenuWorldsAndHUDButtons`（373 秒）、`testFailedSaveBlocksLeavingAndRetryLeaves`（66 秒），以及新增的 `testThreeDViewShowsTheSameGameAndSwitchesBack`（107 秒：从 2D 切到 3D，状态栏和地图照常，拖动旋转镜头、点地面、64× 运行，再切回 2D） |
 
 从截图上确认的：地形分级、地面像素图与立体物对齐（广场、农田、道路位置与 2D 一致）、墙与屋顶、人物与朝向、城名和军团标签、旅人脚下的标记、雨、HUD 与面板照常显示在 3D 之上、战争演示中镜头跟随军团并拉远。
 
