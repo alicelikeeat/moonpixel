@@ -97,7 +97,15 @@ final class CityIdentityTests: XCTestCase {
     func testTheThreeNationsLookDifferentNotOnlyInColour() {
         func mask(_ b: Bitmap) -> [Bool] {
             // brightness pattern, colour thrown away: what someone without colour vision still sees
-            stride(from: 0, to: b.px.count, by: 4).map { i in (Int(b.px[i]) + Int(b.px[i + 1]) + Int(b.px[i + 2])) / 3 > 140 }
+            var out: [Bool] = []
+            var i = 0
+            while i + 2 < b.px.count {
+                let r = Int(b.px[i]), g = Int(b.px[i + 1]), bl = Int(b.px[i + 2])
+                let lum: Int = (r + g + bl) / 3
+                out.append(lum > 140)
+                i += 4
+            }
+            return out
         }
         let roofs = (1...3).map { mask(PixelArt.roof(nation: $0, w: 6, h: 5)) }
         let crests = (1...3).map { mask(PixelArt.gateCrest(nation: $0, color: "#808080")) }
