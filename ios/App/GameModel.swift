@@ -253,7 +253,7 @@ final class GameModel: ObservableObject {
                     guard let self = self, let sc = self.scene else { return }
                     self.activePower = "nano"
                     self.society.realm.player.cooldowns = [:]
-                    sc.attack(toward: sc.player + Vec2(Double(i % 2 == 0 ? 56 : -56), -64))
+                    sc.attack(toward: sc.player + Vec2(Double(i % 2 == 0 ? 60 : -60), -24))
                 }
             }
         }

@@ -38,8 +38,8 @@ final class SwarmTests: XCTestCase {
         for p in helix {
             XCTAssertTrue(p.y > 0 && p.y < 6, "the helix stands on the ground")
             let r = (p.x * p.x + p.z * p.z).squareRoot()
-            XCTAssertLessThan(r, 1.3)
-            if r > 0.95 { strands += 1 }
+            XCTAssertLessThan(r, 1.5)
+            if r > 1.2 { strands += 1 }
         }
         XCTAssertGreaterThan(strands, n * 7 / 10, "most points are on the two strands, the rest on the rungs")
 

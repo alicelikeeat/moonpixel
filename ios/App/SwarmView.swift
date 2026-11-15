@@ -141,7 +141,7 @@ final class SwarmView: MTKView, MTKViewDelegate {
         var u = SwarmUniforms()
         u.right = SIMD4(f.right, px / w * 2)
         u.up = SIMD4(f.up, px / h * 2)
-        u.fwd = SIMD4(f.forward, max(1.5, px * Float(contentScaleFactor) * 0.05) * fade)
+        u.fwd = SIMD4(f.forward, max(1.5, px * Float(contentScaleFactor) * 0.032) * fade)
         u.center = SIMD4(Float(f.center.x) / w * 2 - 1, 1 - Float(f.center.y) / h * 2, t, Float(min(1.0 / 30, max(1.0 / 240, now - last))))
         u.params = SIMD4(t < 0.35 ? 0 : 1, stage.blend, t > SwarmShapes.scatterAt ? 1 : 0, Float(count))
         u.travel = SIMD4(min(1, max(0, (t - 0.35) / 1.3)), 0, 0, 0)

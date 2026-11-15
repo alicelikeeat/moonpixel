@@ -49,14 +49,14 @@ public enum SwarmShapes {
     }
 
     /// A double helix with rungs, standing on the ground: two strands in two colours, pale rungs between.
-    public static func helix(into out: UnsafeMutableBufferPointer<SIMD4<Float>>, radius: Float = 1.1, height: Float = 5.2, turns: Float = 2.5, seed: Int = 2) {
+    public static func helix(into out: UnsafeMutableBufferPointer<SIMD4<Float>>, radius: Float = 1.35, height: Float = 5.2, turns: Float = 2.0, seed: Int = 2) {
         var rng = RNG(seed: seed)
         let n = out.count
         let s1 = RGBA(hex: "#59d8ff"), s2 = RGBA(hex: "#ff6fa8"), rung = RGBA(hex: "#e8ecf4")
-        let rungs = 22
+        let rungs = 14
         for i in 0..<n {
-            let kind = i % 5                      // two points in five on each strand, one in five on the rungs
-            let j: Float = 0.07
+            let kind = i % 8 < 7 ? i % 2 : 4      // seven points in eight on the two strands, one in eight on the rungs
+            let j: Float = 0.045
             let jx = Float(rng.range(-1, 1)) * j, jy = Float(rng.range(-1, 1)) * j, jz = Float(rng.range(-1, 1)) * j
             if kind < 4 {
                 let t = Float(rng.unit())
