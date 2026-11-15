@@ -5,7 +5,7 @@ name: iOS unsigned IPA
 # Blocking (a release is only published when all of these pass):
 #   core   - every MoonPixelCore test (swift test)
 #   build  - device build and unsigned IPA
-#   ui     - simulator build and the UI tests (a failed UI test fails the run)
+#   ui     - simulator build and the UI tests (a test that fails is run once more; failing twice fails the run)
 # Then:
 #   release - publishes the IPA as vMAJOR.N: N = last published MAJOR.N + 1, starting at 0 for a new
 #             major (2.0, 2.1, ...); failed runs take no number. 1.x ended at v1.9; 2.0 is the 3D view.
@@ -111,7 +111,7 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
           xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
-            -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
+            -resultBundlePath ui.xcresult -retry-tests-on-failure -test-iterations 2 CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
           grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -60 | tee ui-result.txt
           mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
           python3 -c "

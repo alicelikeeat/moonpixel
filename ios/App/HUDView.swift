@@ -109,7 +109,7 @@ struct HUDView: View {
         .onChange(of: model.toastID) { _, _ in
             withAnimation(.snappy) { toastVisible = true }
             let id = model.toastID
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { if model.toastID == id { withAnimation(.easeOut) { toastVisible = false } } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { if model.toastID == id { withAnimation(.easeOut) { toastVisible = false } } }
         }
     }
 

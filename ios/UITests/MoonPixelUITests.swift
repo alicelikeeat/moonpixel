@@ -54,7 +54,7 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "of 5 GB").exists || text(app, containing: "/ 5 GB").exists, "map size is shown against the 5 GB cap")
         XCTAssertTrue(text(app, containing: "Tech:").exists, "technology line is shown")
         status.tap(); sleep(1)
-        more(app, "Clean"); sleep(1)
+        more(app, "Clean")                                 // the toast lasts a few seconds: look for it at once
         XCTAssertTrue(text(app, containing: "Cleaned").waitForExistence(timeout: 10), "clean toast shown")
         app.buttons["64×"].tap(); sleep(8)
         shot("05-fast")
