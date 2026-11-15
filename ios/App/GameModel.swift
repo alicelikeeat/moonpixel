@@ -82,6 +82,11 @@ final class GameModel: ObservableObject {
     }
     /// The 3D view while it is on screen (effects are sent to it).
     weak var solid: SolidRenderer?
+    /// The nanite swarm's view, and how many points a swarm has on this device (by its memory; --swarm-count overrides).
+    weak var swarm: SwarmView?
+    var swarmCount = SwarmShapes.size(forMemoryGB: Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824)
+    /// What the last swarm cost (shown in the performance panel).
+    var swarmReport = ""
     private var perfLogAcc = 0.0
     @Published var mapPick: TilePos?
     @Published var mapZoom = 1.0
@@ -220,6 +225,7 @@ final class GameModel: ObservableObject {
         if args.contains("--perf") { showPerf = true }
         if args.contains("--plain-render") { plainRender = true }
         if args.contains("--3d") { render3D = true } else if args.contains("--2d") { render3D = false }
+        if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)) }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
         start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)
@@ -237,6 +243,18 @@ final class GameModel: ObservableObject {
                 guard let self = self else { return }
                 self.cheat("powers"); self.cheat("weather:3"); self.cheat("animals")
                 self.showArsenal = true
+            }
+        }
+        if args.contains("--demo-swarm") {
+            // the traveller sends the nanite swarm out again and again, so a picture at any moment shows it
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.cheat("powers"); self?.cheat("god") }
+            for i in 0..<6 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8 + Double(i) * 10) { [weak self] in
+                    guard let self = self, let sc = self.scene else { return }
+                    self.activePower = "nano"
+                    self.society.realm.player.cooldowns = [:]
+                    sc.attack(toward: sc.player + Vec2(Double(i % 2 == 0 ? 56 : -56), -64))
+                }
             }
         }
         if args.contains("--storm") {
@@ -485,7 +503,7 @@ final class GameModel: ObservableObject {
     /// Called a few times per second from the scene.
     func refreshHUD() {
         guard let w = world, let s = society else { return }
-        if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) }
+        if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
         let h = w.hour
         status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
         pollEvents()
@@ -571,6 +589,7 @@ final class GameModel: ObservableObject {
         let dropped = w.purge(keep: Set(sc.chunkNodes.keys).union(solid?.chunkKeys ?? []))
         let tex = sc.clearTextureCache()
         solid?.trim()
+        swarm?.stop()
         society.trimLog(12)
         cleanCooldown = 30
         let freed = max(0, before - MemoryBudget.usedMB())

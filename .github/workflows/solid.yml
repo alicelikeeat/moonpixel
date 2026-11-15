@@ -49,6 +49,9 @@ jobs:
           run --autostart 7 --3d --demo-city; sleep 22; shot solid-2-city.png
           run --autostart 7 --3d --demo-war; sleep 60; shot solid-3-war.png
           run --autostart 7 --3d --storm; sleep 16; shot solid-4-storm.png
+          # the nanite swarm (2^20 points on the GPU): one cast every 10 s from the 8th second; pictures at the ball, the giant, the wolf, the helix
+          run --autostart 7 --3d --demo-swarm --perf; sleep 19; shot solid-5-swarm-ball.png; sleep 2; shot solid-6-swarm-giant.png; sleep 2; shot solid-7-swarm-wolf.png; sleep 2; shot solid-8-swarm-helix.png
+          run --autostart 7 --2d --demo-swarm; sleep 21; shot solid-9-swarm-flat.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
           ls -la solid-*.png
           echo "===== crash reports ====="

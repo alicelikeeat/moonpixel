@@ -645,7 +645,7 @@ final class SolidRenderer {
 
     /// A power being used: something travels along its path in the colour of its school, and bursts where it lands.
     func cast(_ r: Society.CastResult, from p: Vec2) {
-        guard let power = r.power else { return }
+        guard let power = r.power, power.fx != "swarm" else { return }          // the swarm draws itself (SwarmView)
         let c = RGBA(hex: ["#ffd966", "#59d8ff", "#b48cff", "#fff2b0", "#ffffff"][min(4, max(0, power.school))])
         var last = r.path.first ?? p
         for q in r.path.dropFirst() { bolt(from: last, to: q, color: c, time: 0.25, size: 0.22, burst: 6); last = q }
@@ -714,6 +714,18 @@ final class SolidRenderer {
             particles[i] = p
             i += 1
         }
+    }
+
+    /// How the 3D camera sees a place of the world (for the swarm, which is drawn over this view).
+    func frame(at p: Vec2) -> (center: CGPoint, pointsPerTile: CGFloat, right: SIMD3<Float>, up: SIMD3<Float>, forward: SIMD3<Float>)? {
+        guard let model = model, model.world != nil else { return nil }
+        let o = place(p, model.activeWorld)
+        let eye = camera.position(relativeTo: nil)
+        let f = simd_normalize(target + SIMD3<Float>(0, 0.6, 0) - eye)
+        let r = SIMD3<Float>(cos(yaw), 0, -sin(yaw))
+        let u = simd_cross(r, f)
+        guard simd_dot(o - eye, f) > 0.5, let s0 = view.project(o), let s1 = view.project(o + r), s0.x.isFinite, s1.x.isFinite else { return nil }
+        return (s0, hypot(s1.x - s0.x, s1.y - s0.y), r, u, f)
     }
 
     /// The chunks drawn now: a cleanup must not throw away what is on screen.

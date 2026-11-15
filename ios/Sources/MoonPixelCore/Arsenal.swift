@@ -69,6 +69,8 @@ public struct Power {
         p("grow", "Word: Grow", "真言·生", 4, 3, 0, 160, 10, Shape.grow, 5, 20, "word:生"),
         p("peace", "Word: Peace", "真言·和", 4, 4, 0, 0, 30, Shape.calm, 220, 40, "word:和"),
         p("perish", "Word: Perish", "真言·灭", 4, 5, 500, 300, 12, Shape.shot, 0, 60, "word:灭"),
+        // --- added in 2.1 (kept last, so the order of everything before it is unchanged)
+        p("nano", "Nanite swarm", "纳米蜂群", 1, 5, 280, 400, 12, Shape.blast, 80, 0, "swarm"),
     ]
     public static let byKey: [String: Power] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
     /// Civil technologies a nation needs before it can even study this.

@@ -155,6 +155,9 @@ extension GameScene {
         let brass = UIColor(red: 1, green: 0.85, blue: 0.4, alpha: 1), fire = UIColor(red: 1, green: 0.5, blue: 0.15, alpha: 1)
         let sky = CGPoint(x: to.x + 70, y: to.y + 420)
         switch p.fx {
+        case "swarm":
+            model?.swarm?.launch(caster: player, impact: r.impact, look: model?.playerLook ?? Look())
+            ring(at: to, radius: radius, color: UIColor(red: 0.35, green: 0.85, blue: 1, alpha: 1), time: 0.6)
         case "bullet":
             let n = p.shape == Power.Shape.burst ? max(1, Int(p.radius)) : 1
             for i in 0..<n {

@@ -30,6 +30,8 @@ struct RootView: View {
                 SpriteView(scene: scene, preferredFramesPerSecond: 60).ignoresSafeArea()
                 // 3D: the scene above keeps running the game and draws nothing; this draws the same world as solids
                 if model.render3D { Solid3DView().ignoresSafeArea() }
+                // the nanite swarm is drawn over either view; it is hidden and holds no memory until one is cast
+                SwarmOverlay().ignoresSafeArea().allowsHitTesting(false)
                 HUDView()
             } else {
                 MenuView()
