@@ -155,7 +155,8 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["close-panel"].tap(); sleep(1)
         XCTAssertTrue(app.buttons["Map"].exists, "the game goes on in the new world")
         // back to the world list, then a second world
-        more(app, "Worlds"); sleep(2)
+        more(app, "Worlds")
+        _ = app.buttons["create-world"].waitForExistence(timeout: 30)          // leaving waits for the save
         shot("06-world-list")
         XCTAssertTrue(app.buttons["Play"].firstMatch.waitForExistence(timeout: 5), "the saved world is listed")
         // second world from one sentence: a suggestion fills the composer, the analysis shows live
@@ -165,7 +166,10 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Industrial age").exists, "the sentence was analysed (era)")
         app.buttons["create-world"].tap(); sleep(6)
         shot("06c-sentence-world")
-        more(app, "Worlds"); sleep(2)
+        more(app, "Worlds")
+        // leaving waits for the save of this (larger, industrial-age) world before the list appears
+        _ = app.buttons["create-world"].waitForExistence(timeout: 30)
+        sleep(1)
         shot("07-two-worlds")
         XCTAssertGreaterThanOrEqual(app.buttons.matching(identifier: "Play").count, 2, "two worlds side by side")
         app.buttons["Play"].firstMatch.tap(); sleep(4)
