@@ -1,5 +1,5 @@
 name: iOS unsigned IPA
-# Native Swift app (SpriteKit + SwiftUI Liquid Glass). Builds an UNSIGNED .ipa:
+# Native Swift app (SpriteKit 2D / RealityKit 3D + SwiftUI Liquid Glass). Builds an UNSIGNED .ipa:
 # sign it yourself (Xcode, AltStore, Sideloadly, ...) before installing.
 #
 # Blocking (a release is only published when all of these pass):
@@ -145,7 +145,7 @@ jobs:
           TAG="v${MP_VERSION}"
           gh release create "$TAG" MoonPixel-${MP_VERSION}-unsigned.ipa ui/ui-result.txt $(ls ui/ui-*.png 2>/dev/null) --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)" \
-            --notes "原生 Swift 版（SpriteKit + SwiftUI Liquid Glass）。未签名 ipa，需自行签名后安装。核心测试、真机构建与模拟器 UI 测试均通过后发布；截图、录像与帧时间数据来自模拟器，不是真机。 Native Swift build, unsigned: sign it yourself before installing. Published only after core tests, device build and simulator UI tests passed; screenshots, recordings and frame times come from the simulator, not a device. Commit ${GITHUB_SHA}."
+            --notes "原生 Swift 版（SpriteKit 2D / RealityKit 3D + SwiftUI Liquid Glass）。新增 3D 视角：更多 → 3D 视角，可随时切回 2D；3D 只在模拟器上验证过，没有真机帧率数据。未签名 ipa，需自行签名后安装。核心测试、真机构建与模拟器 UI 测试均通过后发布；截图、录像与帧时间数据来自模拟器，不是真机。 Native Swift build, unsigned: sign it yourself before installing. New 3D view (More → 3D view, switch back any time); checked only in the simulator, no device frame times. Published only after core tests, device build and simulator UI tests passed; screenshots, recordings and frame times come from the simulator, not a device. Commit ${GITHUB_SHA}."
 
   media:
     runs-on: macos-latest
