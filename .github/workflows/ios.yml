@@ -30,9 +30,10 @@ jobs:
       - name: Core tests
         working-directory: ios
         run: |
-          set -o pipefail
+          set +e
           swift test -c release -Xswiftc -enable-testing > core-tests.log 2>&1; rc=$?
-          grep -E "error|failed|Executed|CYCLE|REPEAT|BENCH|STRESS" core-tests.log | cut -c1-300 | tail -60
+          grep -E "error|failed|Executed|CYCLE|REPEAT|BENCH|STRESS|signal|Fatal" core-tests.log | cut -c1-300 | tail -60
+          [ $rc -eq 0 ] || tail -40 core-tests.log | cut -c1-300
           exit $rc
       - uses: actions/upload-artifact@v4
         if: always()
@@ -103,6 +104,7 @@ jobs:
       - name: Simulator build and UI tests (blocking)
         working-directory: ios
         run: |
+          set +e
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
           xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
