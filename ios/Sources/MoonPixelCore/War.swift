@@ -93,91 +93,203 @@ extension Society {
     /// A march route over legal ground: land, roads and bridges. Water without a
     /// bridge, cliffs and walls are closed. If no such way exists the army fords
     /// (a straight, slow line) and the route says so.
-    public func marchRoute(from a: TilePos, to b: TilePos) -> (points: [Vec2], forded: Bool) {
-        let margin = 40
+    /// How a march route came out.
+    public enum RouteStatus: Int, Codable {
+        case complete       // all the way, over legal ground (shallow fords included)
+        case partial        // the search ran out of budget: a legal route towards the goal, to be continued
+        case needsSiege     // legal up to the walls / closed gates of the target; the rest is a siege
+        case needsBridge    // only deep water stands in the way: legal up to the shore
+        case unreachable    // no legal way, and not even across water or walls
+    }
+
+    public struct MarchPlan {
+        public var points: [Vec2]
+        public var status: RouteStatus
+        public var wades: Int                    // shallow-water tiles crossed on foot
+        public var deps: [Int64: Int]            // chunk -> change stamp the route was planned against
+        public var expanded: Int
+    }
+
+    /// What a tile is to a marching army.
+    enum Ground { case road, open, woods, shallow, deep, cliff, wall }
+
+    func ground(_ x: Int, _ y: Int) -> Ground {
+        if !world.touched(x >> 5, y >> 5) {
+            // country nobody has touched is judged from the generator alone, so planning never loads chunks
+            let c = world.gen.climate(x, y)
+            if c.0 > Biome.mountainLevel { return .cliff }
+            if c.0 < Biome.sea || world.gen.isRiver(x, y, c.0) { return .deep }
+            return .open
+        }
+        let st = world.tile(1, x, y)
+        if content.bridge[Int(st)] || st == T["cobble_road"] || st == T["path"] { return .road }
+        if content.solid[Int(st)] { return .cliff }
+        let g = world.tile(0, x, y)
+        if content.water[Int(g)] { return content.solid[Int(g)] ? .deep : .shallow }
+        if let o = content.tile(world.tile(2, x, y)), o.solid {
+            return o.built && !o.natural ? .wall : .woods            // walls and closed gates; trees and rocks are only slow
+        }
+        return .open
+    }
+
+    static func stepCost(_ g: Ground) -> Float? {
+        switch g {
+        case .road: return 0.6
+        case .open: return 1
+        case .woods: return 1.4
+        case .shallow: return 2.5
+        default: return nil
+        }
+    }
+    /// The cheapest step there is, so the heuristic never overestimates (roads cost 0.6).
+    static let minStep: Float = 0.6
+
+    /// Plan a march. Budget-limited A* over legal ground; when the goal cannot be reached legally,
+    /// a second look tells whether walls (a siege) or deep water (a bridge) is what stands in the way.
+    /// The result is simplified only where a straight line is clear tile by tile.
+    public func planMarch(from a: TilePos, to b: TilePos, budget: Int = 30_000, margin: Int = 40) -> MarchPlan {
         let minX = min(a.x, b.x) - margin, minY = min(a.y, b.y) - margin
         let w = abs(a.x - b.x) + 2 * margin + 1, h = abs(a.y - b.y) + 2 * margin + 1
-        if w * h > 90_000 { return ([a.center, b.center], true) }
-        // tile by tile; country nobody has touched is judged from the generator alone,
-        // so planning a march never loads or generates map chunks
-        var closed = [UInt8](repeating: 2, count: w * h)          // 2 unknown, 1 closed, 0 open
-        var touchedMemo: [Int64: Bool] = [:]
-        func open(_ x: Int, _ y: Int) -> Bool {
+        var memo = [UInt8](repeating: 255, count: w * h)
+        let kinds: [Ground] = [.road, .open, .woods, .shallow, .deep, .cliff, .wall]
+        func g(_ x: Int, _ y: Int) -> Ground {
             let k = (y - minY) * w + (x - minX)
-            if closed[k] != 2 { return closed[k] == 0 }
-            let ck = MP.chunkKey(x >> 5, y >> 5)
-            let touched = touchedMemo[ck] ?? { let t = world.touched(x >> 5, y >> 5); touchedMemo[ck] = t; return t }()
-            var ok: Bool
-            if touched { ok = !world.blocked(x, y) }
-            else { let c = world.gen.climate(x, y); ok = !(c.0 < Biome.sea || c.0 > Biome.mountainLevel || world.gen.isRiver(x, y, c.0)) }
-            closed[k] = ok ? 0 : 1
-            return ok
+            if memo[k] == 255 { memo[k] = UInt8(kinds.firstIndex(of: ground(x, y))!) }
+            return kinds[Int(memo[k])]
         }
-        let roadIDs: Set<UInt8> = [T["cobble_road"]!, T["path"]!, content.tid("bridge_wood"), content.tid("bridge_stone")]
-        func step(_ x: Int, _ y: Int) -> Double { world.touched(x >> 5, y >> 5) && roadIDs.contains(world.tile(1, x, y)) ? 0.6 : 1 }
-        var cost = [Float](repeating: .infinity, count: w * h)
-        var from = [Int32](repeating: -1, count: w * h)
-        // binary heap of (f, index)
-        var heap: [(Float, Int32)] = []
-        func push(_ e: (Float, Int32)) {
-            heap.append(e); var c = heap.count - 1
-            while c > 0 { let p = (c - 1) / 2; if heap[p].0 <= heap[c].0 { break }; heap.swapAt(p, c); c = p }
-        }
-        func pop() -> (Float, Int32) {
-            let top = heap[0]; let last = heap.removeLast()
-            if !heap.isEmpty {
-                heap[0] = last; var c = 0
-                while true {
-                    let l = 2 * c + 1, r = l + 1; var m = c
-                    if l < heap.count && heap[l].0 < heap[m].0 { m = l }
-                    if r < heap.count && heap[r].0 < heap[m].0 { m = r }
-                    if m == c { break }; heap.swapAt(m, c); c = m
+        func inside(_ x: Int, _ y: Int) -> Bool { x >= minX && y >= minY && x < minX + w && y < minY + h }
+        /// A* with the given extra passable grounds (at a heavy cost) for the "what blocks it" searches.
+        func search(extra: Set<Ground>, limit: Int) -> (path: [Int], found: Bool, best: Int, exhausted: Bool, expanded: Int) {
+            var cost = [Float](repeating: .infinity, count: w * h)
+            var from = [Int32](repeating: -1, count: w * h)
+            var heap: [(Float, Int32)] = []
+            func push(_ e: (Float, Int32)) {
+                heap.append(e); var c = heap.count - 1
+                while c > 0 { let p = (c - 1) / 2; if heap[p].0 <= heap[c].0 { break }; heap.swapAt(p, c); c = p }
+            }
+            func pop() -> (Float, Int32) {
+                let top = heap[0]; let last = heap.removeLast()
+                if !heap.isEmpty {
+                    heap[0] = last; var c = 0
+                    while true {
+                        let l = 2 * c + 1, r = l + 1; var m = c
+                        if l < heap.count && heap[l].0 < heap[m].0 { m = l }
+                        if r < heap.count && heap[r].0 < heap[m].0 { m = r }
+                        if m == c { break }; heap.swapAt(m, c); c = m
+                    }
+                }
+                return top
+            }
+            func hd(_ x: Int, _ y: Int) -> Float {
+                let dx = Float(abs(x - b.x)), dy = Float(abs(y - b.y))
+                return (max(dx, dy) + 0.414 * min(dx, dy)) * Society.minStep                // admissible: never above the true cost
+            }
+            func price(_ gr: Ground) -> Float? { Society.stepCost(gr) ?? (extra.contains(gr) ? 25 : nil) }
+            let s0 = (a.y - minY) * w + (a.x - minX), g0 = (b.y - minY) * w + (b.x - minX)
+            cost[s0] = 0; push((hd(a.x, a.y), Int32(s0)))
+            var best = s0, bestH = hd(a.x, a.y), n = 0, found = false
+            while !heap.isEmpty && n < limit {
+                let (f, ci) = pop()
+                let c = Int(ci)
+                let cx = c % w + minX, cy = c / w + minY
+                if f > cost[c] + hd(cx, cy) + 0.001 { continue }               // stale entry
+                n += 1
+                if c == g0 { found = true; break }
+                let hc = hd(cx, cy)
+                if hc < bestH { bestH = hc; best = c }
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+                    let nx = cx + dx, ny = cy + dy
+                    if !inside(nx, ny) { continue }
+                    let k = (ny - minY) * w + (nx - minX)
+                    guard let sc = k == g0 ? 1 : price(g(nx, ny)) else { continue }
+                    // no squeezing diagonally between two closed tiles
+                    if dx != 0 && dy != 0 && (price(g(cx + dx, cy)) == nil || price(g(cx, cy + dy)) == nil) { continue }
+                    let nc = cost[c] + sc * (dx != 0 && dy != 0 ? 1.414 : 1)
+                    if nc < cost[k] { cost[k] = nc; from[k] = Int32(c); push((nc + hd(nx, ny), Int32(k))) }
                 }
             }
-            return top
+            let end = found ? g0 : best
+            var path: [Int] = []
+            var k = end
+            while k >= 0 { path.append(k); k = Int(from[k]) }
+            return (path.reversed(), found, best, !found && !heap.isEmpty, n)
         }
-        func hdist(_ x: Int, _ y: Int) -> Float { let dx = Float(abs(x - b.x)), dy = Float(abs(y - b.y)); return max(dx, dy) + 0.41 * min(dx, dy) }
-        let s0 = (a.y - minY) * w + (a.x - minX), g0 = (b.y - minY) * w + (b.x - minX)
-        cost[s0] = 0
-        push((hdist(a.x, a.y), Int32(s0)))
-        var best = s0, bestH = hdist(a.x, a.y)
-        var expanded = 0
-        var found = false
-        while !heap.isEmpty && expanded < 30_000 {
-            let (_, ci) = pop()
-            let c = Int(ci)
-            expanded += 1
-            if c == g0 { found = true; break }
-            let cx = c % w + minX, cy = c / w + minY
-            let hc = hdist(cx, cy)
-            if hc < bestH { bestH = hc; best = c }
-            let base = cost[c]
-            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
-                let nx = cx + dx, ny = cy + dy
-                if nx < minX || ny < minY || nx >= minX + w || ny >= minY + h { continue }
-                let k = (ny - minY) * w + (nx - minX)
-                if k != g0 && !open(nx, ny) { continue }
-                // no squeezing diagonally between two blocked tiles
-                if dx != 0 && dy != 0 && (!open(cx + dx, cy) || !open(cx, cy + dy)) { continue }
-                let nc = base + Float(step(nx, ny) * (dx != 0 && dy != 0 ? 1.414 : 1))
-                if nc < cost[k] { cost[k] = nc; from[k] = Int32(c); push((nc + hdist(nx, ny), Int32(k))) }
+        func tile(_ k: Int) -> TilePos { TilePos(k % w + minX, k / w + minY) }
+        /// Every tile a straight line from p to q passes through, including both neighbours at diagonal steps.
+        func clear(_ p: TilePos, _ q: TilePos, allowShallow: Bool) -> Bool {
+            var x = p.x, y = p.y
+            let dx = abs(q.x - p.x), dy = abs(q.y - p.y), sx = q.x > p.x ? 1 : -1, sy = q.y > p.y ? 1 : -1
+            var err = dx - dy
+            while true {
+                guard inside(x, y), let c = Society.stepCost(g(x, y)) else { return false }
+                if !allowShallow && c > 2 { return false }
+                if x == q.x && y == q.y { return true }
+                let e2 = 2 * err
+                if e2 > -dy && e2 < dx {
+                    // a diagonal step: the line touches both side tiles
+                    guard inside(x + sx, y), inside(x, y + sy), Society.stepCost(g(x + sx, y)) != nil, Society.stepCost(g(x, y + sy)) != nil else { return false }
+                }
+                if e2 > -dy { err -= dy; x += sx }
+                if e2 < dx { err += dx; y += sy }
             }
         }
-        // a walled city cannot be walked into: an army that gets up to its walls has still arrived by road
-        var end = g0
-        if !found {
-            if bestH > 18 { return ([a.center, b.center], true) }
-            end = best
+        var status = RouteStatus.complete
+        var r = search(extra: [], limit: budget)
+        let expanded = r.expanded
+        if !r.found {
+            if r.exhausted { status = .partial }
+            else if search(extra: [.wall], limit: budget).found { status = .needsSiege }
+            else if search(extra: [.deep], limit: budget).found { status = .needsBridge }
+            else if search(extra: [.wall, .deep], limit: budget).found { status = .needsBridge }
+            else { status = .unreachable }
+            if status == .unreachable && r.path.count <= 1 { r.path = [r.path.first ?? 0] }
         }
-        var pts: [Vec2] = []
-        var k = end
-        while k >= 0 { pts.append(TilePos(k % w + minX, k / w + minY).center); k = Int(from[k]) }
-        pts.reverse()
-        var thin: [Vec2] = []
-        for (i, p) in pts.enumerated() where i % 6 == 0 || i == pts.count - 1 { thin.append(p) }
-        thin[0] = a.center
-        if found { thin[thin.count - 1] = b.center } else { thin.append(b.center) }
-        return (thin, false)
+        // straighten only where the straight line is clear tile by tile (and does not add wading)
+        let tiles = r.path.map(tile)
+        var pts: [TilePos] = tiles.isEmpty ? [a] : [tiles[0]]
+        var i = 0
+        while i < tiles.count - 1 {
+            var j = min(tiles.count - 1, i + 24)
+            let wadesHere = tiles[i...].prefix(25).contains { g($0.x, $0.y) == .shallow }
+            while j > i + 1 && !clear(tiles[i], tiles[j], allowShallow: wadesHere) { j -= 1 }
+            pts.append(tiles[j]); i = j
+        }
+        var out = pts.map { $0.center }
+        if status == .complete { out[out.count - 1] = b.center }
+        out[0] = a.center
+        var deps: [Int64: Int] = [:]
+        for t in tiles { let k = MP.chunkKey(t.x >> 5, t.y >> 5); if deps[k] == nil { deps[k] = world.stamp(t.x >> 5, t.y >> 5) } }
+        // the ring around the route matters too: a bridge built next to it can open a shorter way
+        let wades = tiles.filter { g($0.x, $0.y) == .shallow }.count
+        return MarchPlan(points: out, status: status, wades: wades, deps: deps, expanded: expanded)
+    }
+
+    /// Compatibility: points, and whether the route is not a full legal one.
+    public func marchRoute(from a: TilePos, to b: TilePos) -> (points: [Vec2], forded: Bool) {
+        let p = planMarch(from: a, to: b)
+        return (p.points, p.status != .complete)
+    }
+
+    /// Give a legion a fresh plan towards `goal`.
+    func replan(_ lg: Legion, to goal: TilePos) {
+        let p = planMarch(from: lg.pos.tile, to: goal)
+        lg.route = p.points; lg.routeI = 0
+        lg.forded = p.wades > 0
+        lg.routeStatus = p.status.rawValue
+        lg.routeDeps = Dictionary(uniqueKeysWithValues: p.deps.map { ("\($0.key)", $0.value) })
+        lg.routeGoal = [goal.x, goal.y]
+        lg.routeT = world.time
+        if p.status == .complete || p.status == .needsSiege { lg.routeFails = 0 }      // a way was found again
+    }
+
+    /// Something along the way changed (a bridge, a gate, a wall, a law): the route has to be planned again.
+    func routeStale(_ lg: Legion) -> Bool {
+        guard lg.route != nil else { return true }
+        for (k, v) in lg.routeDeps ?? [:] {
+            guard let key = Int64(k) else { continue }
+            if world.stamp(MP.keyCX(key), MP.keyCY(key)) != v { return true }
+        }
+        return false
     }
 
     func routeLength(_ r: [Vec2]) -> Double { zip(r, r.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) } }
@@ -234,9 +346,8 @@ extension Society {
         let grain = min(max(0, home.food - Double(home.members.count) * 2), want - meals * 1.5)
         home.food -= grain
         lg.food = meals * 1.5 + grain
-        let r = marchRoute(from: home.center, to: target.center)
-        lg.route = r.points; lg.routeI = 0; lg.forded = r.forded
-        lg.supply = supply(from: home.center, to: target.center, nation: nid) * (r.forded ? 0.8 : 1)
+        replan(lg, to: target.center)
+        lg.supply = supply(from: home.center, to: target.center, nation: nid) * (lg.forded == true ? 0.8 : 1)
         lg.supplyT = world.time + cfg.supplyInterval
         lg.convoyT = world.time + cfg.convoyEvery
         realm.legions.append(lg)
@@ -365,8 +476,11 @@ extension Society {
 
         // --- going home
         if lg.state == 3 {
-            if lg.route == nil { let r = marchRoute(from: lg.pos.tile, to: hm.center); lg.route = r.points; lg.routeI = 0; lg.forded = r.forded }
-            if advance(lg, dt, speed: cfg.marchSpeed * (morale < cfg.rout ? 1.4 : 1)) { disband(lg, into: hm) }
+            if needsRoute(lg, to: hm.center) { replan(lg, to: hm.center) }
+            if advance(lg, dt, speed: cfg.marchSpeed * (morale < cfg.rout ? 1.4 : 1) * (lg.forded == true ? 0.7 : 1)) {
+                if lg.routeStatus == RouteStatus.complete.rawValue || lg.pos.distance(to: hm.center.center) < 64 { disband(lg, into: hm) }
+                else { blocked(lg, home: hm) }
+            }
             return
         }
         // --- a battle in the open
@@ -405,8 +519,17 @@ extension Society {
         guard let target = settlements[lg.target], !target.abandoned, let enemy = target.nation, enemy != lg.nation, realm.atWar(lg.nation, enemy) else { sendHome(lg); return }
         // --- on the march
         if lg.state == 1 {
-            if lg.route == nil { let r = marchRoute(from: lg.pos.tile, to: target.center); lg.route = r.points; lg.routeI = 0; lg.forded = r.forded }
-            if advance(lg, dt, speed: cfg.marchSpeed * (0.5 + 0.5 * min(1, lg.supply)) * marchWeather() * (lg.forded == true ? 0.6 : 1), stopShort: 56) {
+            if needsRoute(lg, to: target.center) { replan(lg, to: target.center) }
+            var arrived = advance(lg, dt, speed: cfg.marchSpeed * (0.5 + 0.5 * min(1, lg.supply)) * marchWeather() * (lg.forded == true ? 0.6 : 1), stopShort: 56)
+            if arrived {
+                switch RouteStatus(rawValue: lg.routeStatus ?? 0) ?? .complete {
+                case .complete: break
+                case .needsSiege: arrived = lg.pos.distance(to: target.center.center) < 26 * 16      // at the walls: the siege begins here
+                case .partial: arrived = false; lg.route = nil                                        // keep going: plan the next stretch
+                case .needsBridge, .unreachable: arrived = false; blocked(lg, home: hm)
+                }
+            }
+            if arrived {
                 lg.state = 2
                 if world.time >= target.cityT { surveyTown(target) }
                 let walled = target.walls.count >= cfg.wallMin
@@ -481,6 +604,41 @@ extension Society {
             emit("repelled", [cityName(target), realm.nation(lg.nation)?.name(zh: zh) ?? ""], target.center.center, nations: [enemy, lg.nation], city: target.id,
                  cause: m < cfg.waver ? "morale broke" : "losses", result: m < cfg.rout ? "rout" : "retreat")
             sendHome(lg)
+        }
+    }
+
+    /// A route is planned again when it is missing, aimed elsewhere, or something along it changed.
+    func needsRoute(_ lg: Legion, to goal: TilePos) -> Bool {
+        if lg.route == nil { return true }
+        if let g = lg.routeGoal, g.count == 2, g[0] != goal.x || g[1] != goal.y { return true }
+        // a blocked army waits before looking again (backing off), so it never re-plans every step
+        if let st = lg.routeStatus, st == RouteStatus.needsBridge.rawValue || st == RouteStatus.unreachable.rawValue {
+            let wait = realm.cfg.routeRetry * pow(2, Double(min(5, lg.routeFails ?? 0)))
+            return world.time - (lg.routeT ?? 0) >= wait
+        }
+        return routeStale(lg)
+    }
+
+    /// No legal way on: wait where the route ends and look again later; after a few tries give up
+    /// the march (an attack goes home; an army that cannot get home stands down in its own country).
+    func blocked(_ lg: Legion, home hm: Settlement) {
+        // standing at the dead end of one route counts once, however many steps it waits there
+        if let t = lg.routeFailT, t == lg.routeT { return }
+        lg.routeFailT = lg.routeT
+        let fails = (lg.routeFails ?? 0) + 1
+        lg.routeFails = fails
+        if fails < realm.cfg.routeMaxFails { return }
+        if lg.state == 1 || lg.state == 2 {
+            emit("no_road", [realm.nation(lg.nation)?.name(zh: zh) ?? "", settlements[lg.target].map { cityName($0) } ?? ""], lg.pos,
+                 nations: [lg.nation], city: lg.target, cause: (lg.routeStatus == RouteStatus.needsBridge.rawValue ? "deep water" : "no legal route"), result: "turned back")
+            lg.routeFails = 0
+            sendHome(lg)
+        } else {
+            // cannot get home either: the soldiers stand down where they are and belong to the nearest town of their nation
+            let town = towns(of: lg.nation).min { $0.center.center.distance(to: lg.pos) < $1.center.center.distance(to: lg.pos) } ?? hm
+            for id in lg.members { if let a = agents[id] { move(a, to: town); discharge(a) } }
+            lg.members = []
+            realm.legions.removeAll { $0 === lg }
         }
     }
 

@@ -56,6 +56,7 @@ public struct RealmConfig: Codable, Equatable {
     public var waver = 0.4, rout = 0.2, routLoss = 0.1
     public var wallHP = 60.0, wallMin = 12, engineHit = 1.2, ladderHit = 0.04, occupyTime = 30.0
     public var meetRange = 140.0
+    public var routeRetry = 30.0, routeMaxFails = 4      // seconds before a blocked army looks again (doubling), tries before it gives up
     public var captureDamage = 2, refugeeShare = 0.2, refugeeIntegrate = 1.0
     // --- balance of power
     public var dominance = 0.5, dominanceRelease = 0.42
@@ -169,6 +170,13 @@ public final class Legion: Codable {
     public var convoyAt: Double?           // 0...1 along the road from home, while a convoy is out
     public var convoyLoad: Double?
     public var wallsAtStart: Int?
+    public var routeStatus: Int?
+    public var routeDeps: [String: Int]?
+    public var routeGoal: [Int]?
+    public var routeT: Double?
+    public var routeFails: Int?
+    /// planning time of the route whose dead end was last counted, so one failed route counts once
+    public var routeFailT: Double?
     /// Shared march route of the whole legion (waypoints), recomputed when roads or bridges change.
     public var route: [Vec2]?
     public init() {}
@@ -263,7 +271,7 @@ extension Society {
         "palace_ruined": ("The palace of %@ lies in ruins", "%@ 的王宫损毁"), "city_founded": ("%@ was founded for %@", "%@ 建城，归属 %@"),
         "palace": ("palace", "王宫"), "fortress": ("fortress", "要塞"), "barracks": ("barracks", "军营"), "watchtower": ("watchtower", "瞭望塔"),
         "granary": ("granary", "粮仓"), "windmill": ("windmill", "风车"), "market": ("market", "市场"),
-        "breach": ("%@ breached the walls of %@", "%@ 攻破了 %@ 的城墙"), "battle": ("%@ and %@ fought in the field near %@", "%@ 与 %@ 在 %@ 附近野战"),
+        "breach": ("%@ breached the walls of %@", "%@ 攻破了 %@ 的城墙"), "no_road": ("The army of %@ found no way to %@ and turned back", "%@ 的军队找不到通往 %@ 的路，撤军"), "battle": ("%@ and %@ fought in the field near %@", "%@ 与 %@ 在 %@ 附近野战"),
         "festival": ("%@ holds a festival", "%@ 举办了庆典"), "wedding_player": ("You and %@ are married", "你与 %@ 结为伴侣"), "tavern": ("tavern", "酒馆"), "warehouse": ("warehouse", "仓库"), "mine": ("mine", "矿井"),
         "courting": ("%@ and %@ are courting", "%@ 和 %@ 开始相恋"), "split_up": ("%@ and %@ parted ways", "%@ 和 %@ 分手了"),
         "t_festival": ("What a feast that was!", "那场庆典真热闹！"), "t_date": ("A lovely walk.", "一起散步真好。"), "t_breakup": ("My heart is heavy.", "心里很难受。"),
@@ -427,12 +435,35 @@ extension Society {
         default: slot = lg.pos + fwd * (14 - row * 9) + side * ((k - 5.5) * 8)
         }
         if lg.state == 2 || lg.state == 4 { slot = slot + Vec2(sin(world.time * 2 + Double(a.id)) * 3, cos(world.time * 1.7 + Double(a.id)) * 3) }
+        // local avoidance: a place in the formation that is inside a wall, water or rock is given up for a
+        // place in line behind the standard, along the road just walked (narrow ways are passed in single file)
+        if world.blocked(slot.tile.x, slot.tile.y) {
+            let k = Double(lg.members.firstIndex(of: a.id) ?? 0)
+            slot = trail(lg, behind: 8 + k * 7)
+        }
         let to = slot - a.pos
         let stepLen = Society.speed * 1.8 * dt
         a.sleeping = false
         if to.length > 600 { a.pos = slot; return }          // far behind (e.g. just loaded): catch up at once
         if to.length <= stepLen { a.pos = slot; a.facing = fwd } else { a.pos = a.pos + to.normalized * stepLen; a.moving = true; a.facing = to.normalized }
         a.hunger = min(a.hunger, 0.5)                         // fed from the supply line, not from the village pot
+    }
+
+    /// A point on the legion's route `d` pixels behind its standard.
+    func trail(_ lg: Legion, behind d: Double) -> Vec2 {
+        guard let r = lg.route, !r.isEmpty else { return lg.pos }
+        var left = d
+        var p = lg.pos
+        var i = min(lg.routeI ?? 0, r.count - 1)
+        while left > 0 {
+            let q = i > 0 ? r[i - 1] : r[0]
+            let seg = p.distance(to: q)
+            if seg >= left { return p + (q - p).normalized * left }
+            left -= seg; p = q
+            if i == 0 { return p }
+            i -= 1
+        }
+        return p
     }
 
     func move(_ a: Agent, to ns: Settlement) {

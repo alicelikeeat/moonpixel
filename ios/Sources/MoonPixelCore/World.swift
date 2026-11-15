@@ -355,6 +355,11 @@ public final class OpenWorld {
     var timerAcc = 0.0
     public var onTileChanged: [(Int, Int, Int, UInt8, UInt8) -> Void] = []
     public var onChunkChanged: [(Int, Int) -> Void] = []
+    /// A counter bumped on every change to a chunk (tiles, reverts), so plans made against a chunk can tell they are stale.
+    public private(set) var stamps: [Int64: Int] = [:]
+    var stampClock = 0
+    public func stamp(_ cx: Int, _ cy: Int) -> Int { stamps[MP.chunkKey(cx, cy)] ?? 0 }
+    func bump(_ cx: Int, _ cy: Int) { stampClock += 1; stamps[MP.chunkKey(cx, cy)] = stampClock }
 
     /// 0 is the surface; 1 is the underground layer with its own chunks and files.
     public let depth: Int
@@ -582,6 +587,7 @@ public final class OpenWorld {
         if id != 0, let t = content.tile(id), !t.growTo.isEmpty {
             c.timers.append(GrowTimer(i: i, l: layer, to: content.tid(t.growTo), due: time + t.growTime, expect: id))
         }
+        bump(c.cx, c.cy)
         for f in onTileChanged { f(wx, wy, layer, old, id) }
         for f in onChunkChanged { f(c.cx, c.cy) }
     }
@@ -636,6 +642,7 @@ public final class OpenWorld {
             fileSizes[k] = nil
             saved.remove(k)
         }
+        bump(cx, cy)
         if cache[k] != nil {
             if pins[k] != nil {
                 let fresh = gen.generate(cx, cy)
