@@ -58,6 +58,8 @@ final class GameScene: SKScene {
     var shownSoldiers: Set<Int> = []
     /// Soldiers in view that are not drawn one by one, per army (shown at its standard).
     var battleMasses: [Int: Int] = [:]
+    var roofNodes: [Int: SKSpriteNode] = [:]
+    var crestNodes: [TilePos: SKSpriteNode] = [:]
     var simDebt = 0.0
     private var badgeNodes: [TilePos: SKNode] = [:]
     private var otherTouches: [UITouch] = []
@@ -207,6 +209,7 @@ final class GameScene: SKScene {
         model.perf.time("chunks") { updateChunks(world, model) }
         model.perf.time("actors") { updateActors(world, society, model) }
         model.perf.time("soldiers") { updateSoldiers(society, model) }
+        model.perf.time("roofs") { updateRoofs(society, model) }
 
         hudAcc += dt
         if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }

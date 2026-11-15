@@ -97,6 +97,55 @@ public enum PixelArt {
         return img
     }()
 
+    // MARK: nations
+    /// Each nation's banner carries its own device, not only its colour (readable without colour vision).
+    static func bannerDevice(_ img: inout Bitmap, nation: Int, x: Int, y: Int, _ c1: RGBA, _ c2: RGBA) {
+        let hi = c1.lightened(0.55)
+        switch nation {
+        case 1: img.rect(x + 3, y, 3, 9, hi); img.rect(x + 4, y, 1, 9, c2)                          // Azure: a pale pale (vertical band)
+        case 2: for i in 0..<9 { img.set(x + i, y + i, hi); img.set(x + 8 - i, y + i, hi) }           // Crimson: a saltire
+        case 3: img.disc(Double(x) + 4.5, Double(y) + 4.5, 2.6, hi)                                   // Golden: a sun
+                for (dx, dy) in [(4, 0), (4, 8), (0, 4), (8, 4)] { img.set(x + dx, y + dy, hi) }
+        default: img.rect(x + 3, y + 3, 3, 3, hi)
+        }
+    }
+
+    /// A nation's way of roofing: Azure slate, Crimson curved clay tiles, Golden thatch; anyone else shingles.
+    public static func roof(nation: Int, w: Int, h: Int) -> Bitmap {
+        let pw = w * 16, ph = h * 16 + 6
+        var img = Bitmap(pw, ph)
+        let (base, line, ridge): (RGBA, RGBA, RGBA)
+        switch nation {
+        case 1: (base, line, ridge) = (RGBA(hex: "#5a6c88"), RGBA(hex: "#3a4a64"), RGBA(hex: "#8aa0c0"))
+        case 2: (base, line, ridge) = (RGBA(hex: "#b04a38"), RGBA(hex: "#7a2a22"), RGBA(hex: "#e07a5a"))
+        case 3: (base, line, ridge) = (RGBA(hex: "#c8a050"), RGBA(hex: "#8a6a2a"), RGBA(hex: "#e8c878"))
+        default: (base, line, ridge) = (RGBA(hex: "#7a5a3a"), RGBA(hex: "#523a24"), RGBA(hex: "#9a7a52"))
+        }
+        img.rect(0, 0, pw, ph, base)
+        switch nation {
+        case 1: for y in stride(from: 3, to: ph, by: 5) { img.rect(0, y, pw, 1, line); for x in stride(from: (y / 5) % 2 * 4, to: pw, by: 8) { img.rect(x, y - 4, 1, 4, line) } }
+        case 2: for y in stride(from: 4, to: ph, by: 6) { for x in stride(from: 0, to: pw, by: 6) { img.rect(x, y, 5, 1, line); img.set(x + 2, y - 1, line); img.set(x + 5, y - 2, ridge) } }
+        case 3: for x in stride(from: 1, to: pw, by: 3) { img.rect(x, 0, 1, ph, line.lightened(0.1)) }; for y in stride(from: 6, to: ph, by: 9) { img.rect(0, y, pw, 2, line) }
+        default: for y in stride(from: 4, to: ph, by: 4) { img.rect(0, y, pw, 1, line) }
+        }
+        img.rect(0, ph / 2 - 1, pw, 2, ridge)                       // the ridge
+        img.rect(0, ph - 3, pw, 3, line.darkened(0.25))             // the eaves' shadow
+        if nation == 2 { img.rect(0, 0, 2, ph, ridge); img.rect(pw - 2, 0, 2, ph, ridge) }   // upturned eaves
+        return img
+    }
+
+    /// The crest over a town gate in the owner's colours and device.
+    public static func gateCrest(nation: Int, color: String) -> Bitmap {
+        var img = Bitmap(24, 12)
+        let c1 = RGBA(hex: color), c2 = c1.darkened(0.45)
+        let stone = nation == 2 ? RGBA(hex: "#9a5a44") : (nation == 3 ? RGBA(hex: "#8a6a3a") : RGBA(hex: "#8a8e9a"))
+        img.rect(0, 6, 24, 6, stone)
+        for x in stride(from: 0, to: 24, by: 6) { img.rect(x, 3, 4, 3, stone) }      // crenels
+        img.rect(8, 1, 9, 10, c1)
+        bannerDevice(&img, nation: nation, x: 8, y: 1, c1, c2)
+        return img
+    }
+
     static func drawTile(_ img: inout Bitmap, _ ox: Int, _ oy: Int, _ t: TileDef) {
         let c1 = RGBA(hex: t.c1)
         let c2 = t.c2.isEmpty ? c1.darkened(0.2) : RGBA(hex: t.c2)
@@ -243,7 +292,7 @@ public enum PixelArt {
             img.rect(bx + 6, by + 6, 4, 10, c1); img.disc(Double(bx) + 8, Double(by) + 3, 4.5, c2)
         case "banner":
             img.rect(bx + 3, by - 14, 2, 30, RGBA(hex: "#6b4a2c")); img.rect(bx + 5, by - 13, 9, 11, c1); img.rect(bx + 5, by - 4, 9, 2, c2)
-            img.rect(bx + 8, by - 10, 3, 3, c1.lightened(0.45))
+            bannerDevice(&img, nation: Int(String(t.key.last ?? "0")) ?? 0, x: bx + 5, y: by - 13, c1, c2)
         case "throne":
             img.rect(bx + 3, by - 4, 10, 8, c2); img.rect(bx + 2, by + 4, 12, 11, c1); img.rect(bx + 4, by + 6, 8, 5, c2); img.rect(bx + 7, by - 6, 2, 3, c1)
         case "tower":

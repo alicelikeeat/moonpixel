@@ -69,7 +69,7 @@ struct PerfReport: Codable {
 
     var lines: [String] {
         func f(_ v: Double) -> String { String(format: "%.1f", v) }
-        let order = ["sim", "chunks", "actors", "legions", "bake", "texture", "save-main"]
+        let order = ["sim", "chunks", "actors", "soldiers", "roofs", "legions", "bake", "texture", "save-main"]
         var out = ["frame p50 \(f(p50))  p95 \(f(p95))  p99 \(f(p99)) ms  long \(longFrames)/\(frames)"]
         out.append(order.compactMap { k in phases[k].map { "\(k) \(f($0))/\(f(peaks[k] ?? 0))" } }.joined(separator: "  "))
         out.append("nodes \(nodes)  chunks \(chunkNodes)  actors \(actorNodes)  armies \(legionNodes)")

@@ -254,6 +254,21 @@ final class GameModel: ObservableObject {
                 self.perf.reset()
             }
         }
+        if args.contains("--tour-cities") {
+            // the camera visits each nation's capital in turn (for screenshots of the running game)
+            // first let the towns grow for about a year at the highest speed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.speedIndex = 4 }
+            for k in 0..<3 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 48 + Double(k) * 8) { [weak self] in
+                    guard let self = self, let s = self.society else { return }
+                    self.speedIndex = 1
+                    let ids = s.realm.nations.map { $0.id }.sorted()
+                    guard k < ids.count, let c = s.capital(of: ids[k]) ?? s.towns(of: ids[k]).first else { return }
+                    self.watch = .point(c.center.center)
+                    self.scene?.zoom = 1.2
+                }
+            }
+        }
         if args.contains("--demo-war") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self else { return }

@@ -438,4 +438,29 @@ extension Society {
             return (s.id, cityName(s), s.nation ?? 0, cap, cityKind(s), s.center.center, s.siege != nil)
         }
     }
+
+    // MARK: what is drawn over towns
+    public struct RoofInfo { public var building: Int, town: Int, nation: Int, x: Int, y: Int, w: Int, h: Int }
+    /// Finished roofed buildings in a rectangle of tiles (fields, wells and lights have no roof).
+    public func roofs(minX: Int, minY: Int, maxX: Int, maxY: Int) -> [RoofInfo] {
+        var out: [RoofInfo] = []
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            if s.center.x < minX - 80 || s.center.x > maxX + 80 || s.center.y < minY - 80 || s.center.y > maxY + 80 { continue }
+            for b in s.buildings where b.done && b.w >= 3 && b.h >= 3 && !["farm", "well", "lights"].contains(b.type) {
+                if b.x + b.w < minX || b.x > maxX || b.y + b.h < minY || b.y > maxY { continue }
+                out.append(RoofInfo(building: b.id, town: s.id, nation: b.style ?? s.nation ?? 0, x: b.x, y: b.y, w: b.w, h: b.h))
+            }
+        }
+        return out
+    }
+    /// Gates of towns in a rectangle, with the nation whose crest they carry.
+    public func gateCrests(minX: Int, minY: Int, maxX: Int, maxY: Int) -> [(pos: TilePos, nation: Int, color: String)] {
+        var out: [(TilePos, Int, String)] = []
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            let n = s.flagOf ?? s.nation ?? 0
+            guard n != 0, let nat = realm.nation(n) else { continue }
+            for g in s.gates where g.x >= minX && g.x <= maxX && g.y >= minY && g.y <= maxY { out.append((g, n, nat.color)) }
+        }
+        return out
+    }
 }

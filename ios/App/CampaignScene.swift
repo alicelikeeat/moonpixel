@@ -40,6 +40,10 @@ extension GameScene {
         legionNodes = [:]
         for n in soldierNodes.values { n.removeFromParent() }
         soldierNodes = [:]; shownSoldiers = []
+        for n in roofNodes.values { n.removeFromParent() }
+        roofNodes = [:]
+        for n in crestNodes.values { n.removeFromParent() }
+        crestNodes = [:]
         clearPreview()
     }
 

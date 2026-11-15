@@ -199,6 +199,8 @@ public final class Building: Codable {
     /// Household that owns this house (optional so that older saves still load).
     public var owner: Int?
     public var door = TilePos(0, 0)
+    /// The nation whose builders raised it: its roof keeps that style after the town changes hands.
+    public var style: Int?
     public init() {}
 }
 
@@ -619,11 +621,16 @@ public final class Society {
         return true
     }
 
-    func freeSlot(_ s: Settlement, _ w: Int, _ h: Int) -> TilePos {
+    func freeSlot(_ s: Settlement, _ w: Int, _ h: Int, type: String = "house") -> TilePos {
         var cands: [TilePos] = []
         for gy in -4...4 { for gx in -4...4 where gx != 0 || gy != 0 { cands.append(TilePos(gx, gy)) } }
-        cands.sort { $0.lengthSquared != $1.lengthSquared ? $0.lengthSquared < $1.lengthSquared : ($0.y * 16 + $0.x) < ($1.y * 16 + $1.x) }
-        for g in cands {
+        // each kind of city has its own plan: strongholds put their soldiers on the side facing the enemy,
+        // farming towns ring themselves with fields, traders keep the market on the square, the palace stands
+        // on it. Houses and workshops fill in nearest the centre (workshops placed towards the rocks starved
+        // the mines in the long-run tests, so industry keeps to the centre).
+        let score = slotScore(s, type)
+        let ranked = cands.map { ($0, score($0)) }.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : ($0.0.y * 16 + $0.0.x) < ($1.0.y * 16 + $1.0.x) }
+        for (g, _) in ranked {
             let key = "\(g.x),\(g.y)"
             if s.usedSlots.contains(key) { continue }
             s.usedSlots.insert(key)
@@ -631,6 +638,31 @@ public final class Society {
             if footprintOK(s, x, y, w, h) { return TilePos(x, y) }
         }
         return .none
+    }
+
+    static let militaryTypes: Set<String> = ["barracks", "watchtower", "fortress"]
+
+    /// Lower is better. Depends only on the town, its neighbours and its rocks, so it is reproducible.
+    func slotScore(_ s: Settlement, _ type: String) -> (TilePos) -> Double {
+        let focus = cityFocus(s)
+        func toward(_ p: TilePos?) -> (Double, Double) {
+            guard let p = p else { return (0, 0) }
+            let d = Vec2(Double(p.x - s.center.x), Double(p.y - s.center.y))
+            return d.length < 1 ? (0, 0) : (d.x / d.length, d.y / d.length)
+        }
+        var bias: (TilePos) -> Double = { _ in 0 }
+        if Society.militaryTypes.contains(type) {
+            let enemy = settlements.values.filter { !$0.abandoned && $0.nation != s.nation }
+                .min { let a = ($0.center - s.center).lengthSquared, b = ($1.center - s.center).lengthSquared; return a != b ? a < b : $0.id < $1.id }
+            let e = toward(enemy?.center)
+            bias = { g in -6 * (Double(g.x) * e.0 + Double(g.y) * e.1) }
+        } else if type == "farm" || type == "granary" || type == "windmill" {
+            if focus == "agricultural" { return { g in 40 - Double(g.lengthSquared) } }      // the outer ring is the field belt
+            bias = { _ in 3 }
+        } else if type == "market" || type == "palace" {
+            return { g in Double(g.lengthSquared) * 0.5 - 10 }                                  // on the square
+        }
+        return { g in Double(g.lengthSquared) + bias(g) }
     }
 
     @discardableResult func queue(_ s: Settlement, _ type: String) -> Bool {
@@ -649,7 +681,7 @@ public final class Society {
                 b.cells.append(BuildCell(dx: c.0, dy: c.1, layer: 2, key: "lantern_post", wood: 2, stone: 1))
             }
         } else {
-            pos = freeSlot(s, w, h)
+            pos = freeSlot(s, w, h, type: type)
             if pos.isNone { return false }
             for dy in 0..<h { for dx in 0..<w {
                 if world.tile(2, pos.x + dx, pos.y + dy) != 0 { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: "", wood: 0, stone: 0)) }
@@ -685,21 +717,33 @@ public final class Society {
         }
         if let spec = Society.roomSpecs[type] ?? Society.landmarkSpecs[type] {
             let wallKey = styledWall(s, spec.wall)
-            // public buildings: a walled room facing the square with its signature equipment
-            let dd = TilePos(w / 2, h - 1)
+            // public buildings: a walled room facing the square with its signature equipment; the door is
+            // on the side towards the centre, like a house's, so the way in is where the art shows it
+            let cx = pos.x + w / 2, cy = pos.y + h / 2
+            var dd = TilePos(w / 2, h - 1), out = TilePos(0, 1)
+            if abs(s.center.y - cy) >= abs(s.center.x - cx) {
+                if s.center.y < cy { dd = TilePos(w / 2, 0); out = TilePos(0, -1) }
+            } else {
+                dd = s.center.x < cx ? TilePos(0, h / 2) : TilePos(w - 1, h / 2)
+                out = s.center.x < cx ? TilePos(-1, 0) : TilePos(1, 0)
+            }
             for dy in 1..<(h - 1) { for dx in 1..<(w - 1) { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 0, key: spec.floor, wood: 0, stone: 0)) } }
             for dy in 0..<h { for dx in 0..<w where dx == 0 || dy == 0 || dx == w - 1 || dy == h - 1 {
                 if TilePos(dx, dy) == dd { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: "door_wood", wood: 1, stone: 0)) }
                 else { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: wallKey, wood: wallKey == "wall_wood" || wallKey == "fence" ? 1 : 0, stone: wallKey == "wall_wood" || wallKey == "fence" ? 0 : 1)) }
             } }
+            let inside = dd + TilePos(-out.x, -out.y)
             for f in spec.items where f.0 < w - 1 && f.1 < h - 1 {
+                // nothing is put right behind the door, so the entrance is never blocked
+                if TilePos(f.0, f.1) == inside { continue }
                 let key = f.2 == "banner" ? "banner_\(max(1, min(3, s.nation ?? 1)))" : f.2
                 b.cells.append(BuildCell(dx: f.0, dy: f.1, layer: 2, key: key, wood: 2, stone: 2))
             }
-            b.door = pos + dd + TilePos(0, 1)
+            b.door = pos + dd + out
         }
         b.id = nextBID; nextBID += 1
         b.x = pos.x; b.y = pos.y; b.w = w; b.h = h
+        b.style = s.nation
         s.buildings.append(b)
         return true
     }

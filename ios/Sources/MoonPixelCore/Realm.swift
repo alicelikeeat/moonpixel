@@ -353,7 +353,7 @@ extension Society {
     }
 
     // MARK: queries
-    func towns(of nation: Int) -> [Settlement] { settlements.values.filter { !$0.abandoned && $0.nation == nation }.sorted { $0.id < $1.id } }
+    public func towns(of nation: Int) -> [Settlement] { settlements.values.filter { !$0.abandoned && $0.nation == nation }.sorted { $0.id < $1.id } }
     func garrison(_ s: Settlement, create: Bool) -> Legion? {
         if let g = realm.legions.first(where: { $0.home == s.id && $0.state == 0 }) { return g }
         guard create else { return nil }
@@ -606,6 +606,7 @@ extension Society {
         let old = s.nation ?? 0
         if let g = garrison(s, create: false) { realm.legions.removeAll { $0 === g } }
         s.nation = lg.nation
+        reflag(s)                       // the first thing that changes is the flags; the town itself stays as built
         s.unrest = 0.3
         damage(s, buildings: cfg.captureDamage)
         _ = flee(s, share: cfg.refugeeShare, from: old, captor: lg.nation)
@@ -615,7 +616,7 @@ extension Society {
         addFatigue(old, cfg.fatigueLostTown)
         if let r = realm.ri(old, lg.nation) { realm.relations[r].value = max(-1, realm.relations[r].value - 0.2) }
         realm.counts.captures += 1
-        reflag(s)
+        reflag(s)                       // again: banners raised by the damage repairs carry the new colours too
         endSiege(s)
         emit("captured", [realm.nation(lg.nation)?.name(zh: zh) ?? "", realm.nation(old)?.name(zh: zh) ?? "", cityName(s)], s.center.center,
              nations: [lg.nation, old], city: s.id, cause: "siege", result: "owner=\(lg.nation)")
