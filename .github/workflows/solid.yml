@@ -1,0 +1,109 @@
+name: 3D view check
+# Checks the 3D view on its working branch without publishing anything: the simulator build, the UI
+# tests (2D and 3D) and screenshots of the 3D view. Pictures come from a simulator on a CI Mac, not
+# from a device. Releases are still made only by ios.yml.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/upbeat-gates-vu0ssd"]
+    paths: ["ios/**", "content/**", ".github/workflows/solid.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: solid-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shots:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+      - name: Simulator build
+        working-directory: ios
+        run: |
+          xcodegen generate
+          set +e
+          xcodebuild -project MoonPixel.xcodeproj -scheme MoonPixel -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ddsim \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build > simbuild.log 2>&1; rc=$?
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" simbuild.log | cut -c1-400 | sort -u | head -60
+          grep -E "Solid3D.swift.*warning:" simbuild.log | cut -c1-300 | sort -u | head -20
+          exit $rc
+      - name: Screenshots of the 3D view (simulator)
+        working-directory: ios
+        run: |
+          set +e
+          APP=$(find build/ddsim/Build/Products -maxdepth 2 -name "*.app" | head -1)
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')" 2> device.txt)
+          echo "device: $(cat device.txt)"
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
+          xcrun simctl install "$UDID" "$APP"
+          shot() { xcrun simctl io "$UDID" screenshot "$1" > /dev/null 2>&1; }
+          run() { xcrun simctl terminate "$UDID" org.moonpixel.game > /dev/null 2>&1; xcrun simctl launch "$UDID" org.moonpixel.game "$@"; }
+          run --autostart 7 --2d; sleep 30; shot solid-0-flat.png
+          run --autostart 7 --3d --perf; sleep 40; shot solid-1-start.png
+          run --autostart 7 --3d --demo-city; sleep 22; shot solid-2-city.png
+          run --autostart 7 --3d --demo-war; sleep 60; shot solid-3-war.png
+          run --autostart 7 --3d --storm; sleep 16; shot solid-4-storm.png
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          echo "===== app log (errors and faults) ====="
+          xcrun simctl spawn "$UDID" log show --last 4m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | cut -c1-300 | sort | uniq -c | sort -rn | head -25
+          ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i moonpixel | head
+          # small copies in the log, so the pictures can be read without downloading the artifact
+          for f in solid-*.png; do
+            sips -Z 720 -s format jpeg -s formatOptions 45 "$f" --out "${f%.png}.jpg" > /dev/null 2>&1
+            echo "===== BEGIN $f ====="; base64 -i "${f%.png}.jpg" | tr -d '\n' | fold -w 3000; echo; echo "===== END $f ====="
+          done
+          ls -la solid-*.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: solid-shots
+          path: |
+            ios/simbuild.log
+            ios/solid-*.png
+
+  ui:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: brew install xcodegen
+      - name: Simulator build and UI tests
+        working-directory: ios
+        run: |
+          xcodegen generate
+          set +e
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
+          xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
+            -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
+          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -80 | tee ui-result.txt
+          mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
+          python3 -c "
+          import json,shutil
+          for t in json.load(open('uishots/manifest.json')):
+              for a in t.get('attachments', []):
+                  name = a.get('suggestedHumanReadableName','x').split('_')[0].split('.')[0]
+                  name = ''.join(ch if ch.isalnum() or ch in '-' else '-' for ch in name)[:60]
+                  shutil.copy('uishots/' + a['exportedFileName'], 'ui-' + name + '.png')
+          " 2>/dev/null; ls ui-*.png 2>/dev/null
+          for f in ui-3d-01-solid.png ui-3d-02-turned.png; do
+            [ -f "$f" ] || continue
+            sips -Z 720 -s format jpeg -s formatOptions 45 "$f" --out "${f%.png}.jpg" > /dev/null 2>&1
+            echo "===== BEGIN $f ====="; base64 -i "${f%.png}.jpg" | tr -d '\n' | fold -w 3000; echo; echo "===== END $f ====="
+          done
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: solid-ui-tests
+          path: |
+            ios/uitest.log
+            ios/ui-result.txt
+            ios/ui-*.png

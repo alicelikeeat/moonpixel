@@ -259,6 +259,7 @@ extension GameScene {
     func worldFX(_ e: WorldFX) {
         if abs(e.pos.x - player.x) > 900 || abs(e.pos.y - player.y) > 600 { return }      // off screen: nothing to draw
         let p = pt(e.pos)
+        model?.solid?.worldFX(e)
         switch e.kind {
         case "lightning": lightning(from: CGPoint(x: p.x + 30, y: p.y + 420), to: p, forks: 3); skyFlash(0.4)
         case "firework": firework(at: p)

@@ -182,4 +182,40 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Play"].firstMatch.exists, "and the world is listed")
         shot("21-left-after-retry")
     }
+
+    /// The 3D view is another way of drawing the same running game: switch to it, use the HUD, switch back.
+    func testThreeDViewShowsTheSameGameAndSwitchesBack() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--2d"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "the game started")
+        sleep(4)
+        shot("3d-00-flat")
+        let solid = app.descendants(matching: .any)["Solid3D"]
+        XCTAssertFalse(solid.exists, "2D to begin with")
+        more(app, "View3D"); sleep(8)
+        shot("3d-01-solid")
+        XCTAssertTrue(solid.waitForExistence(timeout: 5), "the 3D view is on screen")
+        // the HUD is the same one and still works over it
+        let status = app.buttons.containing(NSPredicate(format: "label CONTAINS 'people'")).firstMatch
+        XCTAssertTrue(status.exists, "the status capsule is there in 3D")
+        app.buttons["Map"].tap(); sleep(2)
+        XCTAssertTrue(text(app, containing: "chunks mapped").waitForExistence(timeout: 4), "the map opens in 3D")
+        app.buttons["Map"].tap(); sleep(1)
+        // turn the camera, zoom, tap the ground: nothing may crash and the game goes on
+        let win = app.windows.firstMatch
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).press(forDuration: 0.1, thenDragTo: win.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.4)))
+        sleep(2)
+        shot("3d-02-turned")
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)).tap(); sleep(1)
+        app.buttons["64×"].tap(); sleep(6)
+        shot("3d-03-fast")
+        XCTAssertTrue(status.exists)
+        if app.buttons["1×"].exists { app.buttons["1×"].tap(); sleep(1) }
+        more(app, "View3D"); sleep(4)
+        shot("3d-04-flat-again")
+        XCTAssertFalse(solid.exists, "back in 2D")
+        XCTAssertTrue(status.exists, "the same game is still running")
+    }
 }

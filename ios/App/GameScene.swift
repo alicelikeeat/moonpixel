@@ -81,6 +81,14 @@ final class GameScene: SKScene {
     private var nationColors: [Int: UIColor] = [:]
     var effects = 0
     static let maxEffects = 120
+    /// True while the 3D view draws the world: this scene still runs the game but draws nothing.
+    private var drawn3D = false
+    /// The cells of the building plan being laid out (the 3D view draws them itself).
+    var previewCells: [(pos: TilePos, ok: Bool, reason: String)] = []
+    /// The traveller is in the middle of a swing or a cast.
+    var striking: Bool { attackT > 0.12 }
+    /// The 3D view's stick: the same state the 2D stick sets.
+    func steer(_ v: CGVector) { joyVec = v }
 
     override func didMove(to view: SKView) {
         backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.10, alpha: 1)
@@ -169,8 +177,8 @@ final class GameScene: SKScene {
             playerNode.colorBlendFactor = (threat.attackers > 0 || bite > 0) && !society.playerWarded ? 0.35 : 0
             if hurt { model.playerDied() }
             for fx in society.takeFX() { worldFX(fx) }
-            updateAnimals(society)
-            if under { for n in weatherNodes { n.removeFromParent() }; weatherNodes = []; weatherFall = -1 } else { updateWeather(society, dt) }
+            if !model.render3D { updateAnimals(society) }
+            if model.render3D { } else if under { for n in weatherNodes { n.removeFromParent() }; weatherNodes = []; weatherFall = -1 } else { updateWeather(society, dt) }
         }
         if flashOnAppear { flashOnAppear = false; genesisFX() }
 
@@ -204,18 +212,22 @@ final class GameScene: SKScene {
         if model.watch == .none && zoom < 1 { zoom = 1 }
         cam.position = pt(viewPos)
         cam.setScale(1 / zoom)
-        night.alpha = under ? 0.42 : CGFloat((1 - world.daylight) * 0.55)
-        layoutJoystick()
-        model.perf.time("chunks") { updateChunks(world, model) }
-        model.perf.time("actors") { updateActors(world, society, model) }
-        if !model.plainRender {
-            model.perf.time("soldiers") { updateSoldiers(society, model) }
-            model.perf.time("roofs") { updateRoofs(society, model) }
+        let flat = !model.render3D
+        if flat == drawn3D { drawn3D = !flat; show2D(flat) }
+        if flat {
+            night.alpha = under ? 0.42 : CGFloat((1 - world.daylight) * 0.55)
+            layoutJoystick()
+            model.perf.time("chunks") { updateChunks(world, model) }
+            model.perf.time("actors") { updateActors(world, society, model) }
+            if !model.plainRender {
+                model.perf.time("soldiers") { updateSoldiers(society, model) }
+                model.perf.time("roofs") { updateRoofs(society, model) }
+            }
         }
 
         hudAcc += dt
-        if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }
-        model.perf.time("legions") { updateLegions(society, model) }
+        if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); if flat { updateTownLabels(society) } }
+        if flat { model.perf.time("legions") { updateLegions(society, model) } }
         maintAcc += dt
         if maintAcc > 2 {
             maintAcc = 0
@@ -227,6 +239,24 @@ final class GameScene: SKScene {
         }
         saveAcc += dt
         if saveAcc > 120 { saveAcc = 0; model.save(announce: false) }
+    }
+
+    /// Switching between the two views: in 3D everything this scene had drawn is taken away (the
+    /// 3D view draws the world); back in 2D it is all drawn again from the same state.
+    private func show2D(_ on: Bool) {
+        for n in [playerNode, playerRing, joyBase, joyKnob] as [SKNode] { n.isHidden = !on }
+        if on { return }
+        resetLayer()
+        trimChunkTextures()
+        for l in townLabels.values { l.removeFromParent() }
+        townLabels = [:]
+        for b in badgeNodes.values { b.removeFromParent() }
+        badgeNodes = [:]
+        for n in weatherNodes { n.removeFromParent() }
+        weatherNodes = []; weatherFall = -1
+        weatherVeil.alpha = 0; night.alpha = 0
+        selectRing.isHidden = true; staffGlow.isHidden = true; ghost.isHidden = true
+        joyTouch = nil; joyVec = .zero
     }
 
     private func layoutJoystick() {
@@ -450,7 +480,7 @@ final class GameScene: SKScene {
         if GameModel.weapons[model.weaponIndex] == "pick" || model.depth > 0 {
             facing = dir; attackT = 0.3
             let t = (player + dir * 16).tile
-            if model.dig(at: t) { dust(at: CGPoint(x: t.center.x, y: -(t.center.y - 8)), color: UIColor(white: 0.7, alpha: 1)); return }
+            if model.dig(at: t) { model.solid?.burst(at: t.center, lift: 0.4, color: RGBA(hex: "#b0b0b0")); dust(at: CGPoint(x: t.center.x, y: -(t.center.y - 8)), color: UIColor(white: 0.7, alpha: 1)); return }
             if model.depth > 0 { return }
         }
         if !model.activePower.isEmpty {
@@ -459,6 +489,7 @@ final class GameScene: SKScene {
             model.casted(cast)
             if cast.ok {
                 attackT = 0.25
+                model.solid?.cast(cast, from: player)
                 if let to = cast.blinkTo { blinkFX(from: pt(player), to: pt(to)); player = to }
                 castFX(cast)
             }
@@ -468,6 +499,7 @@ final class GameScene: SKScene {
         let strike = model.society.playerStrike(from: player, dir: dir, weapon: GameModel.weapons[model.weaponIndex], clock: CACurrentMediaTime())
         if strike.onCooldown { return }
         model.struck(strike)
+        model.solid?.strike(from: player, dir: dir, weapon: GameModel.weapons[model.weaponIndex], target: target, hits: strike.hits.prefix(6).map { ($0.pos, $0.dead) })
         for h in strike.hits.prefix(6) { hitFX(at: CGPoint(x: h.pos.x, y: -(h.pos.y - 20)), damage: h.damage, dead: h.dead) }
         facing = dir
         attackT = 0.3
@@ -577,6 +609,7 @@ final class GameScene: SKScene {
 
     /// Effects only for what is on screen: pixel dust for people, a dissolving veil for a region.
     func lawFX(_ plan: LawPlan) {
+        model?.solid?.flash(0.5, time: 0.9)
         var shown = 0
         for id in plan.agents {
             guard shown < 60, let node = agentNodes[id] else { continue }
@@ -600,6 +633,7 @@ final class GameScene: SKScene {
 
     /// A new world: white light that clears, and a ring spreading from the traveller.
     func genesisFX() {
+        model?.solid?.flash(1, time: 1.4)
         let flash = SKSpriteNode(color: .white, size: CGSize(width: 4000, height: 4000))
         flash.zPosition = 950
         cam.addChild(flash)
@@ -674,19 +708,25 @@ final class GameScene: SKScene {
             if hypot(p.x - start.x, p.y - start.y) > 14 { continue }
             let sp = t.location(in: self)
             let wp = Vec2(Double(sp.x), Double(-sp.y))
-            if model.buildMode == "demolish" { model.demolish(at: wp.tile); continue }
-            if model.buildMode == "depot" { model.build(at: wp.tile); continue }
-            if model.reach(wp.tile) { continue }                     // levers, gates, stairs, chests and flowers within reach
-            if model.watch != .none { model.stopWatching(); continue }   // a tap while watching brings the camera home
-            if let id = model.placingAsset {
-                model.world.addProp(key: "asset:" + id, at: wp)
-                model.placingAsset = nil
-                continue
-            }
-            if let a = model.society.agent(near: wp + Vec2(0, 14), radius: 18) { model.select(a.id) }
-            else if model.selectedID != 0 { model.deselect() }
-            else { attack(toward: wp) }
+            tapWorld(wp, agent: model.society.agent(near: wp + Vec2(0, 14), radius: 18)?.id)
         }
+    }
+
+    /// A tap on a place of the world (and on a person, if one was under the finger): the same in 2D and 3D.
+    func tapWorld(_ wp: Vec2, agent: Int?) {
+        guard let model = model else { return }
+        if model.buildMode == "demolish" { model.demolish(at: wp.tile); return }
+        if model.buildMode == "depot" { model.build(at: wp.tile); return }
+        if model.reach(wp.tile) { return }                       // levers, gates, stairs, chests and flowers within reach
+        if model.watch != .none { model.stopWatching(); return }     // a tap while watching brings the camera home
+        if let id = model.placingAsset {
+            model.world.addProp(key: "asset:" + id, at: wp)
+            model.placingAsset = nil
+            return
+        }
+        if let id = agent { model.select(id) }
+        else if model.selectedID != 0 { model.deselect() }
+        else { attack(toward: wp) }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {

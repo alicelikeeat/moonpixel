@@ -28,6 +28,8 @@ struct RootView: View {
         ZStack {
             if let scene = model.scene {
                 SpriteView(scene: scene, preferredFramesPerSecond: 60).ignoresSafeArea()
+                // 3D: the scene above keeps running the game and draws nothing; this draws the same world as solids
+                if model.render3D { Solid3DView().ignoresSafeArea() }
                 HUDView()
             } else {
                 MenuView()

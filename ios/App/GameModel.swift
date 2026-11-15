@@ -76,6 +76,12 @@ final class GameModel: ObservableObject {
     var perfLogEvery = 0.0
     /// `--plain-render`: draw without the v1.6 roofs, gate crests and soldier view (same-machine A/B measurements)
     var plainRender = false
+    /// The world is drawn as solids by RealityKit instead of as sprites; the game underneath is the same.
+    @Published var render3D = UserDefaults.standard.bool(forKey: "render3D") {
+        didSet { UserDefaults.standard.set(render3D, forKey: "render3D") }
+    }
+    /// The 3D view while it is on screen (effects are sent to it).
+    weak var solid: SolidRenderer?
     private var perfLogAcc = 0.0
     @Published var mapPick: TilePos?
     @Published var mapZoom = 1.0
@@ -213,6 +219,7 @@ final class GameModel: ObservableObject {
         if let i = args.firstIndex(of: "--perf-log"), i + 1 < args.count { perfLogEvery = Double(args[i + 1]) ?? 0 }
         if args.contains("--perf") { showPerf = true }
         if args.contains("--plain-render") { plainRender = true }
+        if args.contains("--3d") { render3D = true } else if args.contains("--2d") { render3D = false }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
         start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)

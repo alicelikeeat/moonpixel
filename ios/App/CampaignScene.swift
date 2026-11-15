@@ -14,6 +14,8 @@ extension GameScene {
 
     func showPreview(_ pre: BuildPreview) {
         clearPreview()
+        previewCells = pre.cells
+        if model?.render3D == true { return }
         for c in pre.cells {
             let n = SKSpriteNode(color: c.ok ? UIColor(red: 0.3, green: 1, blue: 0.5, alpha: 1) : UIColor(red: 1, green: 0.3, blue: 0.3, alpha: 1), size: CGSize(width: 15, height: 15))
             n.alpha = 0.45
@@ -24,7 +26,7 @@ extension GameScene {
         }
     }
 
-    func clearPreview() { for n in previewNodes { n.removeFromParent() }; previewNodes = [] }
+    func clearPreview() { for n in previewNodes { n.removeFromParent() }; previewNodes = []; previewCells = [] }
 
     /// Drop every drawn chunk (and anyone drawn on them) when moving between the surface and the underground.
     func resetLayer() {
