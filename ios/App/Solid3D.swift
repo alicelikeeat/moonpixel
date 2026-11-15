@@ -332,6 +332,7 @@ final class SolidRenderer {
         let e = pool.popLast() ?? ModelEntity()
         e.isEnabled = true
         e.scale = [1, 1, 1]
+        e.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])      // a pooled entity may have been a turned figure
         root.addChild(e)
         return e
     }
@@ -694,6 +695,12 @@ final class SolidRenderer {
             i += 1
         }
     }
+
+    /// The chunks drawn now: a cleanup must not throw away what is on screen.
+    var chunkKeys: Set<Int64> { Set(chunks.keys) }
+
+    /// Memory is short: forget every cached figure mesh and spare entity (they are rebuilt when needed).
+    func trim() { meshes.removeAll(); pool.removeAll() }
 
     var report: String { "3D: \(chunks.count) chunks, \(agents.count + soldiers.count) figures, \(particles.count) particles" }
 }

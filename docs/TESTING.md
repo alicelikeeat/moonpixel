@@ -199,7 +199,7 @@ CI_RESULT_PLACEHOLDER
 | --- | --- | --- |
 | 三角形朝向与法线一致、无零面积、坐标与索引有效 | 所有测试共用的检查 | 方块、6 个区块、每一种地块、人物（10 种手持物 × 4 帧 × 成人/儿童）、全部动物、坐骑、军旗、4 种屋顶 |
 | 调色板贴图 | `testPaletteKeepsColoursWhicheverWayVRuns` | v 从上或从下数读到同一颜色；每通道 5 位，与原色相差小于 4% |
-| 区块网格 | `testChunkMeshIsValidDeterministicAndLeavesTheWorldAlone` | 同一输入两次结果相同；不改动区块和修订号；地面恰好覆盖 32×32 一次；6 个区块共 26056 个三角形，单区块上限 6 万 |
+| 区块网格 | `testChunkMeshIsValidDeterministicAndLeavesTheWorldAlone` | 同一输入两次结果相同；不改动区块和修订号；地面恰好覆盖 32×32 一次；6 个区块共 24844 个三角形，单区块上限 6 万 |
 | 相邻区块 | `testNeighbouringChunksMeetWithoutGaps` | 区块边界两侧的高度与人物站立高度一致 |
 | 水、桥、地下 | `testWaterLiesBelowItsBanksAndBridgesAreLevel` | 水面低于岸 0.3 格，桥面与岸齐平，地下层为 0 |
 | 墙 | `testWallsHideTheSidesBetweenThem` | 相邻两面墙之间的两个面不生成；墙高 1.5 格 |

@@ -485,7 +485,7 @@ final class GameModel: ObservableObject {
     /// Called a few times per second from the scene.
     func refreshHUD() {
         guard let w = world, let s = society else { return }
-        if showPerf, let sc = scene { perfLines = sc.perfReport().lines }
+        if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) }
         let h = w.hour
         status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
         pollEvents()
@@ -568,8 +568,9 @@ final class GameModel: ObservableObject {
     @discardableResult func cleanMemory(announce: Bool) -> Int {
         guard let w = world, let sc = scene else { return 0 }
         let before = MemoryBudget.usedMB()
-        let dropped = w.purge(keep: Set(sc.chunkNodes.keys))
+        let dropped = w.purge(keep: Set(sc.chunkNodes.keys).union(solid?.chunkKeys ?? []))
         let tex = sc.clearTextureCache()
+        solid?.trim()
         society.trimLog(12)
         cleanCooldown = 30
         let freed = max(0, before - MemoryBudget.usedMB())

@@ -113,7 +113,7 @@ public enum Terrain3D {
     public static let maxLevel = 28
 
     public static func level(elevation e: Double) -> Int {
-        Swift.max(0, Swift.min(maxLevel, Int(((e - Biome.sea) * 34).rounded(.down))))
+        Swift.max(0, Swift.min(maxLevel, Int(((e - Biome.sea) * 24).rounded(.down))))
     }
 
     /// Top of the ground of one tile.
