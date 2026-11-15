@@ -74,7 +74,13 @@ vertex SwarmPoint swarmVertex(uint vid [[vertex_id]],
     return o;
 }
 
-fragment float4 swarmFragment(SwarmPoint in, float2 pc [[point_coord]]) {
+// what the fragment stage takes from a grain (a fragment input may not carry the point size)
+struct SwarmGrain {
+    float4 position [[position]];
+    float3 color;
+};
+
+fragment float4 swarmFragment(SwarmGrain in [[stage_in]], float2 pc [[point_coord]]) {
     float2 c = pc - 0.5;
     float r2 = dot(c, c);
     if (r2 > 0.25) { discard_fragment(); }
