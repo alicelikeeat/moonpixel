@@ -210,7 +210,7 @@ public final class Settlement: Codable {
     public var food = 0.0, wood = 0.0, stone = 0.0
     public var buildings: [Building] = []
     public var members: [Int] = []
-    public var usedSlots: Set<String> = []
+    public var usedSlots = StringSet()
     public var graves = 0
     public var abandoned = false
     /// Nation that controls this place right now (0 while unassigned).
@@ -254,6 +254,18 @@ public final class Settlement: Codable {
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
     func stock(_ k: String) -> Double { k == "food" ? food : (k == "wood" ? wood : stone) }
     func addStock(_ k: String, _ n: Double) { if k == "food" { food += n } else if k == "wood" { wood += n } else if k == "stone" { stone += n } }
+}
+
+/// A set of strings saved in sorted order, so the same world always gives the same file.
+public struct StringSet: Codable, Equatable {
+    public private(set) var items: Set<String> = []
+    public init() {}
+    public func contains(_ k: String) -> Bool { items.contains(k) }
+    @discardableResult public mutating func insert(_ k: String) -> Bool { items.insert(k).inserted }
+    @discardableResult public mutating func remove(_ k: String) -> String? { items.remove(k) }
+    public var count: Int { items.count }
+    public init(from d: Decoder) throws { items = Set(try d.singleValueContainer().decode([String].self)) }
+    public func encode(to e: Encoder) throws { var c = e.singleValueContainer(); try c.encode(items.sorted()) }
 }
 
 public struct SocietyStats: Codable {
@@ -353,7 +365,7 @@ public final class Society {
             let id = realm.nations[k].id
             if realm.nations[k].techCount >= Society.techs.count { continue }
             var rate = 0.0
-            for s in settlements.values where !s.abandoned && s.nation == id { rate += researchRate(of: s) }
+            for s in towns(of: id) { rate += researchRate(of: s) }          // in id order: the same sum every run
             // knowledge spreads: nations behind the leader catch up faster; a unified era shares everything
             rate *= governance(id) * cfg.researchScale * (realm.nations[k].techCount < techCount ? cfg.catchUp : 1) * (realm.era == 1 ? cfg.unityResearch : 1)
             if realm.active("breakthrough", id, world.time) { rate *= cfg.breakthroughBoost }
@@ -363,7 +375,7 @@ public final class Society {
                 realm.nations[k].techCount += 1
                 let first = realm.nations[k].techCount > legacyTech
                 legacyTech = max(legacyTech, realm.nations[k].techCount)
-                if first { emit("tech", [techName(realm.nations[k].techCount - 1)], settlements.values.first { !$0.abandoned && $0.nation == id }?.center.center ?? .zero) }
+                if first { emit("tech", [techName(realm.nations[k].techCount - 1)], towns(of: id).first?.center.center ?? .zero) }
                 for s in settlements.values { s.planT = 0 }
             }
         }
@@ -1353,7 +1365,7 @@ public final class Society {
     /// (nearest to `center` first, never the ones asleep indoors) are shown as
     /// characters; everybody else in view is counted on the building they belong
     /// to (their home, else the village square), so nobody silently disappears.
-    public func crowdSplit(center: Vec2, halfW: Double, halfH: Double, limit: Int = 50, useGrid: Bool = true) -> (shown: [Agent], badges: [TilePos: Int]) {
+    public func crowdSplit(center: Vec2, halfW: Double, halfH: Double, limit: Int = 50, useGrid: Bool = true, soldiersApart: Bool = false) -> (shown: [Agent], badges: [TilePos: Int]) {
         var candidates: [(Double, Agent)] = []
         var badges: [TilePos: Int] = [:]
         func anchor(_ a: Agent) -> TilePos {
@@ -1366,6 +1378,8 @@ public final class Society {
         let pad = 48.0 + 64
         let near = useGrid ? agentGrid.ids(minX: center.x - halfW - pad, minY: center.y - halfH - pad, maxX: center.x + halfW + pad, maxY: center.y + halfH + pad).compactMap { agents[$0] } : Array(agents.values)
         for a in near {
+            // soldiers of an army in the field are drawn by battleView, with their own budget
+            if soldiersApart, let l = a.legion, let lg = realm.legion(l), lg.state != 0 { continue }
             let inside = a.sleeping && a.home >= 0
             let dx = abs(a.pos.x - center.x), dy = abs(a.pos.y - center.y)
             if inside {

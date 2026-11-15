@@ -38,6 +38,8 @@ extension GameScene {
         animalNodes = [:]
         for n in legionNodes.values { n.removeFromParent() }
         legionNodes = [:]
+        for n in soldierNodes.values { n.removeFromParent() }
+        soldierNodes = [:]; shownSoldiers = []
         clearPreview()
     }
 
@@ -73,6 +75,12 @@ extension GameScene {
                 node.position = CGPoint(x: l.pos.x, y: -l.pos.y)
                 node.setScale(1 / max(0.45, min(1, zoom)))
                 (node.childNode(withName: "count") as? SKLabelNode)?.text = "\(l.count)"
+                // soldiers in view that are not drawn one by one are counted here, at the battlefield
+                if let mass = node.childNode(withName: "mass") as? SKLabelNode {
+                    let hidden = battleMasses[l.id] ?? 0
+                    mass.isHidden = hidden == 0 || BattleDetail.at(zoom: Double(zoom)) == .far
+                    mass.text = "+\(hidden)"
+                }
                 (node.childNode(withName: "state") as? SKLabelNode)?.text = l.state
                 if let bar = node.childNode(withName: "morale") as? SKSpriteNode { bar.xScale = CGFloat(max(0.05, min(1, l.morale))); bar.color = l.morale < 0.4 ? .red : (l.morale < 0.6 ? .orange : .green) }
                 if let eng = node.childNode(withName: "engines") { eng.isHidden = l.engines == 0 || l.phase > 0 }
@@ -114,6 +122,8 @@ extension GameScene {
         let state = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         state.name = "state"; state.fontSize = 8; state.fontColor = UIColor(white: 1, alpha: 0.85); state.position = CGPoint(x: 0, y: 60)
         let back = SKSpriteNode(color: UIColor(white: 0, alpha: 0.6), size: CGSize(width: 26, height: 3)); back.position = CGPoint(x: 0, y: 2)
+        let mass = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+        mass.name = "mass"; mass.fontSize = 9; mass.fontColor = UIColor(white: 1, alpha: 0.9); mass.position = CGPoint(x: 12, y: 19); mass.horizontalAlignmentMode = .left; mass.isHidden = true
         let morale = SKSpriteNode(color: .green, size: CGSize(width: 26, height: 3))
         morale.name = "morale"; morale.anchorPoint = CGPoint(x: 0, y: 0.5); morale.position = CGPoint(x: -13, y: 2)
         let engines = SKNode(); engines.name = "engines"
@@ -122,7 +132,7 @@ extension GameScene {
         front.name = "front"; front.strokeColor = color; front.lineWidth = 4; front.glowWidth = 3; front.lineCap = .round; front.isHidden = true; front.zPosition = -1
         let convoy = SKSpriteNode(texture: tileTexture("crate"))
         convoy.name = "convoy"; convoy.isHidden = true
-        for n in [front, pole, flag, back, morale, count, state, engines, convoy] as [SKNode] { root.addChild(n) }
+        for n in [front, pole, flag, back, morale, count, mass, state, engines, convoy] as [SKNode] { root.addChild(n) }
         addChild(root)
         return root
     }

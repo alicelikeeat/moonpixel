@@ -49,6 +49,15 @@ final class GameScene: SKScene {
     var legionNodes: [Int: SKNode] = [:]
     var frameAvg = 1.0 / 60
     var effectBudget = 120
+    /// One budget for what is drawn: decoration is cut before soldiers (see RenderBudget).
+    var renderBudget = RenderBudget()
+    var budgetPinned = false
+    private var budgetAcc = 0.0
+    var soldierNodes: [Int: SKSpriteNode] = [:]
+    var soldierPool: [SKSpriteNode] = []
+    var shownSoldiers: Set<Int> = []
+    /// Soldiers in view that are not drawn one by one, per army (shown at its standard).
+    var battleMasses: [Int: Int] = [:]
     var simDebt = 0.0
     private var badgeNodes: [TilePos: SKNode] = [:]
     private var otherTouches: [UITouch] = []
@@ -118,8 +127,13 @@ final class GameScene: SKScene {
         lastTime = currentTime
         frameAvg = frameAvg * 0.95 + dt * 0.05
         // under load, fewer decorative effects and weather particles
-        effectBudget = frameAvg > 1.0 / 40 ? 40 : (frameAvg > 1.0 / 50 ? 80 : 120)
         model.perf.frame(dt)
+        budgetAcc += dt
+        if budgetAcc >= 0.5 {
+            if !budgetPinned { renderBudget.update(p95: model.perf.percentiles().p95, dt: budgetAcc) }
+            budgetAcc = 0
+        }
+        effectBudget = renderBudget.effectCap
         if model.lawBusy || model.savePause { simClock.clear() }
         if model.lawBusy {
             model.stepLaw()                      // a world law is being carried out: the simulation waits for it
@@ -192,6 +206,7 @@ final class GameScene: SKScene {
         layoutJoystick()
         model.perf.time("chunks") { updateChunks(world, model) }
         model.perf.time("actors") { updateActors(world, society, model) }
+        model.perf.time("soldiers") { updateSoldiers(society, model) }
 
         hudAcc += dt
         if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }
@@ -312,7 +327,7 @@ final class GameScene: SKScene {
         var seen = Set<Int>()
         // at most 50 characters on screen; everyone else becomes a number on their building
         // nobody from the surface is drawn underground
-        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters)
+        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters, soldiersApart: true)
         updateBadges(split.badges)
         for a in split.shown {
             seen.insert(a.id)
@@ -494,7 +509,7 @@ final class GameScene: SKScene {
     }
 
     // MARK: nations and world-law effects
-    private func nationColor(_ id: Int, _ society: Society) -> UIColor {
+    func nationColor(_ id: Int, _ society: Society) -> UIColor {
         if let c = nationColors[id] { return c }
         let c = society.realm.nation(id).map { UIColor(hex: $0.color) } ?? .white
         nationColors[id] = c

@@ -236,6 +236,7 @@ public struct Realm: Codable {
     public var nextEvent: Int?
     var weatherBox: Weather?
     var faunaBox: Fauna?
+    var ledgerBox: CasualtyLedger?              // optional so that earlier saves load
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
     public var fauna: Fauna { get { faunaBox ?? Fauna() } set { faunaBox = newValue } }
     public init() {}
@@ -423,16 +424,20 @@ extension Society {
         if lg.state == 2, let t = settlements[lg.target] { let to = t.center.center - lg.pos; if to.length > 1 { fwd = to.normalized } }
         if lg.state == 4, let f = lg.foe.flatMap({ realm.legion($0) }) { let to = f.pos - lg.pos; if to.length > 1 { fwd = to.normalized } }
         let side = Vec2(-fwd.y, fwd.x)
-        let k = Double(a.id % 12), row = Double((a.id / 12) % 3)
+        // the formation grows with the army: wider and deeper ranks, so a big army is not piled on 36 places
+        let n = lg.members.count
+        let cols = n > 96 ? 24 : 12, rows = max(3, Int((Double(n) / Double(cols * 2)).rounded(.up)))
+        let k = Double(a.id % cols) * 12 / Double(cols), row = Double((a.id / cols) % rows)
+        let span = Double(cols) / 12
         var slot = lg.pos
         switch unit {
-        case Unit.archer: slot = lg.pos + fwd * (-16 - row * 9) + side * ((k - 5.5) * 8)
+        case Unit.archer: slot = lg.pos + fwd * (-16 - row * 9) + side * ((k - 5.5) * 8 * span)
         case Unit.cavalry: slot = lg.pos + fwd * (4 - row * 8) + side * ((a.id % 2 == 0 ? 1.0 : -1.0) * (58 + k * 5))
         case Unit.siege: slot = lg.pos + fwd * -38 + side * ((k - 5.5) * 10)
         case Unit.supply:
             if let at = lg.convoyAt, let h = settlements[lg.home] { slot = point(on: [h.center.center, lg.pos], at: at) + side * ((k - 5.5) * 3) }
             else { slot = lg.pos + fwd * -56 + side * ((k - 5.5) * 6) }
-        default: slot = lg.pos + fwd * (14 - row * 9) + side * ((k - 5.5) * 8)
+        default: slot = lg.pos + fwd * (14 - row * 9) + side * ((k - 5.5) * 8 * span)
         }
         if lg.state == 2 || lg.state == 4 { slot = slot + Vec2(sin(world.time * 2 + Double(a.id)) * 3, cos(world.time * 1.7 + Double(a.id)) * 3) }
         // local avoidance: a place in the formation that is inside a wall, water or rock is given up for a
@@ -1047,7 +1052,14 @@ extension Society {
     /// Called for every death: armies shrink, nations tire, leaders are succeeded.
     func realmDeath(_ a: Agent, _ s: Settlement, _ cause: String) {
         var side = s.nation ?? 0
-        if let lid = a.legion, let lg = realm.legion(lid) { lg.members.removeAll { $0 == a.id }; side = lg.nation }
+        let lg = a.legion.flatMap { realm.legion($0) }
+        if let lg = lg { side = lg.nation }
+        if cause == "battle" {
+            // the one record of the fallen: written here, as each soldier dies, never by what is drawn
+            let (key, sides) = battleKey(lg, side: side, near: a.pos)
+            realm.ledger.record(nation: side, battle: key, sides: sides, at: lg?.pos ?? a.pos, time: world.time)
+        }
+        lg?.members.removeAll { $0 == a.id }
         if cause == "battle" {
             realm.intensity += 1
             let pop = Double(max(20, realm.nation(side)?.pop ?? 20))

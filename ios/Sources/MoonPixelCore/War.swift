@@ -433,7 +433,7 @@ extension Society {
         guard let hm = home else {
             // a landless army lays down its arms where it stands
             if let t = settlements[lg.target], t.siege == lg.id { endSiege(t) }
-            if let near = settlements.values.filter({ !$0.abandoned }).min(by: { ($0.center.center - lg.pos).length < ($1.center.center - lg.pos).length }) {
+            if let near = settlements.values.filter({ !$0.abandoned }).min(by: { let a = ($0.center.center - lg.pos).length, b = ($1.center.center - lg.pos).length; return a != b ? a < b : $0.id < $1.id }) {
                 for id in lg.members { if let a = agents[id] { move(a, to: near); discharge(a); a.refugee = world.time + cfg.refugeeIntegrate * MP.year } }
             }
             realm.legions.removeAll { $0 === lg }

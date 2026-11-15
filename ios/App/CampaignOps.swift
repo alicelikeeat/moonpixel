@@ -484,6 +484,17 @@ struct WarPanel: View {
                     }
                     .padding(8).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
+                // losses come from the casualty ledger only: the same numbers whether a battle was watched or not
+                let ledger = model.society.realm.ledger
+                if ledger.total > 0 {
+                    Text(L("阵亡", "Fallen") + " · " + model.society.realm.nations.map { n in "\(n.name(zh: GameModel.zh)) \(ledger.fallen(n.id))" }.joined(separator: " · "))
+                        .font(.system(size: 11, weight: .medium, design: .rounded)).opacity(0.85)
+                        .accessibilityIdentifier("war-fallen")
+                    ForEach(ledger.battles.suffix(3).reversed(), id: \.key) { b in
+                        Text(b.nations.map { id in "\(model.society.realm.nation(id)?.name(zh: GameModel.zh) ?? "?") −\(b.losses["\(id)"] ?? 0)" }.joined(separator: "  "))
+                            .font(.system(size: 10, design: .rounded)).opacity(0.7)
+                    }
+                }
                 Text(L("修桥铺路能让军团走得更快更稳；拆桥、截断补给车队会让敌军断粮、士气下降。",
                        "Bridges and roads let armies march faster and better supplied; breaking bridges and cutting supply trains starves the enemy and breaks their spirit."))
                     .font(.system(size: 10, design: .rounded)).opacity(0.6)

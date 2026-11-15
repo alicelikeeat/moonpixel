@@ -131,7 +131,7 @@ extension Society {
             let id = realm.nations[k].id
             if realm.nations[k].exileSince != nil { continue }
             var rate = 0.0
-            for s in settlements.values where !s.abandoned && s.nation == id { rate += researchRate(of: s) }
+            for s in towns(of: id) { rate += researchRate(of: s) }          // in id order: the same sum every run
             realm.nations[k].arsenalPts = (realm.nations[k].arsenalPts ?? 0) + rate * Society.hour * cfg.arsenalScale * (realm.atWar(id) ? cfg.arsenalWar : 1)
             if realm.nations[k].studying == nil || knows(id, realm.nations[k].studying!) {
                 let options = researchable(id)

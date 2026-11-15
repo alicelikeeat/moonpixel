@@ -242,6 +242,18 @@ final class GameModel: ObservableObject {
                 }
             }
         }
+        if let i = args.firstIndex(of: "--stress-battle"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            // a fixed battle of n real soldiers, watched from close by, with the draw tier pinned to n (for measurements)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                guard let self = self, let s = self.society, let sc = self.scene, let ids = s.stageFieldBattle(perSide: n / 2),
+                      let la = s.realm.legion(ids.0), let lb = s.realm.legion(ids.1) else { return }
+                sc.renderBudget.pin(soldiers: n); sc.budgetPinned = true
+                self.watch = .point((la.pos + lb.pos) * 0.5)
+                sc.zoom = 1.7
+                self.speedIndex = 1
+                self.perf.reset()
+            }
+        }
         if args.contains("--demo-war") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 guard let self = self else { return }
