@@ -142,6 +142,9 @@ extension Society {
         if ids.count > 64 { ids.removeFirst(ids.count - 64) }
         realm.player.plans = ids
         for (g, n) in pre.cost { carry(g, -n) }
+        // a bridge is checked against the real routes between nearby towns, before and after
+        let bridging = p.key == "bridge" && w.depth == 0
+        let routesBefore = bridging ? routesNear(pre.cells.filter { $0.ok }.map { $0.pos }) : []
         var tile = content.tid(p.tile)
         if p.key == "banner" { tile = content.tid("banner_\(max(1, realm.player.nation))") }
         for c in pre.cells where c.ok {
@@ -156,6 +159,7 @@ extension Society {
             if p.group == 3 { updateNetwork(around: c.pos, in: w) }
         }
         out.cost = pre.cost
+        if bridging && out.placed > 0 { creditBridge(before: routesBefore, cells: pre.cells.filter { $0.ok }.map { $0.pos }) }
         if w.depth == 0 { for s in settlements.values where !s.abandoned && pre.cells.contains(where: { s.inArea($0.pos) }) { s.planT = 0; s.cityT = 0 } }
         for lg in realm.legions { lg.supplyT = 0 }            // routes notice the change themselves (chunk stamps)
         return out

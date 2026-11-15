@@ -177,6 +177,8 @@ public final class Legion: Codable {
     public var routeFails: Int?
     /// planning time of the route whose dead end was last counted, so one failed route counts once
     public var routeFailT: Double?
+    // the current convoy: when it set out, how long the player escorted it, whether it was in danger, when the player hit it
+    public var convoyStart: Double?, convoyTrip: Double?, escortT: Double?, escortThreat: Bool?, raidT: Double?
     /// Shared march route of the whole legion (waypoints), recomputed when roads or bridges change.
     public var route: [Vec2]?
     public init() {}
@@ -237,6 +239,7 @@ public struct Realm: Codable {
     var weatherBox: Weather?
     var faunaBox: Fauna?
     var ledgerBox: CasualtyLedger?              // optional so that earlier saves load
+    var contribBox: ContributionLog?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
     public var fauna: Fauna { get { faunaBox ?? Fauna() } set { faunaBox = newValue } }
     public init() {}
@@ -616,6 +619,12 @@ extension Society {
         addFatigue(old, cfg.fatigueLostTown)
         if let r = realm.ri(old, lg.nation) { realm.relations[r].value = max(-1, realm.relations[r].value - 0.2) }
         realm.counts.captures += 1
+        // the player's nation takes back its own former capital, with the player there
+        if lg.nation == realm.player.nation, lg.nation != 0, s.formerCapital == lg.nation, old != lg.nation,
+           let v = viewer, v.distance(to: s.center.center) < 900 {
+            credit("capital_retaken", key: "\(s.id):\(gameYear)", nation: lg.nation, before: "owner \(old)", after: "owner \(lg.nation)",
+                   at: s.center.center, rep: 0.15, args: [realm.nation(lg.nation)?.name(zh: zh) ?? "", cityName(s)])
+        }
         reflag(s)                       // again: banners raised by the damage repairs carry the new colours too
         endSiege(s)
         emit("captured", [realm.nation(lg.nation)?.name(zh: zh) ?? "", realm.nation(old)?.name(zh: zh) ?? "", cityName(s)], s.center.center,

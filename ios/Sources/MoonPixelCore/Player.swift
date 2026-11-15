@@ -108,6 +108,7 @@ extension Society {
         for a in victims {
             let s = side(of: a)
             if realm.player.nation != 0 && s == realm.player.nation { out.spared += 1; continue }
+            if a.unit == Unit.supply, let l = a.legion, let lg = realm.legion(l), lg.convoyAt != nil { lg.raidT = world.time }
             let hp = (a.hp ?? realm.cfg.civilianHP) - st.0
             let soldier = a.legion != nil
             if hp <= 0 {
@@ -208,8 +209,13 @@ extension Society {
         default: return 0
         }
         if give <= 0 { return 0 }
+        let short = kind == "food" && shortage(s), before = s.food
         s.addStock(kind, give)
         let n = s.nation ?? 0
+        if short && !shortage(s) {
+            credit("shortage_relieved", key: "\(s.id):\(gameYear)", nation: n, before: String(format: "%.0f food for %d", before, s.members.count),
+                   after: String(format: "%.0f food", s.food), at: s.center.center, rep: 0.06, args: [cityName(s)])
+        }
         addRep(n, give / 60)
         if realm.player.nation != 0 && realm.player.nation != n { shiftRelation(realm.player.nation, n, give / 150) }
         s.unrest = max(0, (s.unrest ?? 0) - give / 200)
@@ -275,6 +281,7 @@ extension Society {
         let list = agents.values.filter { $0.refugee != nil }
             .sorted { let da = $0.pos.distance(to: s.center.center), db = $1.pos.distance(to: s.center.center); return da != db ? da < db : $0.id < $1.id }
         var n = 0
+        let before = s.members.count, taken = list.prefix(limit).map { $0.id }
         for a in list.prefix(limit) {
             move(a, to: s)
             a.refugee = nil
@@ -283,7 +290,12 @@ extension Society {
             if let idn = a.nation { addRep(idn, 0.04) }
             n += 1
         }
-        if n > 0 { addRep(s.nation ?? 0, 0.02 * Double(n)); s.planT = 0 }
+        if n > 0 {
+            addRep(s.nation ?? 0, 0.02 * Double(n)); s.planT = 0
+            // the deed is these people taken in: the same people can never be taken in twice
+            credit("refugees_taken_in", key: "\(s.id):\(taken.min() ?? 0)-\(taken.max() ?? 0)-\(n)", nation: s.nation ?? 0,
+                   before: "\(before) residents, \(n) refugees outside", after: "\(s.members.count) residents", at: s.center.center, rep: 0, args: [cityName(s), "\(n)"])
+        }
         return n
     }
 }

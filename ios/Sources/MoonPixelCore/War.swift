@@ -448,14 +448,16 @@ extension Society {
             let road = lg.route ?? [hm.center.center, lg.pos]
             let len = max(1, routeLength(road))
             let next = at + cfg.marchSpeed * 1.5 * (lg.forded == true ? 0.4 : 1) * dt / len
-            if carriers == 0 { lg.convoyAt = nil; lg.convoyLoad = nil }                     // the train was cut down: its load is lost
-            else if next >= 1 { food += lg.convoyLoad ?? 0; lg.convoyAt = nil; lg.convoyLoad = nil }
-            else { lg.convoyAt = next }
+            // where the train is, on the same way the map shows it
+            let here = point(on: [hm.center.center] + road.prefix(max(1, (lg.routeI ?? 0) + 1)) + [lg.pos], at: min(1, at))
+            if carriers == 0 { convoyEnded(lg, delivered: false, at: here); lg.convoyAt = nil; lg.convoyLoad = nil }     // the train was cut down: its load is lost
+            else if next >= 1 { food += lg.convoyLoad ?? 0; convoyEnded(lg, delivered: true, at: here); lg.convoyAt = nil; lg.convoyLoad = nil }
+            else { noteEscort(lg, at: here, dt: dt); lg.convoyAt = next }
         } else if world.time >= (lg.convoyT ?? 0), carriers > 0, food < n * cfg.rationStart / 2, lg.state != 3 {
             lg.convoyT = world.time + cfg.convoyEvery
             let spare = max(0, hm.food - Double(hm.members.count) * 2)
             let load = min(spare, Double(carriers) * cfg.convoyCarry)
-            if load >= 1 && hm.siege == nil { hm.food -= load; lg.convoyAt = 0; lg.convoyLoad = load }
+            if load >= 1 && hm.siege == nil { hm.food -= load; lg.convoyAt = 0; lg.convoyLoad = load; lg.convoyStart = world.time }
         }
         let fed = food > 0
         lg.food = max(0, food)
