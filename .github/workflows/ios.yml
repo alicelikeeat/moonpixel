@@ -113,6 +113,11 @@ jobs:
           xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-war; rec rec-war.mp4 60; shot sim-war.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
           ls -la rec-*.mp4 || true
+          echo "===== frame-time diagnostics (simulator on a CI Mac, not a device) ====="
+          xcrun simctl launch "$UDID" org.moonpixel.game --autostart 7 --demo-war --perf --perf-log 10; sleep 45; shot sim-perf.png
+          cp "$(xcrun simctl get_app_container "$UDID" org.moonpixel.game data)/Documents/perf.json" perf-sim.json 2>/dev/null || echo '{"missing":true}' > perf-sim.json
+          xcrun simctl terminate "$UDID" org.moonpixel.game
+          cat perf-sim.json
           echo "===== UI test: tap the HUD buttons ====="
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
             -resultBundlePath ui.xcresult CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1
@@ -128,5 +133,5 @@ jobs:
           echo "===== app log ====="
           xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | tail -25
           TAG="v${MP_VERSION}"
-          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png sim-build.png sim-city.png sim-war.png rec-*.mp4 ui-result.txt ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" sim-menu.png sim-game.png sim-map.png sim-photo.png sim-anim.png sim-realm.png sim-laws.png sim-powers.png sim-storm1.png sim-storm2.png sim-storm3.png sim-build.png sim-city.png sim-war.png sim-perf.png perf-sim.json rec-*.mp4 ui-result.txt ui-*.png --repo "$GITHUB_REPOSITORY" --clobber
           ls -la sim-*.png

@@ -49,6 +49,18 @@ struct HUDView: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
         }
         .foregroundStyle(.white)
+        .overlay(alignment: .bottomLeading) {
+            if model.showPerf && !model.perfLines.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(model.perfLines.enumerated()), id: \.offset) { _, l in Text(l) }
+                }
+                .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(.white)
+                .padding(8).glass(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.leading, 10).padding(.bottom, 92)
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .combine).accessibilityIdentifier("perf-panel")
+            }
+        }
         .overlay { if model.showRealm { RealmPanel() } }
         .overlay { if model.showLaws { LawsPanel() } }
         .overlay { if model.showArsenal { ArsenalPanel() } }

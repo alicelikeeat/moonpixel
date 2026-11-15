@@ -266,10 +266,13 @@ public enum PixelArt {
 
     /// Chunk image (528 x 536): ground/structures, then decor and objects row by
     /// row. Origin of the chunk is at (8, 24) inside the image.
-    public static func bakeChunk(_ c: Chunk) -> Bitmap {
+    public static func bakeChunk(_ c: Chunk) -> Bitmap { bakeChunk(layers: c.layers) }
+
+    /// Pure function of the four tile layers, so it can run on any thread from a snapshot.
+    public static func bakeChunk(layers: [[UInt8]]) -> Bitmap {
         let at = atlas
         var img = Bitmap(MP.chunkPx + 16, MP.chunkPx + 24)
-        let g = c.layers[0], st = c.layers[1], ob = c.layers[2], de = c.layers[3]
+        let g = layers[0], st = layers[1], ob = layers[2], de = layers[3]
         let cliff = Content.shared.tid("cliff")
         for i in 0..<MP.chunkArea {
             let x = (i % 32) * 16 + 8, y = (i / 32) * 16 + 24

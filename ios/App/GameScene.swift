@@ -10,7 +10,19 @@ final class GameScene: SKScene {
     var moving = false
     var zoom: CGFloat = 2
     var chunkNodes: [Int64: SKSpriteNode] = [:]
-    var dirty: Set<Int64> = []
+    // chunk bitmaps are baked off the main thread from immutable snapshots; every result carries the
+    // world, map epoch, depth, chunk and revision it was made for and is thrown away if any changed
+    let bakes = BakeQueue(maxInFlight: 2)
+    let bakeWork = DispatchQueue(label: "moonpixel.bake", qos: .userInitiated, attributes: .concurrent)
+    /// What each chunk node shows right now (it keeps showing it until a newer bitmap is ready).
+    var chunkKeys: [Int64: BakeKey] = [:]
+    /// Baked chunk textures by exact key, limited by bytes; what is on screen is never evicted.
+    let chunkTex = ByteLRU<BakeKey, SKTexture>(budget: 48 << 20)
+    private var visibleChunks: Set<Int64> = []
+    /// Fixed simulation steps per speed setting: the same setting always gives the same steps.
+    static let simSteps: [Double] = [1.0 / 60, 1.0 / 60, 1.0 / 15, 0.25, 1.0]
+    var simClock = SimClock(step: 1.0 / 60, maxBacklog: 8.0 / 60)
+    private var clockSpeed = -1
     var agentNodes: [Int: SKSpriteNode] = [:]
     var texCache: [String: SKTexture] = [:]
     let cam = SKCameraNode()
@@ -29,8 +41,6 @@ final class GameScene: SKScene {
     var lastTime: TimeInterval = 0
     private var lastTile = TilePos(Int.max, 0)
     private var hudAcc = 0.0, maintAcc = 0.0, saveAcc = 0.0, walkT = 0.0, attackT = 0.0
-    private var hooked = false
-    private var hookedUnder = false
     /// Where the camera looks: the player, or a battle / city / army being watched.
     var viewPos = Vec2.zero
     var dragStart: TilePos?
@@ -81,10 +91,6 @@ final class GameScene: SKScene {
             joyKnob.fillColor = UIColor(white: 1, alpha: 0.35); joyKnob.strokeColor = .clear; joyKnob.zPosition = 901
             cam.addChild(joyBase); cam.addChild(joyKnob)
         }
-        if !hooked, let w = model?.world {
-            hooked = true
-            w.onChunkChanged.append { [weak self] cx, cy in self?.dirty.insert(MP.chunkKey(cx, cy)) }
-        }
     }
 
     /// After a photo is applied, turn the player towards the camera so the new face is visible.
@@ -97,6 +103,7 @@ final class GameScene: SKScene {
     @discardableResult func clearTextureCache() -> Int {
         let n = texCache.count
         texCache.removeAll()
+        trimChunkTextures()
         return n
     }
 
@@ -107,28 +114,31 @@ final class GameScene: SKScene {
         guard let model = model, model.world != nil, let society = model.society else { return }
         let world = model.activeWorld
         let under = model.depth > 0
-        if under && !hookedUnder {
-            hookedUnder = true
-            world.onChunkChanged.append { [weak self] cx, cy in if self?.model?.depth ?? 0 > 0 { self?.dirty.insert(MP.chunkKey(cx, cy)) } }
-        }
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
         frameAvg = frameAvg * 0.95 + dt * 0.05
         // under load, fewer decorative effects and weather particles
         effectBudget = frameAvg > 1.0 / 40 ? 40 : (frameAvg > 1.0 / 50 ? 80 : 120)
+        model.perf.frame(dt)
+        if model.lawBusy || model.savePause { simClock.clear() }
         if model.lawBusy {
             model.stepLaw()                      // a world law is being carried out: the simulation waits for it
         } else if model.savePause {
             // a law is done but not saved: nothing moves until it is, so the save matches the plan
         } else {
-            // the simulation gets a fixed slice of each frame; what does not fit is dropped, and the
-            // speed actually reached is shown, so high speeds never freeze the screen
-            let want = dt * GameModel.speeds[model.speedIndex]
-            var sim = want
+            // fixed simulation steps inside a slice of each frame; a bounded backlog carries over and
+            // what cannot be caught up is dropped (and shown as the real speed), never run as one big step
+            if clockSpeed != model.speedIndex {
+                clockSpeed = model.speedIndex
+                let st = GameScene.simSteps[min(model.speedIndex, GameScene.simSteps.count - 1)]
+                simClock = SimClock(step: st, maxBacklog: st * 8)
+            }
+            let speed = GameModel.speeds[model.speedIndex]
+            simClock.add(real: dt, speed: speed)
             let budgetEnd = CACurrentMediaTime() + 0.009
-            var done = 0.0
-            while sim > 0 && CACurrentMediaTime() < budgetEnd { let step = min(sim, 1.0); society.tick(step); sim -= step; done += step }
-            if want > 0 { model.actualSpeed = model.actualSpeed * 0.9 + (done / dt) * 0.1 }
+            let before = simClock.simulated
+            model.perf.time("sim") { simClock.run({ CACurrentMediaTime() < budgetEnd }) { society.tick($0) } }
+            if speed > 0 { model.actualSpeed = model.actualSpeed * 0.9 + ((simClock.simulated - before) / dt) * 0.1 }
             // wards last by the real clock; companions and animals need to know where the traveller is
             society.playerWarded = CACurrentMediaTime() < (society.realm.player.wardUntil ?? 0)
             society.viewer = player
@@ -180,12 +190,12 @@ final class GameScene: SKScene {
         cam.setScale(1 / zoom)
         night.alpha = under ? 0.42 : CGFloat((1 - world.daylight) * 0.55)
         layoutJoystick()
-        updateChunks(world, model)
-        updateActors(world, society, model)
+        model.perf.time("chunks") { updateChunks(world, model) }
+        model.perf.time("actors") { updateActors(world, society, model) }
 
         hudAcc += dt
         if hudAcc > 0.25 { hudAcc = 0; model.refreshHUD(); updateTownLabels(society) }
-        updateLegions(society, model)
+        model.perf.time("legions") { updateLegions(society, model) }
         maintAcc += dt
         if maintAcc > 2 {
             maintAcc = 0
@@ -212,40 +222,78 @@ final class GameScene: SKScene {
         let half = CGSize(width: size.width / zoom / 2, height: size.height / zoom / 2)
         let c0x = Int(((viewPos.x - Double(half.width)) / 512).rounded(.down)) - 1, c1x = Int(((viewPos.x + Double(half.width)) / 512).rounded(.down)) + 1
         let c0y = Int(((viewPos.y - Double(half.height)) / 512).rounded(.down)) - 1, c1y = Int(((viewPos.y + Double(half.height)) / 512).rounded(.down)) + 1
-        var made = 0
+        let wid = model.epoch, ep = world.mapEpoch, depth = model.depth
+        var visible = Set<Int64>()
         for cy in c0y...c1y { for cx in c0x...c1x {
             let k = MP.chunkKey(cx, cy)
-            if made >= 1 || (chunkNodes[k] != nil && !dirty.contains(k)) { continue }
-            made += 1
-            dirty.remove(k)
-            let chunk = world.chunk(cx, cy)
-            let node = chunkNodes[k] ?? {
-                let n = SKSpriteNode()
-                n.anchorPoint = CGPoint(x: 0, y: 1)
-                n.position = CGPoint(x: cx * 512 - 8, y: -(cy * 512 - 24))
-                n.zPosition = -100
-                addChild(n)
-                chunkNodes[k] = n
-                return n
-            }()
-            let tex = PixelArt.bakeChunk(chunk).texture
-            node.texture = tex
-            node.size = tex.size()
-            node.removeAllChildren()
-            for p in chunk.props {
-                guard let t = model.assets[String(p.key.dropFirst(6))] else { continue }
-                let s = SKSpriteNode(texture: t)
-                s.anchorPoint = CGPoint(x: 0.5, y: 0)
-                s.position = CGPoint(x: p.x - Double(cx * 512 - 8), y: -(p.y - Double(cy * 512 - 24)))
-                s.zPosition = 1
-                node.addChild(s)
-            }
+            visible.insert(k)
+            let key = BakeKey(world: wid, epoch: ep, depth: depth, chunk: k, revision: world.revision(cx, cy))
+            if chunkKeys[k] == key { continue }
+            if let t = chunkTex.get(key) { show(key, t, world, model); continue }         // baked before and unchanged
+            let d = hypot(Double(cx * 512 + 256) - viewPos.x, Double(cy * 512 + 256) - viewPos.y)
+            bakes.want(key, priority: d)
         } }
+        visibleChunks = visible
+        bakes.drop { !visible.contains($0.chunk) || $0.world != wid || $0.epoch != ep || $0.depth != depth }
+        for key in bakes.next() {
+            // the snapshot is taken here, on the main thread; the bitmap is made from it elsewhere
+            let snap = ChunkSnapshot(world.chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)))
+            bakeWork.async { [weak self] in
+                let t0 = CACurrentMediaTime()
+                let cg = PixelArt.bakeChunk(layers: snap.layers).cgImage
+                let took = CACurrentMediaTime() - t0
+                DispatchQueue.main.async { self?.baked(key, cg, took) }
+            }
+        }
         for (k, n) in chunkNodes {
             let cx = MP.keyCX(k), cy = MP.keyCY(k)
-            if cx < c0x - 1 || cy < c0y - 1 || cx > c1x + 1 || cy > c1y + 1 { n.removeFromParent(); chunkNodes[k] = nil; dirty.remove(k) }
+            if cx < c0x - 1 || cy < c0y - 1 || cx > c1x + 1 || cy > c1y + 1 { n.removeFromParent(); chunkNodes[k] = nil; chunkKeys[k] = nil }
         }
     }
+
+    /// A background bake is back: use it only if it is still what that chunk should show.
+    private func baked(_ key: BakeKey, _ cg: CGImage?, _ took: Double) {
+        guard let model = model, model.world != nil else { _ = bakes.finished(key, current: nil); return }
+        let world = model.activeWorld
+        let cx = MP.keyCX(key.chunk), cy = MP.keyCY(key.chunk)
+        let current = BakeKey(world: model.epoch, epoch: world.mapEpoch, depth: model.depth, chunk: key.chunk, revision: world.revision(cx, cy))
+        guard bakes.finished(key, current: current), let cg = cg else { return }
+        model.perf.phase("bake", took)
+        let t0 = CACurrentMediaTime()
+        let tex = SKTexture(cgImage: cg)
+        tex.filteringMode = .nearest
+        chunkTex.put(key, tex, bytes: cg.bytesPerRow * cg.height, keep: Set(chunkKeys.values))
+        if visibleChunks.contains(key.chunk) { show(key, tex, world, model) }
+        model.perf.phase("texture", CACurrentMediaTime() - t0)
+    }
+
+    private func show(_ key: BakeKey, _ tex: SKTexture, _ world: OpenWorld, _ model: GameModel) {
+        let k = key.chunk, cx = MP.keyCX(k), cy = MP.keyCY(k)
+        let node = chunkNodes[k] ?? {
+            let n = SKSpriteNode()
+            n.anchorPoint = CGPoint(x: 0, y: 1)
+            n.position = CGPoint(x: cx * 512 - 8, y: -(cy * 512 - 24))
+            n.zPosition = -100
+            addChild(n)
+            chunkNodes[k] = n
+            return n
+        }()
+        node.texture = tex
+        node.size = tex.size()
+        node.removeAllChildren()
+        for p in world.chunk(cx, cy).props {
+            guard let t = model.assets[String(p.key.dropFirst(6))] else { continue }
+            let s = SKSpriteNode(texture: t)
+            s.anchorPoint = CGPoint(x: 0.5, y: 0)
+            s.position = CGPoint(x: p.x - Double(cx * 512 - 8), y: -(p.y - Double(cy * 512 - 24)))
+            s.zPosition = 1
+            node.addChild(s)
+        }
+        chunkKeys[k] = key
+    }
+
+    /// Memory warning: keep only the chunk textures on screen.
+    func trimChunkTextures() { chunkTex.trim(to: 0, keep: Set(chunkKeys.values)) }
 
     private func charTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> SKTexture {
         let dir = abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down")
@@ -479,7 +527,8 @@ final class GameScene: SKScene {
         for (id, l) in townLabels where !seen.contains(id) { l.removeFromParent(); townLabels[id] = nil }
     }
 
-    func markAllDirty() { for k in chunkNodes.keys { dirty.insert(k) } }
+    /// Everything is drawn again (after a law): no texture baked before is reused.
+    func markAllDirty() { chunkKeys.removeAll(); chunkTex.removeAll(); bakes.dropAll() }
 
     /// A few pixels that drift up and fade. Capped, so mass deletions never flood the scene.
     func dust(at p: CGPoint, color: UIColor, count: Int = 9) {

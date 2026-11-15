@@ -69,6 +69,12 @@ final class GameModel: ObservableObject {
     @Published var arsenalLines: [String] = []
     @Published var showArsenal = false
     @Published var showCheats = false
+    /// Frame-time diagnostics shown over the game (More → Performance).
+    @Published var showPerf = false
+    @Published var perfLines: [String] = []
+    /// `--perf-log N`: write a diagnostics reading to Documents/perf.json every N seconds (simulator runs in CI).
+    var perfLogEvery = 0.0
+    private var perfLogAcc = 0.0
     @Published var mapPick: TilePos?
     @Published var mapZoom = 1.0
     var mapOrigin = TilePos(0, 0)
@@ -198,6 +204,8 @@ final class GameModel: ObservableObject {
         refreshWorlds()
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "--fail-saves"), i + 1 < args.count { failSaves = Int(args[i + 1]) ?? 0 }
+        if let i = args.firstIndex(of: "--perf-log"), i + 1 < args.count { perfLogEvery = Double(args[i + 1]) ?? 0 }
+        if args.contains("--perf") { showPerf = true }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
         start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)
@@ -436,6 +444,7 @@ final class GameModel: ObservableObject {
     /// Called a few times per second from the scene.
     func refreshHUD() {
         guard let w = world, let s = society else { return }
+        if showPerf, let sc = scene { perfLines = sc.perfReport().lines }
         let h = w.hour
         status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
         pollEvents()
@@ -475,6 +484,16 @@ final class GameModel: ObservableObject {
 
     func tickHousekeeping(_ dt: Double) {
         cleanCooldown = max(0, cleanCooldown - dt)
+        if perfLogEvery > 0, let sc = scene {
+            perfLogAcc += dt
+            if perfLogAcc >= perfLogEvery {
+                perfLogAcc = 0
+                let e = JSONEncoder(); e.outputFormatting = [.sortedKeys, .prettyPrinted]
+                if let d = try? e.encode(sc.perfReport()), let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                    try? d.write(to: docs.appendingPathComponent("perf.json"), options: .atomic)
+                }
+            }
+        }
         if autoClean && cleanCooldown <= 0 && world.budget.pressure() > 0.9 { cleanMemory(announce: true) }
         if world.diskBytes > world.diskLimitBytes { world.enforceDiskLimit() }
         checkPolicy()

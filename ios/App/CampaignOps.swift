@@ -512,6 +512,11 @@ struct MorePanel: View {
                     Chip(title: L("保存", "Save"), icon: "square.and.arrow.down.fill", id: "Save") { model.showMore = false; model.save(announce: true) }
                     Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
                 }
+                HStack(spacing: 6) {
+                    Chip(title: model.showPerf ? L("关闭性能", "Hide perf") : L("性能", "Performance"), icon: "speedometer", id: "Perf") {
+                        model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
+                    }
+                }
             }
         }
     }

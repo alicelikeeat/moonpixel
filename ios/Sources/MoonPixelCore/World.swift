@@ -360,6 +360,16 @@ public final class OpenWorld {
     var stampClock = 0
     public func stamp(_ cx: Int, _ cy: Int) -> Int { stamps[MP.chunkKey(cx, cy)] ?? 0 }
     func bump(_ cx: Int, _ cy: Int) { stampClock += 1; stamps[MP.chunkKey(cx, cy)] = stampClock }
+    /// What is drawn for a chunk changed (tiles, growth, props): baked bitmaps of older revisions are stale.
+    public private(set) var revisions: [Int64: Int] = [:]
+    public func revision(_ cx: Int, _ cy: Int) -> Int { revisions[MP.chunkKey(cx, cy)] ?? 0 }
+    /// Bumped when the whole map is replaced (Genesis wipes it), so nothing baked before is used again.
+    public private(set) var mapEpoch = 0
+    func changed(_ cx: Int, _ cy: Int) {
+        revClock += 1; revisions[MP.chunkKey(cx, cy)] = revClock
+        for f in onChunkChanged { f(cx, cy) }
+    }
+    private var revClock = 0
 
     /// 0 is the surface; 1 is the underground layer with its own chunks and files.
     public let depth: Int
@@ -589,7 +599,7 @@ public final class OpenWorld {
         }
         bump(c.cx, c.cy)
         for f in onTileChanged { f(wx, wy, layer, old, id) }
-        for f in onChunkChanged { f(c.cx, c.cy) }
+        changed(c.cx, c.cy)
     }
 
     public func schedule(_ wx: Int, _ wy: Int, layer: Int, to: UInt8, delay: Double, expect: UInt8) {
@@ -600,7 +610,7 @@ public final class OpenWorld {
 
     /// Growth catches up from due times, so plants keep growing while evicted.
     func processTimers(_ c: Chunk) {
-        var n = 0, guardCount = 0, changed = false
+        var n = 0, guardCount = 0, grew = false
         while n < c.timers.count && guardCount < 4096 {
             guardCount += 1
             let tm = c.timers[n]
@@ -610,13 +620,13 @@ public final class OpenWorld {
             let old = c.layers[tm.l][tm.i]
             c.layers[tm.l][tm.i] = tm.to
             c.touch()
-            changed = true
+            grew = true
             if tm.to != 0, let t = content.tile(tm.to), !t.growTo.isEmpty {
                 c.timers.append(GrowTimer(i: tm.i, l: tm.l, to: content.tid(t.growTo), due: tm.due + t.growTime, expect: tm.to))
             }
             for f in onTileChanged { f(c.cx * 32 + tm.i % 32, c.cy * 32 + tm.i / 32, tm.l, old, tm.to) }
         }
-        if changed { for f in onChunkChanged { f(c.cx, c.cy) } }
+        if grew { changed(c.cx, c.cy) }
     }
 
     // MARK: permanent deletion (world laws) - unlike cache cleaning, this destroys saved data
@@ -643,13 +653,14 @@ public final class OpenWorld {
             saved.remove(k)
         }
         bump(cx, cy)
+        revClock += 1; revisions[k] = revClock          // even when not loaded: any bitmap of it is out of date
         if cache[k] != nil {
             if pins[k] != nil {
                 let fresh = gen.generate(cx, cy)
                 fresh.lastUsed = clock
                 cache[k] = fresh
             } else { cache[k] = nil }
-            for f in onChunkChanged { f(cx, cy) }
+            changed(cx, cy)
         }
         return freed
     }
@@ -679,6 +690,7 @@ public final class OpenWorld {
         saved.removeAll(); fileSizes.removeAll(); diskBytes = 0
         cache.removeAll(); pins.removeAll(); regions.removeAll(); ring.removeAll()
         surveyed = 0
+        mapEpoch += 1; revisions.removeAll()
         return freed
     }
 
@@ -687,7 +699,7 @@ public final class OpenWorld {
         guard let i = c.props.firstIndex(where: { $0.id == id }) else { return false }
         c.props.remove(at: i)
         c.touch()
-        for f in onChunkChanged { f(cx, cy) }
+        changed(cx, cy)
         return true
     }
 
@@ -698,6 +710,7 @@ public final class OpenWorld {
         nextPropID += 1
         c.props.append(Prop(id: id, key: key, x: p.x, y: p.y))
         c.touch()
+        changed(c.cx, c.cy)
         return id
     }
 
@@ -708,6 +721,7 @@ public final class OpenWorld {
             if let i = c.props.firstIndex(where: { Vec2($0.x, $0.y).distance(to: p) <= radius }) {
                 c.props.remove(at: i)
                 c.touch()
+                changed(c.cx, c.cy)
                 return true
             }
         } }

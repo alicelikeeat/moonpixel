@@ -410,6 +410,13 @@ public final class Society {
     public internal(set) var log: [(t: Double, text: String)] = []
     public var onEvent: ((String, String, Vec2) -> Void)?
     var hourAcc = 0.0, migrAcc = 0.0
+    /// Simulation steps taken since this society was made (drives the spatial index).
+    public private(set) var tickCount = 0
+    /// Heavy town jobs run in the last step, and how many due ones had to wait for a later step.
+    public private(set) var heavyLast = 0, heavyDeferred = 0
+    var agentGrid = SpatialGrid()
+    /// Agents were moved or removed outside a simulation step (a law, a cheat): rebuild the index.
+    public func invalidateGrid() { agentGrid = SpatialGrid() }
     var T: [String: UInt8] = [:]
 
     public init(world: OpenWorld, seed: Int) {
@@ -532,11 +539,23 @@ public final class Society {
     // MARK: tick
     public func tick(_ dt: Double) {
         world.advance(dt)
-        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+        tickCount += 1
+        // planning and resource scans are the heavy part of a town's work. When many fall due together
+        // (a load, a new year of founding) they are spread over the next steps, most overdue first.
+        // The cap depends only on the simulation, never on the frame time, so runs stay reproducible,
+        // and it is always above the average demand, so no town is planned less often over time.
+        let live = settlements.values.filter { !$0.abandoned }.sorted { $0.id < $1.id }
+        for s in live { s.planT -= dt }
+        let planCap = max(2, Int((dt * Double(live.count) / 6 * 1.5).rounded(.up)))
+        let scanCap = max(1, Int((dt * Double(live.count) / 25 * 1.5).rounded(.up)))
+        let planNow = Set(live.filter { $0.planT <= 0 }.sorted { $0.planT != $1.planT ? $0.planT < $1.planT : $0.id < $1.id }.prefix(planCap).map { $0.id })
+        let scanNow = Set(live.filter { world.time >= $0.resT }.sorted { $0.resT != $1.resT ? $0.resT < $1.resT : $0.id < $1.id }.prefix(scanCap).map { $0.id })
+        heavyLast = planNow.count + scanNow.count
+        heavyDeferred = live.filter { $0.planT <= 0 }.count - planNow.count + live.filter { world.time >= $0.resT }.count - scanNow.count
+        for s in live {
             techCtx = s.nation ?? 0
-            s.planT -= dt
-            if s.planT <= 0 { s.planT = 6; plan(s) }
-            if world.time >= s.resT { s.resT = world.time + 25; scan(s) }
+            if planNow.contains(s.id) { s.planT = 6; plan(s) }
+            if scanNow.contains(s.id) { s.resT = world.time + 25; scan(s) }
             automation(s, dt)
         }
         techCtx = 0
@@ -1334,7 +1353,7 @@ public final class Society {
     /// (nearest to `center` first, never the ones asleep indoors) are shown as
     /// characters; everybody else in view is counted on the building they belong
     /// to (their home, else the village square), so nobody silently disappears.
-    public func crowdSplit(center: Vec2, halfW: Double, halfH: Double, limit: Int = 50) -> (shown: [Agent], badges: [TilePos: Int]) {
+    public func crowdSplit(center: Vec2, halfW: Double, halfH: Double, limit: Int = 50, useGrid: Bool = true) -> (shown: [Agent], badges: [TilePos: Int]) {
         var candidates: [(Double, Agent)] = []
         var badges: [TilePos: Int] = [:]
         func anchor(_ a: Agent) -> TilePos {
@@ -1342,7 +1361,11 @@ public final class Society {
             if a.home >= 0, let b = s.building(a.home) { return TilePos(b.x + b.w / 2, b.y) }
             return s.center
         }
-        for a in agents.values {
+        // only the cells under the view (plus a margin for sleepers shown at their door) are looked at
+        if agentGrid.builtSteps != tickCount || agentGrid.builtCount != agents.count { agentGrid.rebuild(agents, time: world.time, steps: tickCount) }
+        let pad = 48.0 + 64
+        let near = useGrid ? agentGrid.ids(minX: center.x - halfW - pad, minY: center.y - halfH - pad, maxX: center.x + halfW + pad, maxY: center.y + halfH + pad).compactMap { agents[$0] } : Array(agents.values)
+        for a in near {
             let inside = a.sleeping && a.home >= 0
             let dx = abs(a.pos.x - center.x), dy = abs(a.pos.y - center.y)
             if inside {

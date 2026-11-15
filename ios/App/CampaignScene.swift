@@ -30,7 +30,8 @@ extension GameScene {
     func resetLayer() {
         for n in chunkNodes.values { n.removeFromParent() }
         chunkNodes = [:]
-        dirty = []
+        chunkKeys = [:]
+        bakes.dropAll()
         for n in agentNodes.values { n.removeFromParent() }
         agentNodes = [:]
         for n in animalNodes.values { n.removeFromParent() }
