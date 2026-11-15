@@ -5,7 +5,9 @@ import Foundation
 // belongs in each shape, so it has no graphics framework in it and is tested on Linux.
 //
 // A target is four floats: x, y, z in tile units around the swarm's own origin (y up), and the
-// colour packed into the bits of the fourth (0x00BBGGRR), which the shader unpacks.
+// colour as one whole number in the fourth (r + 256 g + 65536 b, exact in a float), which the
+// shader takes apart. (Packing the colour into the float's bits does not survive the GPU: such
+// values are denormal and are read back as zero.)
 
 public enum SwarmShapes {
     /// Tiers of swarm size; the largest is the "million" of the name (2^20).
@@ -17,11 +19,11 @@ public enum SwarmShapes {
     }
 
     @inline(__always) public static func pack(_ c: RGBA) -> Float {
-        Float(bitPattern: UInt32(c.r) | (UInt32(c.g) << 8) | (UInt32(c.b) << 16))
+        Float(UInt32(c.r) | (UInt32(c.g) << 8) | (UInt32(c.b) << 16))
     }
 
     public static func unpack(_ w: Float) -> RGBA {
-        let v = w.bitPattern
+        let v = UInt32(Swift.max(0, Swift.min(16_777_215, w)))
         return RGBA(UInt8(v & 255), UInt8((v >> 8) & 255), UInt8((v >> 16) & 255))
     }
 

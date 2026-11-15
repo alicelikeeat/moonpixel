@@ -248,7 +248,7 @@ final class GameModel: ObservableObject {
         if args.contains("--demo-swarm") {
             // the traveller sends the nanite swarm out again and again, so a picture at any moment shows it
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.cheat("powers"); self?.cheat("god") }
-            for i in 0..<6 {
+            for i in 0..<12 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8 + Double(i) * 10) { [weak self] in
                     guard let self = self, let sc = self.scene else { return }
                     self.activePower = "nano"

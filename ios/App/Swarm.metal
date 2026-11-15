@@ -4,7 +4,7 @@ using namespace metal;
 // The nanite swarm. Every point is simulated here, on the GPU: a compute pass moves all of them
 // (a spring towards the point's place in the current shape, a swirl and a wobble while it is free),
 // then they are drawn as round grains. Shapes come from MoonPixelCore (Swarm.swift): x, y, z and a
-// colour packed into the bits of w. Space is tile units around the swarm's origin, y up.
+// colour as one whole number in w. Space is tile units around the swarm's origin, y up.
 
 struct SwarmUniforms {
     float4 right;    // xyz: the camera's right in swarm space; w: one tile in NDC along x
@@ -16,7 +16,7 @@ struct SwarmUniforms {
 };
 
 static float3 unpackColor(float w) {
-    uint v = as_type<uint>(w);
+    uint v = uint(w + 0.5);                 // a whole number: r + 256 g + 65536 b
     return float3(float(v & 255), float((v >> 8) & 255), float((v >> 16) & 255)) / 255.0;
 }
 
