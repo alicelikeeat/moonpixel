@@ -8,7 +8,7 @@ on:
     branches: ["claude/upbeat-gates-vu0ssd"]
     paths: ["ios/**", "content/**", ".github/workflows/solid.yml"]
 permissions:
-  contents: read
+  contents: write     # only to keep the screenshots on this branch (docs/media/3d)
 concurrency:
   group: solid-${{ github.ref }}
   cancel-in-progress: true
@@ -50,15 +50,25 @@ jobs:
           run --autostart 7 --3d --demo-war; sleep 60; shot solid-3-war.png
           run --autostart 7 --3d --storm; sleep 16; shot solid-4-storm.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
-          echo "===== app log (errors and faults) ====="
-          xcrun simctl spawn "$UDID" log show --last 4m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | cut -c1-300 | sort | uniq -c | sort -rn | head -25
-          ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i moonpixel | head
-          # small copies in the log, so the pictures can be read without downloading the artifact
-          for f in solid-*.png; do
-            sips -Z 720 -s format jpeg -s formatOptions 45 "$f" --out "${f%.png}.jpg" > /dev/null 2>&1
-            echo "===== BEGIN $f ====="; base64 -i "${f%.png}.jpg" | tr -d '\n' | fold -w 3000; echo; echo "===== END $f ====="
-          done
           ls -la solid-*.png
+          echo "===== crash reports ====="
+          ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i moonpixel | head
+          echo "===== app log (errors and faults, most frequent first) ====="
+          xcrun simctl spawn "$UDID" log show --last 5m --style compact --predicate 'process == "MoonPixel" AND (messageType == error OR messageType == fault)' | cut -c40-260 | sort | uniq -c | sort -rn | head -14
+      - name: Keep the pictures on the branch
+        if: always() && github.event_name == 'push'
+        run: |
+          mkdir -p docs/media/3d
+          for f in ios/solid-*.png ios/ui-3d-*.png; do
+            [ -f "$f" ] || continue
+            sips -Z 1280 -s format jpeg -s formatOptions 70 "$f" --out "docs/media/3d/$(basename "${f%.png}").jpg" > /dev/null 2>&1
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/media/3d
+          git diff --cached --quiet && exit 0
+          git commit -q -m "3D view: simulator pictures from CI run $GITHUB_RUN_NUMBER ($GITHUB_JOB)"
+          for i in 1 2 3; do git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -93,12 +103,22 @@ jobs:
                   name = ''.join(ch if ch.isalnum() or ch in '-' else '-' for ch in name)[:60]
                   shutil.copy('uishots/' + a['exportedFileName'], 'ui-' + name + '.png')
           " 2>/dev/null; ls ui-*.png 2>/dev/null
-          for f in ui-3d-01-solid.png ui-3d-02-turned.png; do
-            [ -f "$f" ] || continue
-            sips -Z 720 -s format jpeg -s formatOptions 45 "$f" --out "${f%.png}.jpg" > /dev/null 2>&1
-            echo "===== BEGIN $f ====="; base64 -i "${f%.png}.jpg" | tr -d '\n' | fold -w 3000; echo; echo "===== END $f ====="
-          done
+          echo "===== result ====="; grep -E "Test Case.*(passed|failed)|XCTAssert|TEST (SUCCEEDED|FAILED)|error:" uitest.log | cut -c1-260 | sort -u | tail -30
           exit $rc
+      - name: Keep the pictures on the branch
+        if: always() && github.event_name == 'push'
+        run: |
+          mkdir -p docs/media/3d
+          for f in ios/solid-*.png ios/ui-3d-*.png; do
+            [ -f "$f" ] || continue
+            sips -Z 1280 -s format jpeg -s formatOptions 70 "$f" --out "docs/media/3d/$(basename "${f%.png}").jpg" > /dev/null 2>&1
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/media/3d
+          git diff --cached --quiet && exit 0
+          git commit -q -m "3D view: simulator pictures from CI run $GITHUB_RUN_NUMBER ($GITHUB_JOB)"
+          for i in 1 2 3; do git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
