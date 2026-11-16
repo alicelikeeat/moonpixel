@@ -15,7 +15,10 @@ final class MetroSession: ObservableObject {
     let file: URL
     @Published var tool = ""                 // "", street, avenue, R, C, I, dezone, bulldoze, or a service key
     @Published var overlay = ""
-    @Published var speed = 1
+    /// The city reopens at the speed it was left at (paused if it was paused).
+    @Published var speed = UserDefaults.standard.object(forKey: "metroSpeed") as? Int ?? 1 {
+        didSet { UserDefaults.standard.set(speed, forKey: "metroSpeed") }
+    }
     @Published var money = 0
     @Published var population = 0
     @Published var income = 0

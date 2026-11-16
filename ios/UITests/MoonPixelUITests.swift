@@ -303,14 +303,16 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["metro-budget-line"].waitForExistence(timeout: 4), "the budget opens")
         shot("metro-03-budget")
         app.buttons["metro-budget-close"].tap(); sleep(1)
+        app.buttons["metro-speed-0"].tap(); sleep(2)          // paused: the city is left exactly as it is
         let spent = money.label
         app.buttons["metro-exit"].tap()
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "back in the world")
         more(app, "Metro")
         XCTAssertTrue(money.waitForExistence(timeout: 15))
         sleep(1)
-        XCTAssertEqual(money.label, spent, "the city was kept as it was left")
+        XCTAssertEqual(money.label, spent, "the city was kept as it was left (and reopens paused)")
         shot("metro-04-reopened")
+        app.buttons["metro-speed-1"].tap()
         app.buttons["metro-exit"].tap()
     }
 }

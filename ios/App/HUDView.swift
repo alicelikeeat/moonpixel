@@ -50,6 +50,7 @@ struct HUDView: View {
                 tabBar
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)       // if it ever overflows, the top stays on screen
         }
         .foregroundStyle(.white)
         .overlay(alignment: .bottomLeading) {
@@ -119,7 +120,8 @@ struct HUDView: View {
     /// Clickable news of war: tap one to look at where it happened.
     private var noticeStack: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            ForEach(model.notices) { n in
+            // at most three, newest last: a long war must not push the top of the HUD off a phone screen
+            ForEach(Array(model.notices.suffix(3))) { n in
                 Button { model.look(at: n.pos); model.notices.removeAll { $0.id == n.id } } label: {
                     Label(n.text, systemImage: "scope").font(.system(size: 11, weight: .semibold, design: .rounded)).lineLimit(1)
                         .padding(.horizontal, 10).frame(height: 30).frame(maxWidth: 330, alignment: .trailing)
