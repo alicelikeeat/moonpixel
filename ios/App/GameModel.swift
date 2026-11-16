@@ -253,7 +253,7 @@ final class GameModel: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                 guard let self = self else { return }
                 self.startCommand()
-                if args.contains("--command-auto") { self.command?.sim.setComputer(0, true); self.command?.scene.speed = 3 }
+                if args.contains("--command-auto") { self.command?.sim.setComputer(0, true); self.command?.scene.pace = 3 }
             }
         }
         if args.contains("--demo-swarm") {

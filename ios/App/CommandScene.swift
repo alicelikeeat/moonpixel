@@ -12,7 +12,9 @@ import MoonPixelCore
 final class SkirmishSession: ObservableObject {
     let sim: Skirmish
     let scene: CommandScene
-    @Published var credits = 0, powerMade = 0, powerUsed = 0
+    @Published var credits = 0
+    @Published var powerMade = 0
+    @Published var powerUsed = 0
     @Published var making: [Int?] = [nil, nil, nil]
     @Published var progress: [Double] = [0, 0, 0]
     @Published var waiting: [Int] = [0, 0, 0]
@@ -95,7 +97,7 @@ final class CommandScene: SKScene {
     private let ghost = SKSpriteNode()
     private var shots = 0
     /// Run the battle this many times faster (the demo flag uses it).
-    var speed = 1.0
+    var pace = 1.0
 
     private func pt(_ v: Vec2) -> CGPoint { CGPoint(x: v.x, y: -v.y) }
     private func world(_ p: CGPoint) -> Vec2 { Vec2(Double(p.x), Double(-p.y)) }
@@ -136,7 +138,7 @@ final class CommandScene: SKScene {
         let sim = session.sim
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
-        sim.tick(dt * speed)
+        sim.tick(dt * pace)
         sync(sim, session)
         for e in sim.takeEvents() { show(e, sim, session) }
         oreAcc += dt
