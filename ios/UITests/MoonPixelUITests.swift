@@ -95,7 +95,19 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Free traveller").exists, "the player starts neutral")
         app.buttons["join-1"].tap(); sleep(1)
         XCTAssertTrue(text(app, containing: "Azure · HP").exists, "the player joined a nation")
-        app.buttons["close-panel"].tap(); sleep(1)
+        // beyond the first three: every nation of the known world, in a list that grows with history
+        let summary = app.descendants(matching: .any)["civ-summary"]
+        for _ in 0..<4 where !summary.isHittable { app.swipeUp(); sleep(1) }
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "the known world is listed")
+        shot("05c-world-nations")
+        let open = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'civ-open-'")).firstMatch
+        if open.waitForExistence(timeout: 3) {
+            open.tap(); sleep(2)
+            XCTAssertTrue(app.descendants(matching: .any)["civ-ledger"].waitForExistence(timeout: 4), "a nation in full: its people's ledger")
+            shot("05d-nation-detail")
+            app.buttons["close-panel"].firstMatch.tap(); sleep(1)
+        }
+        app.buttons["close-panel"].firstMatch.tap(); sleep(1)
         // free building: choose a piece, drag a line, confirm (at normal speed, so nothing scrolls away)
         app.buttons["1×"].tap(); sleep(1)
         app.buttons["Build"].tap(); sleep(2)
