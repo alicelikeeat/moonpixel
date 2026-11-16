@@ -52,11 +52,14 @@ final class CivStressTests: XCTestCase {
         for (nations, people) in [(10, 10_000), (50, 100_000), (100, 1_000_000)] {
             let c = world(nations: nations, people: people)
             let t0 = Date()
-            c.advance(to: 10 * MP.daySeconds)
+            var worst = 0.0
+            while c.time < 10 * MP.daySeconds {
+                let h0 = Date(); c.advance(to: c.time + MP.daySeconds / 24); worst = max(worst, Date().timeIntervalSince(h0) * 1000)
+            }
             let perDay = Date().timeIntervalSince(t0) / 10 * 1000
             XCTAssertEqual(c.audit(), [])
             let e0 = Date(); let data = try! JSONEncoder().encode(c); let save = Date().timeIntervalSince(e0) * 1000
-            lines.append(String(format: "%3d nations, %8d people (%d cities): %.1f ms per day, save %.0f ms, %.1f MB", nations, c.people, c.cities.count, perDay, save, Double(data.count) / 1_048_576))
+            lines.append(String(format: "%3d nations, %8d people (%d cities): %.1f ms per day, worst single hour %.1f ms, save %.0f ms, %.1f MB", nations, c.people, c.cities.count, perDay, worst, save, Double(data.count) / 1_048_576))
         }
         for n in [50, 200, 400] {
             let c = world(nations: 10, people: 10_000)

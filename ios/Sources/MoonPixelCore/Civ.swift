@@ -328,19 +328,25 @@ public final class Civ: Codable {
         }
     }
 
-    /// One hour: armies move and fight, strikes land, aircraft fly. Food, births and deaths go by the day.
+    /// One hour: armies move and fight, strikes land, aircraft fly; and the cities whose hour it is live
+    /// their day (each city has its own hour, so the work of a day is spread over all 24 and no single
+    /// step carries every city at once; every city still lives exactly one day per day).
     func hourly() {
         warHourly()
+        let h = Int((time - hourAcc) / (MP.daySeconds / 24)) % 24
+        for id in cities.keys.sorted() where id % 24 == h {
+            guard let c = cities[id], c.detail == nil else { continue }
+            c.yesterday = c.today; c.today = CivLedger()
+            cityDay(c)
+        }
     }
 
     /// One day, in the same order every time: research and plans, then every city, then everyone on the road.
     func daily(world: OpenWorld?) {
         politicsDaily()
-        for id in cities.keys.sorted() { if let c = cities[id], c.detail == nil { cityDay(c) } }
         tripsDaily()
         industryDaily()
         forcesDaily()
-        for id in cities.keys.sorted() { if let c = cities[id] { c.yesterday = c.today; c.today = CivLedger() } }
     }
 
     // MARK: - a city's day
