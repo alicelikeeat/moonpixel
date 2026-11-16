@@ -86,6 +86,9 @@ public struct CivTrip: Codable, Equatable {
     public var refugee = false
     public var settle: Int64?                               // a new town is founded here when they arrive
     public var waiting = 0.0                                // days held up by a blockade
+    /// The nation the goods were sent to (a purchase goes to another nation's city). If the city has
+    /// changed hands when they arrive, they are not handed to its new masters.
+    public var forNation: Int?
 }
 
 public struct CivNews: Codable, Equatable {
@@ -121,6 +124,9 @@ public final class CivCity: Codable {
     public var yesterday = CivLedger()
     public var builds: [CivBuild] = []
     public var lastDay = -1
+    var revBox: Int?
+    /// Bumped by every command that changes the city; a command decided on an older revision is refused.
+    public var rev: Int { get { revBox ?? 0 } set { revBox = newValue } }
     public init() {}
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
     public var pop: Int { people.total }
@@ -156,6 +162,11 @@ public final class Civ: Codable {
     public var fights: [CivFight] = []
     /// How many times each kind of news has happened, ever (the news list itself keeps only the latest).
     public var happened: [String: Int] = [:]
+    /// Results of the commands seen lately, by id (a repeated id is not carried out twice), oldest first.
+    public var commandResults: [String: CommandResult] = [:]
+    public var commandOrder: [String] = []
+    /// Commands waiting for the step they were given for.
+    public var pendingCommands: [WorldCommand] = []
     /// What each nation knows of enemy machines: "nation:unit" -> where and when last seen.
     public var intel: [String: CivSighting] = [:]
     public var nextCity = 1, nextTrip = 1, nextForce = 1, nextUnit = 1, nextProject = 1
@@ -171,7 +182,7 @@ public final class Civ: Codable {
     // read if present, so a save from before a field existed still opens (with that field's default).
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
-        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born
+        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -190,6 +201,7 @@ public final class Civ: Codable {
         try c.encode(nextCity, forKey: .nextCity); try c.encode(nextTrip, forKey: .nextTrip); try c.encode(nextForce, forKey: .nextForce)
         try c.encode(nextUnit, forKey: .nextUnit); try c.encode(nextProject, forKey: .nextProject); try c.encode(nextNation, forKey: .nextNation)
         try c.encode(totals, forKey: .totals); try c.encode(rng, forKey: .rng); try c.encode(born, forKey: .born)
+        try c.encode(commandOrder.compactMap { commandResults[$0] }, forKey: .commandResults); try c.encode(pendingCommands, forKey: .pendingCommands)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -222,6 +234,8 @@ public final class Civ: Codable {
         totals = try c.decodeIfPresent(CivLedger.self, forKey: .totals) ?? CivLedger()
         rng = try c.decodeIfPresent(RNG.self, forKey: .rng) ?? RNG(seed: seed)
         born = try c.decodeIfPresent([Int].self, forKey: .born) ?? []
+        for r in try c.decodeIfPresent([CommandResult].self, forKey: .commandResults) ?? [] { commandResults[r.id] = r; commandOrder.append(r.id) }
+        pendingCommands = try c.decodeIfPresent([WorldCommand].self, forKey: .pendingCommands) ?? []
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -332,6 +346,7 @@ public final class Civ: Codable {
     /// their day (each city has its own hour, so the work of a day is spread over all 24 and no single
     /// step carries every city at once; every city still lives exactly one day per day).
     func hourly() {
+        runPending()
         warHourly()
         let h = Int((time - hourAcc) / (MP.daySeconds / 24)) % 24
         for id in cities.keys.sorted() where id % 24 == h {
@@ -658,7 +673,7 @@ public final class Civ: Codable {
         }
         guard !cargo.isEmpty else { return nil }
         var t = CivTrip(); t.id = nextTrip; nextTrip += 1
-        t.nation = from.nation; t.from = a; t.to = b; t.route = path; t.cargo = cargo
+        t.nation = from.nation; t.from = a; t.to = b; t.route = path; t.cargo = cargo; t.forNation = to.nation
         // carters and drivers come along; they are counted where they live, so the trip carries no people
         trips[t.id] = t
         return t.id
@@ -721,8 +736,12 @@ public final class Civ: Codable {
             say("city_founded", [c.nameEn, c.nameZh, polities[t.nation]?.nameEn ?? "", polities[t.nation]?.nameZh ?? ""], [t.nation], region: s)
             return
         }
-        // the town they set out for is gone or taken: they go back where they came from, or stop at the nearest friendly one
-        let dest = cities[t.to] ?? cities[t.from] ?? cities.values.filter { $0.nation == t.nation && $0.detail == nil }.min { $0.id < $1.id }
+        // the town they set out for is gone or in other hands: they go back where they came from, or stop
+        // at the nearest town of their own
+        let receiver = t.forNation ?? t.nation
+        let target = cities[t.to].flatMap { $0.nation == receiver ? $0 : nil }
+        let home = cities[t.from].flatMap { $0.nation == t.nation ? $0 : nil }
+        let dest = target ?? home ?? cities.values.filter { $0.nation == t.nation && $0.detail == nil }.min { $0.id < $1.id }
         guard let c = dest else {
             if !t.people.isEmpty { totals.deaths["journey", default: 0] += t.people.total }
             for (k, v) in t.cargo { totals.add(\.lost, k, v) }
@@ -810,6 +829,15 @@ public final class Civ: Codable {
             if c.sick > c.pop { out.append("more sick than people in \(c.nameEn)") }
         }
         for t in trips.values where t.people.n.contains(where: { $0 < 0 }) { out.append("negative people on trip \(t.id)") }
+        // what is held aside is exactly what the city's projects hold, and never more than is there
+        for c in cities.values where c.detail == nil {
+            var held: [String: Double] = [:]
+            for p in projects.values where p.city == c.id { for (k, v) in p.held { held[k, default: 0] += v } }
+            for k in Set(held.keys).union(c.reserved.keys) {
+                if abs((held[k] ?? 0) - (c.reserved[k] ?? 0)) > 1e-6 { out.append("\(c.nameEn) holds \(c.reserved[k] ?? 0) \(k) aside, its projects \(held[k] ?? 0)") }
+                if (c.reserved[k] ?? 0) > (c.stock[k] ?? 0) + 1e-6 { out.append("\(c.nameEn) holds aside more \(k) than it has") }
+            }
+        }
         for f in forces.values where f.crew.n.contains(where: { $0 < 0 }) { out.append("negative crew in force \(f.id)") }
         var seen = Set<Int>()
         for f in forces.values { for u in f.units { if !seen.insert(u).inserted { out.append("unit \(u) in two forces") }; if units[u] == nil { out.append("force \(f.id) holds missing unit \(u)") } } }

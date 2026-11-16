@@ -51,6 +51,9 @@ public struct CivProject: Codable, Equatable {
     public var stage = 0, taken = false, hours = 0.0
     public var invested: [String: Double] = [:]
     public var waiting = ""                            // why it is not moving: "materials", "facility", "energy"
+    var heldBox: [String: Double]?
+    /// The next stage's materials, held aside in the city for it.
+    public var held: [String: Double] { get { heldBox ?? [:] } set { heldBox = newValue.isEmpty ? nil : newValue } }
 }
 
 /// A shot in the air: it lands at `impact`, and only then does it hurt (and only if the target is still there).
@@ -91,12 +94,14 @@ extension Civ {
         var p = CivProject(); p.id = nextProject; nextProject += 1
         p.nation = nation; p.city = city; p.kind = kind
         projects[p.id] = p
+        reserveNextStage(p.id)
         return p.id
     }
 
     /// Give a project up: part of what went into it comes back, the rest is gone (and booked as such).
     @discardableResult public func cancel(project id: Int) -> [String: Double] {
-        guard let p = projects[id] else { return [:] }
+        guard var p = projects[id] else { return [:] }
+        release(&p, from: cities[p.city])
         var back: [String: Double] = [:]
         if let c = cities[p.city], c.nation == p.nation {
             for (k, v) in p.invested.sorted(by: { $0.key < $1.key }) {
@@ -115,6 +120,13 @@ extension Civ {
             guard var p = projects[id], let def = CivUnitDef.byKey[p.kind] else { continue }
             guard let c = cities[p.city], c.nation == p.nation else { _ = cancel(project: id); continue }     // the yard was lost
             guard c.has(def.facility) > 0 else { p.waiting = "facility"; projects[id] = p; continue }
+            if !p.taken && !p.held.isEmpty {
+                // what was held aside for this stage is used now
+                let need = p.held
+                release(&p, from: c)
+                for (k, v) in need { c.stock[k, default: 0] -= v; p.invested[k, default: 0] += v; c.today.add(\.used, k, v) }
+                p.taken = true; p.waiting = ""
+            }
             if !p.taken {
                 let need = def.stages[p.stage]
                 if need.allSatisfy({ c.free($0.key) >= $0.value }) {
@@ -127,6 +139,9 @@ extension Civ {
             p.hours += 24 * max(0.1, power) * (1 - c.people.hungerIndex)
             if p.hours >= def.hours {
                 p.hours = 0; p.stage += 1; p.taken = false
+                projects[id] = p
+                reserveNextStage(id)
+                p = projects[id]!
                 if p.stage >= def.stages.count {
                     var u = CivUnit(); u.id = nextUnit; nextUnit += 1
                     u.kind = p.kind; u.nation = p.nation; u.depot = c.id

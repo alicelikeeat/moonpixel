@@ -324,14 +324,14 @@ struct CivCityControls: View {
             HStack(spacing: 4) {
                 ForEach(CivRation.allCases, id: \.self) { r in
                     Chip(title: GameModel.zh ? r.label.1 : r.label.0, icon: city.ration == r ? "checkmark" : (city.rationNext == r ? "clock" : "fork.knife"), tint: city.ration == r ? Color.white.opacity(0.3) : Color.white.opacity(0.1), id: "ration-\(city.id)-\(r.rawValue)") {
-                        c.setRation(city, r)
+                        model.civDo(nation, .ration(city: city.id, policy: r))
                     }
                 }
             }
             Menu {
                 ForEach(facilities, id: \.key) { f in
                     Button((GameModel.zh ? f.zh : f.en) + " · " + f.cost.keys.sorted().map { "\(CivItem.name($0, zh: GameModel.zh)) \(Int(f.cost[$0]!))" }.joined(separator: " ")) {
-                        if !c.build(f.key, in: city) { model.showToast(L("材料不足或条件不符", "Not enough materials, or the place is wrong for it")) }
+                        model.civDo(nation, .build(city: city.id, facility: f.key))
                     }
                 }
             } label: { Label(L("建造设施（在建 \(city.builds.count)）", "Build (\(city.builds.count) going up)"), systemImage: "hammer.fill").font(.system(size: 11, weight: .medium, design: .rounded)).padding(.horizontal, 10).frame(height: 32).background(Color.white.opacity(0.14), in: Capsule()) }
@@ -340,7 +340,7 @@ struct CivCityControls: View {
                 Menu {
                     ForEach(machines, id: \.key) { d in
                         Button((GameModel.zh ? d.zh : d.en) + L("（\(d.stages.count) 段，乘员 \(d.crew)）", " (\(d.stages.count) stages, crew \(d.crew))")) {
-                            if c.order(d.key, nation: nation, city: city.id) == nil { model.showToast(L("无法下单", "Cannot order that here")) }
+                            model.civDo(nation, .order(city: city.id, kind: d.key))
                         }
                     }
                 } label: { Label(L("订造装备", "Order machines"), systemImage: "gearshape.2.fill").font(.system(size: 11, weight: .medium, design: .rounded)).padding(.horizontal, 10).frame(height: 32).background(Color.white.opacity(0.14), in: Capsule()) }
@@ -371,13 +371,13 @@ struct CivArmsCard: View {
                 HStack(spacing: 6) {
                     Text(L("建造 \(d?.zh ?? p.kind)：第 \(p.stage + 1)/\(d?.stages.count ?? 1) 段 \(Int(p.hours))/\(Int(d?.hours ?? 0)) 小时", "building \(d?.en ?? p.kind): stage \(p.stage + 1)/\(d?.stages.count ?? 1), \(Int(p.hours))/\(Int(d?.hours ?? 0)) h") + (p.waiting.isEmpty ? "" : L(" · 等待：", " · waiting for ") + waiting(p.waiting)))
                         .font(.system(size: 10, design: .rounded))
-                    if commanding { Chip(title: L("取消（返还 50%）", "Cancel (50% back)"), icon: "xmark", id: "civ-cancel-\(p.id)") { _ = c.cancel(project: p.id) } }
+                    if commanding { Chip(title: L("取消（返还 50%）", "Cancel (50% back)"), icon: "xmark", id: "civ-cancel-\(p.id)") { model.civDo(nation, .cancel(project: p.id)) } }
                 }
             }
             ForEach(depot, id: \.id) { u in
                 HStack(spacing: 6) {
                     Text(L("库存：\(u.def.zh)（未配乘员、未加注）", "in depot: \(u.def.en) (no crew, empty tanks)")).font(.system(size: 10, design: .rounded))
-                    if commanding { Chip(title: L("配员出库", "Crew and deploy"), icon: "person.3.fill", id: "civ-deploy-\(u.id)") { if c.deploy(u.id) == nil { model.showToast(L("城里没有足够的成年人或机库", "Not enough adults in the city, or no deck or airfield")) } } }
+                    if commanding { Chip(title: L("配员出库", "Crew and deploy"), icon: "person.3.fill", id: "civ-deploy-\(u.id)") { model.civDo(nation, .deploy(unit: u.id, force: nil)) } }
                 }
             }
             ForEach(forces, id: \.id) { f in forceLine(f) }
@@ -412,7 +412,7 @@ struct CivArmsCard: View {
                 Menu {
                     ForEach(targets, id: \.id) { t in
                         Button((t.nation == f.nation ? L("前往 ", "Go to ") : L("进攻 ", "Attack ")) + t.name(zh: GameModel.zh)) {
-                            if !c.send(f.id, to: t.regionKey, attack: t.nation != f.nation) { model.showToast(L("此部队无法到达（地形、水深或通道宽度不允许）", "This force cannot get there (terrain, water depth or a pass too narrow)")) }
+                            model.civDo(nation, .send(force: f.id, region: t.regionKey, attack: t.nation != f.nation))
                         }
                     }
                 } label: { Label(L("调动", "Send"), systemImage: "arrow.triangle.turn.up.right.diamond.fill").font(.system(size: 11, weight: .medium, design: .rounded)).padding(.horizontal, 10).frame(height: 30).background(Color.white.opacity(0.14), in: Capsule()) }
@@ -460,5 +460,26 @@ extension GameModel {
         if let old = civCommand { c.polities[old]?.ai = true }
         civCommand = id
         if let id = id { c.polities[id]?.ai = false; showToast(L("你执掌了 \(c.polities[id]?.name(zh: GameModel.zh) ?? "")：配给、建设、军工与调兵由你决定", "\(c.polities[id]?.name(zh: GameModel.zh) ?? "") is in your hands: rations, building, arms and orders are yours")) }
+    }
+}
+
+extension GameModel {
+    /// Everything the panel does to the world goes through a command: checked, then done or refused with a reason.
+    @discardableResult func civDo(_ nation: Int, _ action: WorldCommand.Action) -> CommandResult {
+        let r = society.civ.execute(WorldCommand(id: UUID().uuidString, issuer: nation, action))
+        if !r.ok {
+            let why: String
+            switch r.reason {
+            case "cannot_build": why = L("材料不足或条件不符", "Not enough materials, or the place is wrong for it")
+            case "cannot_order": why = L("无法下单：缺少科技或厂房", "Cannot order that here: a technology or a works is missing")
+            case "cannot_deploy": why = L("城里没有足够的成年人，或没有机库与机场", "Not enough adults in the city, or no deck or airfield")
+            case "no_way": why = L("此部队无法到达（地形、水深或通道宽度不允许）", "This force cannot get there (terrain, water depth or a pass too narrow)")
+            case "stale": why = L("情况已经变化，请重新查看", "Things have changed; look again")
+            case "not_yours": why = L("这不归你指挥", "That is not yours to command")
+            default: why = L("无法执行", "That cannot be done")
+            }
+            showToast(why)
+        }
+        return r
     }
 }
