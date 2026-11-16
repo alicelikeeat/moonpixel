@@ -198,8 +198,8 @@ final class CommandScene: SKScene {
                     bar.position = CGPoint(x: n.size.width / 2 - 8, y: -2)
                     ring.position = CGPoint(x: n.size.width / 2, y: -n.size.height / 2 - 4)
                 } else if d.armor == .infantry {
-                    n.anchorPoint = CGPoint(x: 0.5, y: 0.1); n.setScale(0.55)
-                    bar.position = CGPoint(x: -8, y: 42); bar.setScale(1.8); ring.position = CGPoint(x: 0, y: 4); ring.setScale(1.8)
+                    n.anchorPoint = CGPoint(x: 0.5, y: 0.1); n.setScale(0.42)
+                    bar.position = CGPoint(x: -8, y: 42); bar.setScale(2.4); ring.position = CGPoint(x: 0, y: 4); ring.setScale(2.4)
                 } else {
                     n.texture = texture(for: d, side: e.side); n.size = n.texture?.size() ?? .zero
                     bar.position = CGPoint(x: -8, y: 15)
@@ -215,7 +215,7 @@ final class CommandScene: SKScene {
                     let side = abs(e.facing.x) > abs(e.facing.y)
                     let t = texture(for: d, side: e.side, facing: e.facing, frame: e.sinceShot < 0.25 ? 3 : (e.moving ? 1 + (phase + id) % 2 : 0))
                     node.texture = t; node.size = t.size()
-                    node.xScale = (side && e.facing.x < 0 ? -1 : 1) * 0.55
+                    node.xScale = (side && e.facing.x < 0 ? -1 : 1) * 0.42
                 } else {
                     node.zRotation = CGFloat(atan2(-e.facing.x, -e.facing.y)) + .pi            // the picture points up
                     // the bar and ring stay level while the hull turns
@@ -226,7 +226,7 @@ final class CommandScene: SKScene {
             if let bar = node.childNode(withName: "hp") as? SKSpriteNode {
                 bar.isHidden = !(hurt || sel)
                 let f = CGFloat(max(0.03, min(1, e.hp / d.hp)))
-                bar.xScale = f * (d.armor == .infantry ? 1.8 : 1)
+                bar.xScale = f * (d.armor == .infantry ? 2.4 : 1)
                 bar.color = f > 0.5 ? .green : (f > 0.25 ? .yellow : .red)
             }
             node.childNode(withName: "ring")?.isHidden = !sel
@@ -394,7 +394,7 @@ struct CommandView: View {
             VStack(spacing: 6) {
                 top
                 if !session.notice.isEmpty {
-                    Text(session.notice).font(.system(size: 12, weight: .medium, design: .rounded)).padding(.horizontal, 12).padding(.vertical, 6).glass(Capsule()).accessibilityIdentifier("cmd-notice")
+                    Text(session.notice).font(.system(size: 12, weight: .medium, design: .rounded)).padding(.horizontal, 12).padding(.vertical, 6).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule()).accessibilityIdentifier("cmd-notice")
                 }
                 Spacer()
                 bottom
@@ -414,11 +414,11 @@ struct CommandView: View {
                 Label("\(session.powerUsed)/\(session.powerMade)", systemImage: "bolt.fill").font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(session.powerUsed > session.powerMade ? Color.red : Color.white)
                 Text(String(format: "%d:%02d", session.clock / 60, session.clock % 60)).font(.system(size: 12, design: .monospaced)).opacity(0.8)
-            }.padding(.horizontal, 14).padding(.vertical, 8).glass(Capsule())
+            }.padding(.horizontal, 14).padding(.vertical, 8).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule())
             Spacer()
-            Minimap(session: session).frame(width: 84, height: 84).glass(RoundedRectangle(cornerRadius: 10))
+            Minimap(session: session).frame(width: 84, height: 84).background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 10)).glass(RoundedRectangle(cornerRadius: 10))
             Button { session.onExit() } label: { Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).frame(width: 36, height: 36) }
-                .buttonStyle(PressStyle()).glass(Circle()).accessibilityIdentifier("cmd-exit")
+                .buttonStyle(PressStyle()).background(Color.black.opacity(0.55), in: Circle()).glass(Circle()).accessibilityIdentifier("cmd-exit")
         }
     }
 
@@ -430,7 +430,7 @@ struct CommandView: View {
                 }
             }.padding(6)
         }
-        .frame(width: 128).glass(RoundedRectangle(cornerRadius: 14))
+        .frame(width: 128).background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 14)).glass(RoundedRectangle(cornerRadius: 14))
     }
 
     private func item(_ i: Int, _ d: SkKind) -> some View {
@@ -465,7 +465,7 @@ struct CommandView: View {
             if !session.selected.isEmpty {
                 pill(L("停止", "Stop"), "stop.fill", id: "cmd-stop") { session.stop() }
                 pill(L("采矿", "Mine"), "diamond", id: "cmd-mine") { session.harvest() }
-                Text(session.selectionText).font(.system(size: 11, weight: .medium, design: .rounded)).lineLimit(1).padding(.horizontal, 10).padding(.vertical, 7).glass(Capsule()).accessibilityIdentifier("cmd-selection")
+                Text(session.selectionText).font(.system(size: 11, weight: .medium, design: .rounded)).lineLimit(1).padding(.horizontal, 10).padding(.vertical, 7).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule()).accessibilityIdentifier("cmd-selection")
             }
             if session.making[0] != nil || session.ready != nil { pill(L("取消建筑", "Cancel"), "xmark.circle", id: "cmd-cancel") { session.cancel(0) } }
             Spacer()
@@ -476,7 +476,7 @@ struct CommandView: View {
         Button(action: action) {
             Label(title, systemImage: icon).font(.system(size: 12, weight: .semibold, design: .rounded)).padding(.horizontal, 11).padding(.vertical, 8)
                 .background(on ? Color.green.opacity(0.4) : Color.clear, in: Capsule())
-        }.buttonStyle(PressStyle()).glass(Capsule()).accessibilityIdentifier(id)
+        }.buttonStyle(PressStyle()).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule()).accessibilityIdentifier(id)
     }
 
     private func ending(_ w: Int) -> some View {
@@ -485,8 +485,8 @@ struct CommandView: View {
             Text(L("击毁 \(session.sim.sides[0].killed) · 损失 \(session.sim.sides[0].lost) · 采矿 \(Int(session.sim.sides[0].mined))", "Destroyed \(session.sim.sides[0].killed) · lost \(session.sim.sides[0].lost) · mined \(Int(session.sim.sides[0].mined))"))
                 .font(.system(size: 13, design: .rounded)).opacity(0.85)
             Button { session.onExit() } label: { Text(L("返回世界", "Back to the world")).font(.system(size: 15, weight: .bold, design: .rounded)).padding(.horizontal, 18).padding(.vertical, 10) }
-                .buttonStyle(PressStyle()).glass(Capsule()).accessibilityIdentifier("cmd-back")
-        }.padding(26).glass(RoundedRectangle(cornerRadius: 22)).accessibilityIdentifier("cmd-ending")
+                .buttonStyle(PressStyle()).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule()).accessibilityIdentifier("cmd-back")
+        }.padding(26).background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 22)).glass(RoundedRectangle(cornerRadius: 22)).accessibilityIdentifier("cmd-ending")
     }
 }
 
