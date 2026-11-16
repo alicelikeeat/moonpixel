@@ -67,6 +67,7 @@ final class CivTests: XCTestCase {
             let c = Civ(seed: 5); land(c, 0...0)
             let n = c.newPolity(origin: "first", near: nil)
             c.polities[n]!.techs = ["farming", "irrigation", "medicine"]
+            c.polities[n]!.builds = false                                  // what it is given, nothing more
             let t = city(c, 0, nation: n, adults: 60, farms: farms, houses: houses, grain: 900)
             run(c, days: 160)
             return t.pop
@@ -302,5 +303,30 @@ final class CivTests: XCTestCase {
         XCTAssertNotEqual(far1.nation, empire)
         XCTAssertEqual(c.activePolities().count, before + 2)
         XCTAssertEqual(c.audit(), [], "people were not moved or made by changing flags")
+    }
+
+    /// Several worlds left alone for a long time: every day adds up, nobody goes negative, no id is
+    /// reused, nothing piles up without end, and the history that unfolds has nations rising and falling.
+    func testLongRunsKeepTheBooksAndMakeHistory() {
+        var events: [String: Int] = [:]
+        for seed in [3, 8, 21] {
+            let c = Civ(seed: seed)
+            c.discover(around: TilePos(0, 0), radius: 8, gen: Generator(seed: seed))
+            for d in 1...400 {
+                c.advance(to: Double(d) * day)
+                let a = c.audit()
+                XCTAssertEqual(a, [], "seed \(seed) day \(d)")
+                if !a.isEmpty { break }
+            }
+            let held = c.foodHeld(), want = c.foodExpected()
+            for f in CivFood.all { XCTAssertEqual(held[f.key] ?? 0, want[f.key] ?? 0, accuracy: 0.05 + 1e-6 * abs(want[f.key] ?? 0), "\(f.key) seed \(seed)") }
+            XCTAssertLessThanOrEqual(c.projects.count, c.polities.count, "no endless order book")
+            XCTAssertLessThan(c.trips.count, 500)
+            XCTAssertGreaterThan(c.polities.count, 3)
+            XCTAssertGreaterThan(c.polities.values.map { $0.techs.count }.max()!, 12, "research moves on")
+            for (k, v) in c.happened { events[k, default: 0] += v }
+        }
+        for k in ["war", "captured", "exile", "city_founded", "tech"] { XCTAssertGreaterThan(events[k] ?? 0, 0, "\(k) happened somewhere") }
+        XCTAssertGreaterThan((events["restored"] ?? 0) + (events["seceded"] ?? 0) + (events["submitted"] ?? 0) + (events["federated"] ?? 0), 0, "nations broke away, came back or joined")
     }
 }

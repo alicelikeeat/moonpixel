@@ -11,9 +11,9 @@ public struct CivConfig: Codable, Equatable {
     public var daysPerYear = 8.0
     // --- people
     public var childYears = 4.0, adultYears = 10.0            // years spent as a child, as a working adult
-    public var fertility = 0.55                               // births per adult couple per year, before modifiers
-    public var wealthDamp = 0.5                               // fertility / (1 + wealthDamp * wealth): richer is not endlessly more
-    public var deathPerYear = [0.012, 0.006, 0.09]            // natural deaths per person-year: child, adult, elder
+    public var fertility = 0.5                                // births per adult couple per year, before modifiers
+    public var wealthDamp = 0.25                              // fertility / (1 + wealthDamp * wealth): richer is not endlessly more
+    public var deathPerYear = [0.012, 0.006, 0.2]             // natural deaths per person-year: child, adult, elder
     public var careCut = 0.45                                 // share of natural and illness deaths a full clinic network prevents
     public var sickPerDay = 0.004, sickCrowd = 0.02, sickThirst = 0.03, sickHunger = 0.01
     public var sickRecover = 0.18, sickDeath = 0.012
@@ -35,12 +35,15 @@ public struct CivConfig: Codable, Equatable {
     public var rulesVersion = 1
     public var cityStateChance = 0.22                         // of a region with fertile land, when first known
     public var housePeople = 6.0, wellWater = 40.0, riverWater = 400.0
-    public var plotWorkers = 3.0                              // adults a farm plot needs
-    public var plotYield = 48.0                               // grain a plot gives at harvest (6 days), before land and skill
+    public var plotWorkers = 2.0                              // adults a farm plot needs
+    public var plotYield = 72.0                               // grain a plot gives at harvest (6 days), before land and skill
     public var travelDaysPerRegion = 1.5
     public var convoyCarry = 400.0, convoyLossBlockade = 1.0, convoyLossHostile = 0.15
     // --- polity
     public var taxPerWorker = 0.05, upkeepPerSoldier = 0.04
+    public var supplyReach = 3, supplyLoss = 0.3, armyForage = 0.35              // regions from a friendly city a force is fed over, and what the road costs
+    public var foodPrice = 0.05                               // money per unit of nutrition bought from another nation
+    public var rivalry = 0.003                                // a day, between crowded neighbours who do not trade
     public var unrestIdentity = 0.4, unrestHunger = 0.5, unrestDistance = 0.08, unrestDebt = 0.3, unrestCalm = 0.25
     public var secedeUnrest = 1.0, rebelMinPeople = 60
     public var exileToHistoryYears = 6.0, exileMinIdentity = 30
@@ -49,7 +52,7 @@ public struct CivConfig: Codable, Equatable {
     public var warPressure = 0.35, warChance = 0.25           // per year at full pressure, after weighing what war costs
     public var policyDelayDays = 1.0
     // --- research and industry
-    public var researchPerResearcher = 0.02, diffusion = 0.4, capturedKnowledge = 0.3, capturedCap = 0.6
+    public var researchPerResearcher = 0.12, diffusion = 0.4, capturedKnowledge = 0.3, capturedCap = 0.6
     public var refund = 0.5, salvage = 0.4
     public init() {}
 }
@@ -184,8 +187,8 @@ public struct CivFacility {
     public let energy: Double          // made (+) or used (-) per day
     public let needs: String?          // terrain: "coast", "deep" (deep water), nil anywhere
     public static let all: [CivFacility] = [
-        CivFacility(key: "house", en: "Housing", zh: "住房", tech: nil, cost: ["timber": 20, "stone": 10], workers: 0, energy: 0, needs: nil),
-        CivFacility(key: "farm", en: "Farm plots", zh: "农田", tech: nil, cost: ["timber": 6], workers: 3, energy: 0, needs: nil),
+        CivFacility(key: "house", en: "Housing", zh: "住房", tech: nil, cost: ["timber": 10, "stone": 5], workers: 0, energy: 0, needs: nil),
+        CivFacility(key: "farm", en: "Farm plots", zh: "农田", tech: nil, cost: ["timber": 6], workers: 2, energy: 0, needs: nil),
         CivFacility(key: "pasture", en: "Pasture", zh: "牧场", tech: "husbandry", cost: ["timber": 10], workers: 2, energy: 0, needs: nil),
         CivFacility(key: "fishery", en: "Fishery", zh: "渔场", tech: "fishing", cost: ["timber": 12], workers: 3, energy: 0, needs: "coast"),
         CivFacility(key: "well", en: "Wells & cisterns", zh: "水井蓄水", tech: nil, cost: ["stone": 12], workers: 0, energy: 0, needs: nil),
@@ -193,8 +196,8 @@ public struct CivFacility {
         CivFacility(key: "bakery", en: "Bakery & kitchen", zh: "面包房与厨房", tech: nil, cost: ["stone": 15, "timber": 10], workers: 3, energy: 0, needs: nil),
         CivFacility(key: "clinic", en: "Clinic", zh: "诊所", tech: "medicine", cost: ["stone": 20, "timber": 10], workers: 2, energy: 0, needs: nil),
         CivFacility(key: "school", en: "School", zh: "学校", tech: "writing", cost: ["stone": 15, "timber": 15], workers: 2, energy: 0, needs: nil),
-        CivFacility(key: "institute", en: "Institute", zh: "研究院", tech: "steel", cost: ["stone": 40, "steel": 10], workers: 6, energy: -1, needs: nil),
-        CivFacility(key: "laboratory", en: "Laboratory", zh: "实验室", tech: "electronics", cost: ["steel": 20, "electronics": 10], workers: 8, energy: -4, needs: nil),
+        CivFacility(key: "institute", en: "Institute", zh: "研究院", tech: "metallurgy", cost: ["stone": 40, "timber": 30], workers: 6, energy: -1, needs: nil),
+        CivFacility(key: "laboratory", en: "Laboratory", zh: "实验室", tech: "electricity", cost: ["steel": 30, "parts": 10], workers: 8, energy: -4, needs: nil),
         CivFacility(key: "mine", en: "Mine", zh: "矿井", tech: "metallurgy", cost: ["timber": 20], workers: 6, energy: 0, needs: nil),
         CivFacility(key: "oilwell", en: "Oil well", zh: "油井", tech: "oil", cost: ["steel": 12], workers: 4, energy: -1, needs: nil),
         CivFacility(key: "steelworks", en: "Steelworks", zh: "钢铁厂", tech: "steel", cost: ["stone": 40, "timber": 20], workers: 10, energy: -2, needs: nil),
@@ -288,6 +291,7 @@ public struct CivUnitDef {
     public let parts: [String]             // key parts that can be knocked out: power, weapons, hangar, control, cooling
     public var label: String { key }
 
+    static let spear = CivWeapon(key: "spears", range: 0, layers: [.ground], damage: 2.5, vs: [1, 0.1, 0.02, 0.05], ammo: 0, energy: 0, cooldown: 1, flight: 0, heat: 0)
     static let rifle = CivWeapon(key: "rifle", range: 0, layers: [.ground, .lowAir], damage: 4, vs: [1, 0.15, 0.05, 0.1], ammo: 0.2, energy: 0, cooldown: 1, flight: 0, heat: 0)
     static let cannon = CivWeapon(key: "cannon", range: 0, layers: [.ground, .sea], damage: 20, vs: [0.8, 1, 0.5, 0.8], ammo: 1, energy: 0, cooldown: 1, flight: 0, heat: 0)
     static let howitzer = CivWeapon(key: "howitzer", range: 1, layers: [.ground, .sea], damage: 30, vs: [1, 0.7, 0.4, 1.2], ammo: 2, energy: 0, cooldown: 2, flight: 1, heat: 0)
@@ -306,6 +310,9 @@ public struct CivUnitDef {
     static let skyBattery = CivWeapon(key: "sky_battery", range: 1, layers: [.ground, .sea, .lowAir, .highAir], damage: 40, vs: [1, 1, 0.8, 1], ammo: 0, energy: 20, cooldown: 3, flight: 0, heat: 40)
 
     public static let all: [CivUnitDef] = [
+        CivUnitDef(key: "levy", en: "Levy band", zh: "民兵队", layer: .ground, size: .person, tech: [], facility: "barracks",
+                   stages: [["timber": 10]], hours: 12, crew: 30, upkeep: 0.5, hp: 120, armor: 0, speed: 1.0, fuelCap: 0, fuelPerDay: 0, energyPerDay: 0,
+                   ammoCap: 0, foodCap: 300, heatCap: 0, cool: 0, sensor: 0, stealth: 1, weapons: [spear], hangar: 0, deckPerHour: 0, carrierBased: false, endurance: 0, parts: []),
         CivUnitDef(key: "infantry", en: "Rifle company", zh: "步兵连", layer: .ground, size: .person, tech: ["rifles"], facility: "barracks",
                    stages: [["steel": 2, "ammo": 10]], hours: 12, crew: 20, upkeep: 1, hp: 120, armor: 0, speed: 1.0, fuelCap: 0, fuelPerDay: 0, energyPerDay: 0,
                    ammoCap: 30, foodCap: 120, heatCap: 0, cool: 0, sensor: 0, stealth: 1, weapons: [rifle], hangar: 0, deckPerHour: 0, carrierBased: false, endurance: 0, parts: []),

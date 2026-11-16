@@ -154,6 +154,8 @@ public final class Civ: Codable {
     public var wrecks: [CivWreck] = []
     public var news: [CivNews] = []
     public var fights: [CivFight] = []
+    /// How many times each kind of news has happened, ever (the news list itself keeps only the latest).
+    public var happened: [String: Int] = [:]
     /// What each nation knows of enemy machines: "nation:unit" -> where and when last seen.
     public var intel: [String: CivSighting] = [:]
     public var nextCity = 1, nextTrip = 1, nextForce = 1, nextUnit = 1, nextProject = 1
@@ -247,6 +249,7 @@ public final class Civ: Codable {
     // MARK: - news, ids
 
     func say(_ key: String, _ args: [String], _ nations: [Int], region: Int64? = nil) {
+        happened[key, default: 0] += 1
         news.append(CivNews(t: time, key: key, args: args, nations: nations, region: region))
         if news.count > 400 { news.removeFirst(news.count - 400) }
     }
@@ -311,14 +314,19 @@ public final class Civ: Codable {
         let water = Double(c.has("well")) * cfg.wellWater + (reg.river || reg.coast ? cfg.riverWater : 30)
         c.thirst = pop == 0 ? 0 : max(0, 1 - water / Double(pop))
         // --- work: food first, then everything else in turn
-        var hands = max(0, (0..<6).reduce(0.0) { $0 + Double(c.people.n[6 + $1]) * cfg.work[$1] } - Double(c.sick) * 0.5)
+        // adults work, elders lend a hand; the sick and the hungry less so
+        var hands = 0.0
+        for st in 0..<6 { let a = Double(c.people.n[6 + st]), e = Double(c.people.n[12 + st]); hands += (a + 0.3 * e) * cfg.work[st] }
+        hands = max(0, hands - Double(c.sick) * 0.5)
         var staffed: [String: Double] = [:]
         var jobsTotal = 0.0
         let order = ["farm", "pasture", "fishery", "well", "bakery", "granary", "clinic", "autofarm", "greenhouse", "synth_plant", "ration_works", "plant", "fusion_plant", "mine", "oilwell",
                      "steelworks", "refinery", "factory", "fab", "school", "institute", "laboratory", "barracks", "motor_works", "shipyard", "deep_yard", "airfield", "aircraft_works", "frame_works", "sky_yard"]
         for f in order {
             guard let def = CivFacility.byKey[f], c.has(f) > 0, def.workers > 0 else { if c.has(f) > 0 { staffed[f] = 1 }; continue }
-            let need = Double(def.workers * c.has(f))
+            var need = Double(def.workers * c.has(f))
+            // with the granary full, only as many farm hands as keep it full: the rest quarry, cut and build
+            if f == "farm" && c.foodDays > 40 { need = min(need, max(Double(def.workers), need * 40 / c.foodDays)) }
             jobsTotal += need
             let got = min(need, hands)
             hands -= got
@@ -352,8 +360,8 @@ public final class Civ: Codable {
         make("fish", Double(c.has("fishery")) * (staffed["fishery"] ?? 0) * 5 * min(1, reg.water * 2) * fields)
         make("hydro", Double(c.has("greenhouse")) * (staffed["greenhouse"] ?? 0) * 8 * power)
         make("grain", Double(c.has("autofarm")) * (staffed["autofarm"] ?? 0) * 30 * power)
-        make("timber", spare * 0.12 * (0.3 + reg.forest))
-        make("stone", spare * 0.08 * (0.3 + reg.mountain))
+        make("timber", spare * 0.2 * (0.3 + reg.forest))
+        make("stone", spare * 0.12 * (0.3 + reg.mountain))
         make("ore", Double(c.has("mine")) * (staffed["mine"] ?? 0) * 6 * reg.ore)
         make("coal", Double(c.has("mine")) * (staffed["mine"] ?? 0) * 4 * reg.coal)
         make("crude", Double(c.has("oilwell")) * (staffed["oilwell"] ?? 0) * 8 * reg.oil * power)

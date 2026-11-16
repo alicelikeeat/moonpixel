@@ -223,11 +223,17 @@ extension Civ {
         let cfg = self.cfg
         for id in forces.keys.sorted() {
             guard let f = forces[id] else { continue }
-            // supply from a friendly city in the same region: food first, then fuel and ammunition
-            if let c = cities.values.filter({ $0.nation == f.nation && $0.regionKey == f.region && $0.detail == nil && !$0.besieged }).min(by: { $0.id < $1.id }) {
+            // supply from a friendly city: in the same region in full, or over a clear road a little way off,
+            // where part of it is lost on the way (and booked as lost). Cut off, a force lives on what it carries.
+            let hostile = hostileRegions(of: f.nation)
+            let supplier = cities.values.filter { $0.nation == f.nation && $0.detail == nil && !$0.besieged && dist($0.regionKey, f.region) <= cfg.supplyReach }
+                .sorted { dist($0.regionKey, f.region) != dist($1.regionKey, f.region) ? dist($0.regionKey, f.region) < dist($1.regionKey, f.region) : $0.id < $1.id }
+                .first { $0.regionKey == f.region || route(from: $0.regionKey, to: f.region, avoid: hostile.subtracting([f.region])) != nil }
+            if let c = supplier {
                 let need = Double(f.crew.total) * (1 + cfg.needSoldier) * 5
                 let have = f.food.keys.sorted().reduce(0.0) { $0 + f.food[$1]! * (CivFood.byKey[$1]?.nutrition ?? 0) }
-                if have < need { for (k, v) in takeFood(from: c, nutrition: need - have) { f.food[k, default: 0] += v } }
+                let keep = c.regionKey == f.region ? 1 : 1 - cfg.supplyLoss
+                if have < need { for (k, v) in takeFood(from: c, nutrition: (need - have) / keep) { f.food[k, default: 0] += v * keep; totals.add(\.lost, k, v * (1 - keep)) } }
                 for uid in f.units {
                     guard var u = units[uid] else { continue }
                     let d = u.def
@@ -236,10 +242,15 @@ extension Civ {
                     // reactors and lift are charged from the city's power when it has some to spare
                     if d.energyPerDay > 0 { let spare = max(0, c.energyMade - c.energyUsed) * 4; u.energy = min(d.energyPerDay * 3, u.energy + spare) }
                     // repairs: a little each day at home, with parts
-                    if u.hp < d.hp && c.free("parts") >= 1 { c.stock["parts", default: 0] -= 1; u.hp = min(d.hp, u.hp + d.hp * 0.05) }
-                    for p in u.parts.keys.sorted() where u.parts[p]! < 1 && c.free("parts") >= 2 { c.stock["parts", default: 0] -= 2; u.parts[p] = min(1, u.parts[p]! + 0.25) }
+                    if c.regionKey == f.region && u.hp < d.hp && c.free("parts") >= 1 { c.stock["parts", default: 0] -= 1; u.hp = min(d.hp, u.hp + d.hp * 0.05) }
+                    for p in u.parts.keys.sorted() where c.regionKey == f.region && u.parts[p]! < 1 && c.free("parts") >= 2 { c.stock["parts", default: 0] -= 2; u.parts[p] = min(1, u.parts[p]! + 0.25) }
                     units[uid] = u
                 }
+            }
+            // on campaign an army lives partly off the land it crosses (what it finds is booked as made there)
+            if let r = regions[f.region], f.layer == .ground, r.land > 0.3 {
+                let found = Double(f.crew.total) * cfg.armyForage * (0.3 + r.fertility)
+                f.food["vegetable", default: 0] += found / 0.5; totals.add(\.made, "vegetable", found / 0.5)
             }
             // the crew eats what the force carries
             let need = Double(f.crew.total) * (1 + cfg.needSoldier)
@@ -258,7 +269,7 @@ extension Civ {
             }
             f.morale = max(0.1, min(1, f.morale + (cover >= 0.95 ? 0.05 : -0.1)))
             // a machine whose crew has starved away cannot be worked
-            while f.crew.total < f.units.compactMap({ units[$0]?.def.crew }).reduce(0, +), let last = f.units.last(where: { (units[$0]?.def.crew ?? 0) > 0 }) {
+            while f.crew.total * 2 < f.units.compactMap({ units[$0]?.def.crew }).reduce(0, +), let last = f.units.last(where: { (units[$0]?.def.crew ?? 0) > 0 }) {
                 guard var u = units[last] else { break }
                 u.force = nil
                 if let c = cities.values.filter({ $0.nation == f.nation && $0.regionKey == f.region }).min(by: { $0.id < $1.id }) { u.depot = c.id; units[last] = u }
@@ -595,11 +606,13 @@ extension Civ {
     func warChoices(_ id: Int) {
         guard let p = polities[id] else { return }
         // war: only when it is worth its cost, against a weaker neighbour, while the people are pressed
-        let pressed = p.foodDays < 12 || cities(of: id).contains { $0.crowding > 1.2 }
+        let pressed = p.foodDays < 12 || cities(of: id).contains { $0.crowding > 1.0 }
         for r in relations.values.sorted(by: { $0.a != $1.a ? $0.a < $1.a : $0.b < $1.b }) where (r.a == id || r.b == id) {
             let o = r.a == id ? r.b : r.a
             guard let q = polities[o], q.status == .active else { continue }
-            if r.state == 0 && pressed && r.value < -0.1 && p.power > q.power * 1.5 && p.treasury > 0 && p.fatigue < 0.5 && p.power > 5 {
+            // an old quarrel or deep resentment can start a war without hunger, if it looks winnable
+            let grudge = r.value < -0.5 || (r.claim && r.value < -0.3)
+            if r.state == 0 && (pressed || grudge) && r.value < -0.1 && p.power > q.power * 1.3 && p.treasury > 0 && p.fatigue < 0.5 && p.power > 5 {
                 if rng.unit() < cfg.warChance / yearDays { declare(id, on: o) }
             }
             if r.state == 1 && (p.fatigue > 0.8 || p.power < q.power * 0.5) && (time - r.since) / MP.daySeconds > 4 { makePeace(id, o) }
@@ -614,8 +627,13 @@ extension Civ {
         }
         // arms: only with money, a works and a reason
         let atWar = !wars(of: id).isEmpty
-        if (atWar || p.leaning == "mecha" || p.leaning == "naval" || p.leaning == "air") && p.treasury > 50 && projects.values.filter({ $0.nation == id }).count < 2 {
-            for kind in ["frame", "sky_carrier", "carrier", "fighter", "air_defence", "escort", "armour", "artillery", "infantry"] {
+        // a nation keeps some force under arms: more in war, more when its neighbours resent it
+        let threatened = relations.values.contains { ($0.a == id || $0.b == id) && $0.value < -0.3 }
+        // machines counted wherever they are: in service, or built and waiting in a depot
+        let armed = units.values.filter { $0.nation == id }.count
+        let cap = (atWar ? 3 : 1) + p.cityCount + p.pop / 400
+        if (atWar || threatened || armed == 0 || p.leaning == "mecha" || p.leaning == "naval" || p.leaning == "air") && armed < cap && p.treasury > 20 && projects.values.filter({ $0.nation == id }).isEmpty {
+            for kind in ["frame", "sky_carrier", "carrier", "fighter", "air_defence", "escort", "armour", "artillery", "infantry", "levy"] {
                 guard let def = CivUnitDef.byKey[kind], def.tech.allSatisfy(p.knows) else { continue }
                 if let c = cities(of: id).first(where: { $0.has(def.facility) > 0 }) { order(kind, nation: id, city: c.id); break }
             }

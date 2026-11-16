@@ -25,6 +25,8 @@ public struct CivPolity: Codable, Equatable {
     public var detailed = false                                 // also has towns at the detailed level (Society)
     /// Run by the computer (arms, war, peace). Cities still look after their own food and roofs either way.
     public var ai = true
+    /// Its cities choose what to build themselves (off: only what they are given, as in some tests).
+    public var builds = true
     public func knows(_ t: String) -> Bool { techs.contains(t) }
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
 }
@@ -211,6 +213,9 @@ extension Civ {
             if r.state == 2 && (time - r.since) / MP.daySeconds > yearDays * 0.5 { r.state = 0; r.since = time }
             r.trade *= 0.95
             r.value += (r.trade > 1 ? 0.004 : 0) - (r.state == 1 ? 0.004 : 0)
+            // two growing peoples pressing on the same land, with nothing to trade, come to resent each other
+            let pressA = cities(of: r.a).contains { $0.crowding > 0.8 }, pressB = cities(of: r.b).contains { $0.crowding > 0.8 }
+            if pressA && pressB && r.trade < 1 && !r.pact { r.value -= cfg.rivalry }
             r.value = max(-1, min(1, r.value * 0.998))
             // a pair that no longer meets, trades or quarrels is forgotten (the record stays in the news)
             let idle = (time - r.contact) / MP.daySeconds > yearDays * 2 && r.state == 0 && !r.pact && !r.claim && abs(r.value) < 0.05
@@ -371,9 +376,27 @@ extension Civ {
                 let pending = trips.values.contains { $0.to == c.id && !$0.cargo.isEmpty }
                 if !pending { ship(foodFor(giver, nutrition: want), from: giver.id, to: c.id) }
             }
+            // none of our own to help: buy from a friendly neighbour that has plenty (paid, and remembered)
+            if c.foodDays < 6, p.treasury > 0, !trips.values.contains(where: { $0.to == c.id && !$0.cargo.isEmpty }),
+               !cities(of: id).contains(where: { $0.id != c.id && $0.foodDays > 30 }),
+               let seller = cities.values.filter({ $0.nation != id && $0.detail == nil && $0.foodDays > 30 && !atWar($0.nation, id) && (relation($0.nation, id)?.value ?? 0) >= -0.1 && dist($0.regionKey, c.regionKey) <= 3 })
+                   .min(by: { dist($0.regionKey, c.regionKey) != dist($1.regionKey, c.regionKey) ? dist($0.regionKey, c.regionKey) < dist($1.regionKey, c.regionKey) : $0.id < $1.id }) {
+                let want = min(c.dailyNeed * 8, p.treasury / cfg.foodPrice)
+                let goods = foodFor(seller, nutrition: want)
+                let n = goods.keys.sorted().reduce(0.0) { $0 + goods[$1]! * (CivFood.byKey[$1]?.nutrition ?? 0) }
+                if n > 0, ship(goods, from: seller.id, to: c.id) != nil {
+                    polities[id]!.treasury -= n * cfg.foodPrice; polities[seller.nation]?.treasury += n * cfg.foodPrice
+                    let k = touch(id, seller.nation); relations[k]!.trade += n; relations[k]!.value = min(1, relations[k]!.value + 0.02)
+                }
+            }
             let adults = c.people.band(1)
             let building = Set(c.builds.map { $0.facility })
-            func want(_ f: String, _ cond: Bool) { if cond && !building.contains(f) { _ = build(f, in: c) } }
+            func want(_ f: String, _ cond: Bool) { if p.builds && cond && !building.contains(f) { _ = build(f, in: c) } }
+            // the capital's schools come before anything that can wait: they are what the future is made of
+            let big = c.id == p.capital
+            want("school", p.knows("writing") && c.has("school") == 0 && c.pop > 30)
+            want("institute", big && p.knows("metallurgy") && c.has("institute") == 0)
+            want("laboratory", big && p.knows("electricity") && c.has("laboratory") == 0)
             want("farm", c.foodDays < 30 && Double(adults) > c.jobs + cfg.plotWorkers)
             want("house", c.crowding > 0.9)
             want("well", c.thirst > 0.05)
@@ -383,9 +406,7 @@ extension Civ {
             want("fishery", p.knows("fishing") && (regions[c.regionKey]?.coast ?? false) && c.has("fishery") < 1 + c.pop / 150)
             want("clinic", p.knows("medicine") && c.has("clinic") < c.pop / 150)
             want("school", p.knows("writing") && c.has("school") == 0 && c.pop > 40)
-            let big = c.id == p.capital
-            want("institute", big && p.knows("steel") && c.has("institute") == 0)
-            want("laboratory", big && p.knows("electronics") && c.has("laboratory") == 0)
+
             want("mine", p.knows("metallurgy") && c.has("mine") < 2 && (regions[c.regionKey]?.ore ?? 0) > 0.2)
             want("steelworks", p.knows("steel") && c.has("steelworks") == 0 && c.has("mine") > 0)
             want("factory", p.knows("machining") && c.has("factory") == 0 && c.pop > 100)
@@ -396,7 +417,8 @@ extension Civ {
             want("ration_works", p.knows("preserving") && big && c.has("ration_works") == 0)
             want("barracks", big && c.has("barracks") == 0 && c.pop > 60)
             // a crowded, settled city sends people to found another where the land is free
-            if c.crowding > 1.1 && c.pop > 140 && !trips.values.contains(where: { $0.from == c.id && $0.settle != nil }) {
+            // (a choice weighed against building more houses: open land nearby and a full town tip it)
+            if c.crowding > 0.85 && c.pop > 100 && c.foodDays > 15 && rng.unit() < 0.1 && !trips.values.contains(where: { $0.from == c.id && $0.settle != nil }) {
                 if let site = freeSite(near: c) { _ = settle(from: c, at: site) }
             }
         }
