@@ -55,7 +55,10 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Tech:").exists, "technology line is shown")
         status.tap(); sleep(1)
         more(app, "Clean")                                 // the toast lasts a few seconds: look for it at once
-        XCTAssertTrue(text(app, containing: "Cleaned").waitForExistence(timeout: 10), "clean toast shown")
+        // the toast fades after a few seconds; the last message stays readable for tests
+        let last = app.staticTexts["last-toast"]
+        let cleaned = NSPredicate(format: "label CONTAINS 'Cleaned'")
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: cleaned, evaluatedWith: last)], timeout: 15), .completed, "clean was announced")
         app.buttons["64×"].tap(); sleep(8)
         shot("05-fast")
         // cheats unlock every power; the arsenal lists five schools; a storm is called

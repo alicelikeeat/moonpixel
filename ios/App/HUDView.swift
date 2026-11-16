@@ -26,6 +26,9 @@ struct HUDView: View {
                         if model.showDetails { details }
                     }
                     Spacer(minLength: 0)
+                    // the last message, kept for assistive technology and UI tests after the toast has faded
+                    Text(model.toast).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)
+                        .accessibilityIdentifier("last-toast").allowsHitTesting(false)
                     if toastVisible {
                         Text(model.toast).font(.system(size: 13, weight: .medium, design: .rounded)).lineLimit(2)
                             .padding(.horizontal, 14).padding(.vertical, 9).glass(Capsule())
