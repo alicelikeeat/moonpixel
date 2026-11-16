@@ -367,7 +367,8 @@ public final class Civ: Codable {
     }
 
     /// Recipes, upstream first: what feeds others is made before what uses it.
-    static let recipeOrder: [CivRecipe] = ["bread", "meal", "ration", "synth", "steel", "fuel", "parts", "electronics", "armor", "engine", "weapons", "core", "ammo"].compactMap { CivRecipe.byKey[$0] }
+    static var recipeOrder: [CivRecipe] { recipeOrderKeys.compactMap { CivRecipe.byKey[$0] } + CivRecipe.all.filter { !recipeOrderKeys.contains($0.key) } }
+    static let recipeOrderKeys = ["bread", "meal", "ration", "synth", "steel", "fuel", "parts", "electronics", "armor", "engine", "weapons", "core", "ammo"]
 
     /// What the city's works should make: everything its orders still need (and a reserve of fuel and
     /// ammunition when its nation keeps forces), worked back through the recipes to the raw materials.
@@ -407,7 +408,8 @@ public final class Civ: Codable {
         var jobsTotal = 0.0
         let order = ["farm", "pasture", "fishery", "well", "bakery", "granary", "clinic", "autofarm", "greenhouse", "synth_plant", "ration_works", "plant", "fusion_plant", "mine", "oilwell",
                      "steelworks", "refinery", "factory", "fab", "school", "institute", "laboratory", "barracks", "motor_works", "shipyard", "deep_yard", "airfield", "aircraft_works", "frame_works", "sky_yard"]
-        for f in order {
+        // facilities from content packs take their turn after the built-in ones, in key order
+        for f in order + c.facilities.keys.filter({ !order.contains($0) }).sorted() {
             guard let def = CivFacility.byKey[f], c.has(f) > 0, def.workers > 0 else { if c.has(f) > 0 { staffed[f] = 1 }; continue }
             var need = Double(def.workers * c.has(f))
             // with the granary full, only as many farm hands as keep it full: the rest quarry, cut and build

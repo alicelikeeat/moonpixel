@@ -68,12 +68,16 @@ public enum CivHunger {
 
 // MARK: - food
 
-public struct CivFood {
+public struct CivFood: Codable, Equatable {
     public let key: String, en: String, zh: String
     public let nutrition: Double       // adult-days per unit
     public let shelfDays: Double       // a share 1/shelfDays of the stock spoils each day
     public let tech: String?           // needed to make it
-    public static let all: [CivFood] = [
+    /// Everything of this kind the game knows: the built-in pack and any added content packs.
+    public static var all: [CivFood] { ContentRegistry.shared.foods }
+    public static var byKey: [String: CivFood] { ContentRegistry.shared.foodsByKey }
+    /// The kinds that come with the game (the "moonpixel" content pack).
+    static let builtin: [CivFood] = [
         CivFood(key: "grain", en: "Grain", zh: "谷物", nutrition: 1.0, shelfDays: 360, tech: nil),
         CivFood(key: "vegetable", en: "Vegetables", zh: "蔬菜", nutrition: 0.5, shelfDays: 12, tech: nil),
         CivFood(key: "meat", en: "Meat", zh: "肉", nutrition: 1.2, shelfDays: 6, tech: nil),
@@ -85,10 +89,10 @@ public struct CivFood {
         CivFood(key: "hydro", en: "Greenhouse greens", zh: "温室蔬菜", nutrition: 0.6, shelfDays: 14, tech: "greenhouse"),
         CivFood(key: "synth", en: "Synthetic nutrition", zh: "合成营养", nutrition: 2.5, shelfDays: 900, tech: "synth_food"),
     ]
-    public static let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
     public static func isFood(_ k: String) -> Bool { byKey[k] != nil }
     /// What is eaten first: what spoils soonest.
-    public static let eatOrder = all.sorted { $0.shelfDays != $1.shelfDays ? $0.shelfDays < $1.shelfDays : $0.key < $1.key }.map { $0.key }
+    public static var eatOrder: [String] { ContentRegistry.shared.eatOrder }
+    static func eatOrder(_ all: [CivFood]) -> [String] { all.sorted { $0.shelfDays != $1.shelfDays ? $0.shelfDays < $1.shelfDays : $0.key < $1.key }.map { $0.key }  }
 }
 
 public enum CivRation: String, Codable, CaseIterable {
@@ -105,7 +109,7 @@ public enum CivRation: String, Codable, CaseIterable {
 
 // MARK: - technology
 
-public struct CivTech {
+public struct CivTech: Codable, Equatable {
     public let key: String, en: String, zh: String
     public let branch: String          // agri, industry, info, land, naval, air, mecha, space
     public let era: Int                // 0 farming & crafts, 1 metal & machines, 2 industry, 3 electric, 4 information, 5 future (a label only)
@@ -113,7 +117,11 @@ public struct CivTech {
     public let cost: Double            // research points
     public let lab: Int                // research facility level needed (0 none, 1 school, 2 institute, 3 laboratory)
     public static let eraNames = [("Farming & crafts", "农耕手工"), ("Metal & machines", "冶金机械"), ("Industry", "工业"), ("Electric age", "电气化"), ("Information age", "信息化"), ("Future", "未来科技")]
-    public static let all: [CivTech] = [
+    /// Everything of this kind the game knows: the built-in pack and any added content packs.
+    public static var all: [CivTech] { ContentRegistry.shared.techs }
+    public static var byKey: [String: CivTech] { ContentRegistry.shared.techsByKey }
+    /// The kinds that come with the game (the "moonpixel" content pack).
+    static let builtin: [CivTech] = [
         CivTech(key: "farming", en: "Farming", zh: "农耕", branch: "agri", era: 0, needs: [], cost: 0, lab: 0),
         CivTech(key: "husbandry", en: "Animal husbandry", zh: "畜牧", branch: "agri", era: 0, needs: ["farming"], cost: 20, lab: 0),
         CivTech(key: "fishing", en: "Fishing boats", zh: "渔船", branch: "naval", era: 0, needs: ["farming"], cost: 20, lab: 0),
@@ -154,14 +162,17 @@ public struct CivTech {
         CivTech(key: "aerospace", en: "Aerospace hulls", zh: "空天船体", branch: "space", era: 5, needs: ["jets", "fusion"], cost: 1000, lab: 3),
         CivTech(key: "lift", en: "Field lift", zh: "场升力", branch: "space", era: 5, needs: ["aerospace", "frame_reactor"], cost: 1200, lab: 3),
     ]
-    public static let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
 }
 
 // MARK: - industry
 
-public struct CivItem {
+public struct CivItem: Codable, Equatable {
     public let key: String, en: String, zh: String
-    public static let all: [CivItem] = [
+    /// Everything of this kind the game knows: the built-in pack and any added content packs.
+    public static var all: [CivItem] { ContentRegistry.shared.items }
+    public static var byKey: [String: CivItem] { ContentRegistry.shared.itemsByKey }
+    /// The kinds that come with the game (the "moonpixel" content pack).
+    static let builtin: [CivItem] = [
         CivItem(key: "timber", en: "Timber", zh: "木材"), CivItem(key: "stone", en: "Stone", zh: "石料"),
         CivItem(key: "ore", en: "Iron ore", zh: "铁矿石"), CivItem(key: "coal", en: "Coal", zh: "煤"), CivItem(key: "crude", en: "Crude oil", zh: "原油"),
         CivItem(key: "steel", en: "Steel", zh: "钢材"), CivItem(key: "fuel", en: "Fuel", zh: "燃料"),
@@ -170,7 +181,6 @@ public struct CivItem {
         CivItem(key: "weapons", en: "Weapon systems", zh: "武器系统"), CivItem(key: "core", en: "Reactor cores", zh: "反应堆芯"),
         CivItem(key: "ammo", en: "Ammunition", zh: "弹药"),
     ]
-    public static let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
     public static func name(_ k: String, zh: Bool) -> String {
         if let i = byKey[k] { return zh ? i.zh : i.en }
         if let f = CivFood.byKey[k] { return zh ? f.zh : f.en }
@@ -179,14 +189,18 @@ public struct CivItem {
 }
 
 /// Places a city builds. Workers come from its adults; energy from its power plants.
-public struct CivFacility {
+public struct CivFacility: Codable, Equatable {
     public let key: String, en: String, zh: String
     public let tech: String?
     public let cost: [String: Double]  // materials to build
     public let workers: Int
     public let energy: Double          // made (+) or used (-) per day
     public let needs: String?          // terrain: "coast", "deep" (deep water), nil anywhere
-    public static let all: [CivFacility] = [
+    /// Everything of this kind the game knows: the built-in pack and any added content packs.
+    public static var all: [CivFacility] { ContentRegistry.shared.facilities }
+    public static var byKey: [String: CivFacility] { ContentRegistry.shared.facilitiesByKey }
+    /// The kinds that come with the game (the "moonpixel" content pack).
+    static let builtin: [CivFacility] = [
         CivFacility(key: "house", en: "Housing", zh: "住房", tech: nil, cost: ["timber": 10, "stone": 5], workers: 0, energy: 0, needs: nil),
         CivFacility(key: "farm", en: "Farm plots", zh: "农田", tech: nil, cost: ["timber": 6], workers: 2, energy: 0, needs: nil),
         CivFacility(key: "pasture", en: "Pasture", zh: "牧场", tech: "husbandry", cost: ["timber": 10], workers: 2, energy: 0, needs: nil),
@@ -219,16 +233,19 @@ public struct CivFacility {
         CivFacility(key: "frame_works", en: "Frame works", zh: "机体工厂", tech: "frame", cost: ["steel": 120, "electronics": 40, "parts": 40], workers: 24, energy: -20, needs: nil),
         CivFacility(key: "sky_yard", en: "Sky dock", zh: "空天船坞", tech: "aerospace", cost: ["steel": 300, "electronics": 120, "core": 4], workers: 60, energy: -60, needs: nil),
     ]
-    public static let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
 }
 
 /// One way of turning things into other things in a facility: inputs, outputs, hours of work by its crew, energy.
-public struct CivRecipe {
+public struct CivRecipe: Codable, Equatable {
     public let key: String, facility: String
     public let inputs: [String: Double], outputs: [String: Double]
     public let hours: Double, energy: Double
     public let tech: String?
-    public static let all: [CivRecipe] = [
+    /// Everything of this kind the game knows: the built-in pack and any added content packs.
+    public static var all: [CivRecipe] { ContentRegistry.shared.recipes }
+    public static var byKey: [String: CivRecipe] { ContentRegistry.shared.recipesByKey }
+    /// The kinds that come with the game (the "moonpixel" content pack).
+    static let builtin: [CivRecipe] = [
         CivRecipe(key: "bread", facility: "bakery", inputs: ["grain": 4], outputs: ["bread": 4], hours: 4, energy: 0, tech: nil),
         CivRecipe(key: "meal", facility: "bakery", inputs: ["vegetable": 2, "meat": 1, "grain": 1], outputs: ["meal": 4], hours: 4, energy: 0, tech: nil),
         CivRecipe(key: "ration", facility: "ration_works", inputs: ["grain": 4, "meat": 2], outputs: ["ration": 4], hours: 6, energy: 0, tech: "preserving"),
@@ -243,7 +260,6 @@ public struct CivRecipe {
         CivRecipe(key: "weapons", facility: "factory", inputs: ["steel": 1, "parts": 1, "electronics": 0.5], outputs: ["weapons": 1], hours: 8, energy: 2, tech: "missiles"),
         CivRecipe(key: "core", facility: "fab", inputs: ["electronics": 3, "steel": 3], outputs: ["core": 1], hours: 24, energy: 20, tech: "fusion"),
     ]
-    public static let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
 }
 
 // MARK: - arms
@@ -259,7 +275,9 @@ public enum CivLayer: Int, Codable, CaseIterable { case ground = 0, sea, underwa
 /// How wide a passage a unit needs between regions: people go anywhere, a frame needs a real road or open land.
 public enum CivSize: Int, Codable { case person = 0, vehicle, large, huge }
 
-public struct CivWeapon {
+public struct CivWeapon: Codable, Equatable {
+    public static var all: [CivWeapon] { ContentRegistry.shared.weapons }
+    public static var byKey: [String: CivWeapon] { ContentRegistry.shared.weaponsByKey }
     public let key: String
     public let range: Int              // regions: 0 the same one, 1 a neighbour
     public let layers: Set<CivLayer>
@@ -272,25 +290,89 @@ public struct CivWeapon {
     public let heat: Double
 }
 
-public struct CivUnitDef {
-    public let key: String, en: String, zh: String
-    public let layer: CivLayer, size: CivSize
-    public let tech: [String], facility: String
-    public let stages: [[String: Double]]  // materials taken stage by stage as it is built
-    public let hours: Double               // work per stage
-    public let crew: Int, upkeep: Double   // people aboard; money a day
-    public let hp: Double, armor: Int      // armour class 0...3
-    public let speed: Double               // regions a day (0: does not move)
-    public let fuelCap: Double, fuelPerDay: Double, energyPerDay: Double
-    public let ammoCap: Double, foodCap: Double
-    public let heatCap: Double, cool: Double
-    public let sensor: Int, stealth: Int   // regions seen around; how hard to see
-    public let weapons: [CivWeapon]
-    public let hangar: Int, deckPerHour: Int   // aircraft carried, and launched or landed in an hour
-    public let carrierBased: Bool, endurance: Double   // aircraft: can use a carrier; hours of fuel in the air
-    public let parts: [String]             // key parts that can be knocked out: power, weapons, hangar, control, cooling
+/// A machine (or a band of people) as a set of capabilities. A carrier is a platform that moves on the
+/// sea + a hull + a crew + stores + a hangar bay + weapons; a sky carrier is the same with another
+/// layer and a power draw instead of fuel. Only the capabilities a thing has are stored; the rules
+/// ask "has it a hangar bay?", never "is this the carrier?".
+public struct CivUnitDef: Codable, Equatable {
+    public struct Build: Codable, Equatable { public var tech: [String]; public var facility: String; public var stages: [[String: Double]]; public var hours: Double }
+    public struct Move: Codable, Equatable { public var layer: CivLayer; public var size: CivSize; public var speed: Double }
+    public struct Tank: Codable, Equatable { public var cap: Double; public var perDay: Double }
+    public struct Power: Codable, Equatable { public var perDay: Double }
+    public struct Hull: Codable, Equatable { public var hp: Double; public var armor: Int; public var parts: [String] }
+    public struct Crew: Codable, Equatable { public var people: Int; public var upkeep: Double }
+    public struct Stores: Codable, Equatable { public var ammo: Double; public var food: Double }
+    public struct Thermal: Codable, Equatable { public var cap: Double; public var cool: Double }
+    public struct Sensor: Codable, Equatable { public var range: Int; public var stealth: Int }
+    public struct HangarBay: Codable, Equatable { public var capacity: Int; public var deckPerHour: Int }
+    public struct Flight: Codable, Equatable { public var carrierBased: Bool; public var endurance: Double }
+
+    public var key: String, en: String, zh: String
+    public var build: Build
+    public var move: Move
+    public var fuelTank: Tank?
+    public var power: Power?
+    public var hull: Hull
+    public var crewing: Crew
+    public var stores: Stores?
+    public var thermal: Thermal?
+    public var eyes: Sensor?
+    public var weaponKeys: [String]
+    public var hangarBay: HangarBay?
+    public var flight: Flight?
+    /// Picture used to draw it (checked against the art the game has).
+    public var art: String?
+
+    // the rules read capabilities through these
+    public var layer: CivLayer { move.layer }
+    public var size: CivSize { move.size }
+    public var speed: Double { move.speed }
+    public var tech: [String] { build.tech }
+    public var facility: String { build.facility }
+    public var stages: [[String: Double]] { build.stages }
+    public var hours: Double { build.hours }
+    public var crew: Int { crewing.people }
+    public var upkeep: Double { crewing.upkeep }
+    public var hp: Double { hull.hp }
+    public var armor: Int { hull.armor }
+    public var parts: [String] { hull.parts }
+    public var fuelCap: Double { fuelTank?.cap ?? 0 }
+    public var fuelPerDay: Double { fuelTank?.perDay ?? 0 }
+    public var energyPerDay: Double { power?.perDay ?? 0 }
+    public var ammoCap: Double { stores?.ammo ?? 0 }
+    public var foodCap: Double { stores?.food ?? 0 }
+    public var heatCap: Double { thermal?.cap ?? 0 }
+    public var cool: Double { thermal?.cool ?? 0 }
+    public var sensor: Int { eyes?.range ?? 0 }
+    public var stealth: Int { eyes?.stealth ?? 0 }
+    public var weapons: [CivWeapon] { weaponKeys.compactMap { CivWeapon.byKey[$0] } }
+    public var hangar: Int { hangarBay?.capacity ?? 0 }
+    public var deckPerHour: Int { hangarBay?.deckPerHour ?? 0 }
+    public var carrierBased: Bool { flight?.carrierBased ?? false }
+    public var endurance: Double { flight?.endurance ?? 0 }
     public var label: String { key }
 
+    public init(key: String, en: String, zh: String, build: Build, move: Move, fuelTank: Tank? = nil, power: Power? = nil, hull: Hull, crewing: Crew,
+                stores: Stores? = nil, thermal: Thermal? = nil, eyes: Sensor? = nil, weaponKeys: [String] = [], hangarBay: HangarBay? = nil, flight: Flight? = nil, art: String? = nil) {
+        self.key = key; self.en = en; self.zh = zh; self.build = build; self.move = move; self.fuelTank = fuelTank; self.power = power; self.hull = hull
+        self.crewing = crewing; self.stores = stores; self.thermal = thermal; self.eyes = eyes; self.weaponKeys = weaponKeys; self.hangarBay = hangarBay; self.flight = flight; self.art = art
+    }
+
+    /// The built-in table is written flat; only the capabilities each one really has are kept.
+    init(key: String, en: String, zh: String, layer: CivLayer, size: CivSize, tech: [String], facility: String, stages: [[String: Double]], hours: Double,
+         crew: Int, upkeep: Double, hp: Double, armor: Int, speed: Double, fuelCap: Double, fuelPerDay: Double, energyPerDay: Double,
+         ammoCap: Double, foodCap: Double, heatCap: Double, cool: Double, sensor: Int, stealth: Int, weapons: [CivWeapon],
+         hangar: Int, deckPerHour: Int, carrierBased: Bool, endurance: Double, parts: [String]) {
+        self.init(key: key, en: en, zh: zh, build: Build(tech: tech, facility: facility, stages: stages, hours: hours), move: Move(layer: layer, size: size, speed: speed),
+                  fuelTank: fuelCap > 0 ? Tank(cap: fuelCap, perDay: fuelPerDay) : nil, power: energyPerDay > 0 ? Power(perDay: energyPerDay) : nil,
+                  hull: Hull(hp: hp, armor: armor, parts: parts), crewing: Crew(people: crew, upkeep: upkeep),
+                  stores: ammoCap > 0 || foodCap > 0 ? Stores(ammo: ammoCap, food: foodCap) : nil, thermal: heatCap > 0 ? Thermal(cap: heatCap, cool: cool) : nil,
+                  eyes: sensor > 0 || stealth > 0 ? Sensor(range: sensor, stealth: stealth) : nil, weaponKeys: weapons.map { $0.key },
+                  hangarBay: hangar > 0 ? HangarBay(capacity: hangar, deckPerHour: deckPerHour) : nil,
+                  flight: carrierBased || endurance > 0 ? Flight(carrierBased: carrierBased, endurance: endurance) : nil, art: "civ:" + key)
+    }
+
+    static var builtinWeapons: [CivWeapon] { [spear, rifle, cannon, howitzer, sam, longSam, droneShot, airMissile, strike, torpedo, depth, naval, shipAA, beam, blade, antiFrame, skyBattery] }
     static let spear = CivWeapon(key: "spears", range: 0, layers: [.ground], damage: 2.5, vs: [1, 0.1, 0.02, 0.05], ammo: 0, energy: 0, cooldown: 1, flight: 0, heat: 0)
     static let rifle = CivWeapon(key: "rifle", range: 0, layers: [.ground, .lowAir], damage: 4, vs: [1, 0.15, 0.05, 0.1], ammo: 0.2, energy: 0, cooldown: 1, flight: 0, heat: 0)
     static let cannon = CivWeapon(key: "cannon", range: 0, layers: [.ground, .sea], damage: 20, vs: [0.8, 1, 0.5, 0.8], ammo: 1, energy: 0, cooldown: 1, flight: 0, heat: 0)
@@ -309,7 +391,9 @@ public struct CivUnitDef {
     static let antiFrame = CivWeapon(key: "lance_missile", range: 0, layers: [.ground], damage: 70, vs: [0.3, 1, 1.4, 0.8], ammo: 2, energy: 0, cooldown: 2, flight: 0, heat: 0)
     static let skyBattery = CivWeapon(key: "sky_battery", range: 1, layers: [.ground, .sea, .lowAir, .highAir], damage: 40, vs: [1, 1, 0.8, 1], ammo: 0, energy: 20, cooldown: 3, flight: 0, heat: 40)
 
-    public static let all: [CivUnitDef] = [
+    public static var all: [CivUnitDef] { ContentRegistry.shared.units }
+    public static var byKey: [String: CivUnitDef] { ContentRegistry.shared.unitsByKey }
+    static let builtin: [CivUnitDef] = [
         CivUnitDef(key: "levy", en: "Levy band", zh: "民兵队", layer: .ground, size: .person, tech: [], facility: "barracks",
                    stages: [["timber": 10]], hours: 12, crew: 30, upkeep: 0.5, hp: 120, armor: 0, speed: 1.0, fuelCap: 0, fuelPerDay: 0, energyPerDay: 0,
                    ammoCap: 0, foodCap: 300, heatCap: 0, cool: 0, sensor: 0, stealth: 1, weapons: [spear], hangar: 0, deckPerHour: 0, carrierBased: false, endurance: 0, parts: []),
@@ -350,5 +434,4 @@ public struct CivUnitDef {
                    stages: [["steel": 400, "armor": 60], ["parts": 120, "engine": 16], ["electronics": 120, "weapons": 10, "core": 6]], hours: 160, crew: 300, upkeep: 60, hp: 3200, armor: 3, speed: 4, fuelCap: 0, fuelPerDay: 0, energyPerDay: 240,
                    ammoCap: 0, foodCap: 3000, heatCap: 200, cool: 60, sensor: 4, stealth: 0, weapons: [skyBattery], hangar: 8, deckPerHour: 2, carrierBased: false, endurance: 0, parts: ["power", "cooling", "hangar", "control", "weapons"]),
     ]
-    public static let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
 }
