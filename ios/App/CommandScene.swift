@@ -29,15 +29,37 @@ final class SkirmishSession: ObservableObject {
     @Published var tick = 0
     var noticeUntil = 0.0
     var onExit: () -> Void = {}
+    /// Where the battle is kept while it is unfinished (nil: not kept, as for pictures).
+    let store: SaveFile?
+    @Published var exitBlocked: String?
 
-    init(sim: Skirmish) {
+    init(sim: Skirmish, store: SaveFile? = nil) {
         self.sim = sim
+        self.store = store
         scene = CommandScene(size: CGSize(width: 874, height: 402))
         scene.scaleMode = .resizeFill
         scene.session = self
     }
 
     func say(_ t: String) { notice = t; noticeUntil = CACurrentMediaTime() + 3 }
+
+    /// Keep an unfinished battle on disk (atomically, the old one kept until the new one is in place);
+    /// a finished one is cleared away so the next visit starts a new battle.
+    @discardableResult func save() -> Bool {
+        guard let store = store else { return true }
+        if sim.winner != nil { store.discard(); return true }
+        do {
+            try store.write(try sim.encode()) { (try? Skirmish.decode($0)) != nil }
+            lastError = nil
+            return true
+        } catch { lastError = "\(error)"; return false }
+    }
+    var lastError: String?
+
+    /// Leave only once the battle is safely kept; otherwise stay, paused, and offer to try again.
+    func leave() { if save() { exitBlocked = nil; onExit() } else { exitBlocked = lastError ?? L("保存失败", "Saving failed") } }
+    /// Leave and give the battle up: the next visit starts a new one.
+    func abandon() { store?.discard(); onExit() }
 
     func build(_ kind: Int) {
         let d = SkKind.all[kind]
@@ -86,7 +108,7 @@ final class CommandScene: SKScene {
     private var oreNodes: [Int: SKSpriteNode] = [:]
     private var tex: [String: SKTexture] = [:]
     private var lastTime: TimeInterval = 0
-    private var hudAcc = 0.0, oreAcc = 1.0
+    private var hudAcc = 0.0, oreAcc = 1.0, saveAcc = 0.0
     private var zoom: CGFloat = 1.6
     private var touchesDown: [UITouch] = []
     private var startPoint: [ObjectIdentifier: CGPoint] = [:]
@@ -138,7 +160,9 @@ final class CommandScene: SKScene {
         let sim = session.sim
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
-        sim.tick(dt * pace)
+        if session.exitBlocked == nil { sim.tick(dt * pace) }
+        saveAcc += dt
+        if saveAcc > 30 && session.exitBlocked == nil { saveAcc = 0; session.save() }
         sync(sim, session)
         for e in sim.takeEvents() { show(e, sim, session) }
         oreAcc += dt
@@ -265,6 +289,22 @@ final class CommandScene: SKScene {
             n.strokeColor = big ? UIColor(red: 1, green: 0.7, blue: 0.3, alpha: 1) : UIColor(white: 1, alpha: 0.9); n.lineWidth = big ? 2 : 1; n.zPosition = 500
             addChild(n)
             n.run(.sequence([.fadeOut(withDuration: 0.15), .removeFromParent(), .run { [weak self] in self?.shots -= 1 }]))
+        case "shell":
+            // a shell arcs over and lands when the core says it does (the "impact" event, with the damage)
+            let n = SKShapeNode(circleOfRadius: 2.5)
+            n.fillColor = UIColor(red: 1, green: 0.85, blue: 0.5, alpha: 1); n.strokeColor = .clear; n.zPosition = 505
+            n.position = pt(e.a); addChild(n)
+            let a = pt(e.a), b = pt(e.b), lift = CGFloat(min(90, 20 + e.a.distance(to: e.b) * 0.35))
+            let fly = SKAction.customAction(withDuration: e.time) { node, t in
+                let f = t / CGFloat(max(0.01, e.time))
+                node.position = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f + lift * 4 * f * (1 - f))
+            }
+            n.run(.sequence([fly, .removeFromParent()]))
+        case "impact":
+            let n = SKShapeNode(circleOfRadius: 14)
+            n.fillColor = UIColor(red: 1, green: 0.55, blue: 0.2, alpha: 0.75); n.strokeColor = UIColor(red: 1, green: 0.9, blue: 0.6, alpha: 0.9); n.position = pt(e.a); n.zPosition = 508
+            addChild(n)
+            n.run(.sequence([.group([.scale(to: 2, duration: 0.25), .fadeOut(withDuration: 0.25)]), .removeFromParent()]))
         case "died":
             let n = SKShapeNode(circleOfRadius: SkKind.all[e.what].structure ? 22 : 7)
             n.fillColor = UIColor(red: 1, green: 0.6, blue: 0.2, alpha: 0.9); n.strokeColor = .clear; n.position = pt(e.a); n.zPosition = 510
@@ -401,8 +441,23 @@ struct CommandView: View {
             }.padding(.horizontal, 14).padding(.vertical, 10)
             HStack { Spacer(); sidebar }.padding(.trailing, 10).padding(.vertical, 54)
             if let w = session.winner { ending(w) }
+            if let why = session.exitBlocked { blocked(why) }
         }
         .foregroundStyle(.white)
+    }
+
+    /// Leaving was refused because the battle could not be kept: it is still here, paused.
+    private func blocked(_ why: String) -> some View {
+        VStack(spacing: 10) {
+            Label(L("保存失败，对局没有关闭", "Saving failed, so the battle was not closed"), systemImage: "externaldrive.badge.exclamationmark").font(.system(size: 14, weight: .bold, design: .rounded))
+            Text(why).font(.system(size: 11, design: .rounded)).opacity(0.8).lineLimit(2)
+            HStack(spacing: 10) {
+                Button { session.exitBlocked = nil; session.leave() } label: { Text(L("重试保存并离开", "Retry and leave")).font(.system(size: 13, weight: .bold, design: .rounded)).padding(.horizontal, 14).frame(minHeight: 44).background(Color.white.opacity(0.22), in: Capsule()) }
+                    .buttonStyle(PressStyle()).accessibilityIdentifier("cmd-retry-exit")
+                Button { session.exitBlocked = nil } label: { Text(L("继续作战", "Keep fighting")).font(.system(size: 13, weight: .semibold, design: .rounded)).padding(.horizontal, 14).frame(minHeight: 44).background(Color.white.opacity(0.12), in: Capsule()) }
+                    .buttonStyle(PressStyle()).accessibilityIdentifier("cmd-stay")
+            }
+        }.padding(18).background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 18)).accessibilityElement(children: .contain).accessibilityIdentifier("cmd-exit-blocked")
     }
 
     private var top: some View {
@@ -417,7 +472,7 @@ struct CommandView: View {
             }.padding(.horizontal, 14).padding(.vertical, 8).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule())
             Spacer()
             Minimap(session: session).frame(width: 84, height: 84).background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 10)).glass(RoundedRectangle(cornerRadius: 10))
-            Button { session.onExit() } label: { Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).frame(width: 36, height: 36) }
+            Button { session.leave() } label: { Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).frame(width: 36, height: 36) }
                 .buttonStyle(PressStyle()).background(Color.black.opacity(0.55), in: Circle()).glass(Circle()).accessibilityIdentifier("cmd-exit")
         }
     }
@@ -484,7 +539,7 @@ struct CommandView: View {
             Text(w == 0 ? L("胜利", "Victory") : L("战败", "Defeat")).font(.system(size: 34, weight: .heavy, design: .rounded))
             Text(L("击毁 \(session.sim.sides[0].killed) · 损失 \(session.sim.sides[0].lost) · 采矿 \(Int(session.sim.sides[0].mined))", "Destroyed \(session.sim.sides[0].killed) · lost \(session.sim.sides[0].lost) · mined \(Int(session.sim.sides[0].mined))"))
                 .font(.system(size: 13, design: .rounded)).opacity(0.85)
-            Button { session.onExit() } label: { Text(L("返回世界", "Back to the world")).font(.system(size: 15, weight: .bold, design: .rounded)).padding(.horizontal, 18).padding(.vertical, 10) }
+            Button { session.abandon() } label: { Text(L("返回世界", "Back to the world")).font(.system(size: 15, weight: .bold, design: .rounded)).padding(.horizontal, 18).padding(.vertical, 10) }
                 .buttonStyle(PressStyle()).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule()).accessibilityIdentifier("cmd-back")
         }.padding(26).background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 22)).glass(RoundedRectangle(cornerRadius: 22)).accessibilityIdentifier("cmd-ending")
     }

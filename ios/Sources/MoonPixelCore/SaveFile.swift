@@ -60,6 +60,11 @@ public final class SaveFile {
         guard rename(tmp.path, url.path) == 0 else { throw Failure(stage: "swap", detail: "rename \(errno)") }
     }
 
+    /// Remove the save and its previous version (a finished battle, a city given up).
+    public func discard() {
+        for u in [url, previous, tmp] { _ = try? FileManager.default.removeItem(at: u) }
+    }
+
     public enum Source: Equatable { case fresh, current, previous }
 
     public struct Loaded<T> {

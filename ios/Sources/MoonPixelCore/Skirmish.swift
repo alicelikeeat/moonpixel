@@ -29,6 +29,8 @@ public struct SkKind {
     public let needs: [String]                       // structures a side must own first
     public let line: Int                             // which queue makes it: 0 structures, 1 infantry, 2 vehicles
     public func name(zh z: Bool) -> String { z ? zh : en }
+    /// Fires shells over walls and hills (they take a while to land) instead of shooting straight.
+    public var indirect: Bool { key == "mortar" }
 
     static func s(_ k: String, _ en: String, _ zh: String, _ cost: Double, _ time: Double, _ hp: Double, _ w: Int, _ h: Int, _ power: Double, _ needs: [String],
                   range: Double = 0, damage: Double = 0, cooldown: Double = 0, vs: [Double] = [1, 1, 1]) -> SkKind {
@@ -57,8 +59,8 @@ public struct SkKind {
     public static func named(_ k: String) -> Int { index[k] ?? 0 }
 }
 
-public struct SkEntity {
-    public enum Order: Equatable { case idle, move(Vec2), attack(Int), attackMove(Vec2), harvest, deliver }
+public struct SkEntity: Codable {
+    public enum Order: Equatable, Codable { case idle, move(Vec2), attack(Int), attackMove(Vec2), harvest, deliver }
     public var id = 0, kind = 0, side = 0
     public var pos = Vec2.zero
     public var hp = 1.0
@@ -75,7 +77,7 @@ public struct SkEntity {
     public var def: SkKind { SkKind.all[kind] }
 }
 
-public struct SkSide {
+public struct SkSide: Codable {
     public var name = "", color = "#ffffff"
     public var credits = 0.0
     /// One thing being made on each line (0 structures, 1 infantry, 2 vehicles) and how far along it is (0...1).
@@ -94,9 +96,18 @@ public struct SkSide {
 
 /// Something that happened this step, for the app to draw or announce. Nothing depends on it.
 public struct SkEvent {
-    public var kind: String          // "shot", "died", "built", "placed", "trained", "lowpower", "attack"
+    public var kind: String          // "shot", "shell", "impact", "died", "built", "placed", "trained", "lowpower", "attack"
     public var a: Vec2, b: Vec2
     public var side: Int, what: Int
+    /// For "shell": seconds until it lands (the "impact" event comes then, with the damage).
+    public var time = 0.0
+}
+
+/// A mortar shell in the air: it lands where its target stood when it was fired.
+public struct SkShell: Codable, Equatable {
+    public var from: Vec2, to: Vec2
+    public var left: Double, total: Double
+    public var kind: Int, side: Int
 }
 
 public final class Skirmish {
@@ -120,6 +131,13 @@ public final class Skirmish {
     var mapVersion = 0
     var acc = 0.0
     var ids: [Int] = []
+    public private(set) var shells: [SkShell] = []
+    /// Units by 32-pixel cell as they stood at the start of the step (ids ascending in each cell), and
+    /// every structure: the only places neighbour and target searches look.
+    var grid: [[Int]] = []
+    var structureIDs: [Int] = []
+    static let cell = 32.0
+    static let gn = Skirmish.size * 16 / 32
 
     static let n = Skirmish.size
     @inline(__always) static func idx(_ x: Int, _ y: Int) -> Int { y * n + x }
@@ -174,6 +192,41 @@ public final class Skirmish {
         clearLanes()
         recount()
     }
+
+    // MARK: saving
+
+    enum Key: String, CodingKey { case v, seed, cx, cy, layers, blocked, occupied, ore, entities, sides, time, winner, rng, nextID, acc, shells, mapVersion }
+
+    /// Everything a battle needs to go on exactly as it would have (caches are worked out again).
+    public func encode() throws -> Data {
+        var c = SkSave(seed: seed, cx: cx, cy: cy, layers: layers.map { $0.map { Data($0) } }, blocked: Data(blocked.map { $0 ? 1 : 0 }),
+                       occupied: occupied, ore: ore, entities: entities.keys.sorted().map { entities[$0]! }, sides: sides, time: time, winner: winner,
+                       rng: rng, nextID: nextID, acc: acc, shells: shells, mapVersion: mapVersion)
+        c.v = 1
+        return try JSONEncoder().encode(c)
+    }
+
+    public static func decode(_ data: Data) throws -> Skirmish {
+        let c = try JSONDecoder().decode(SkSave.self, from: data)
+        let n = Skirmish.n
+        guard c.v == 1, c.blocked.count == n * n, c.occupied.count == n * n, c.ore.count == n * n, c.layers.count == 9,
+              c.sides.count == 2, c.layers.allSatisfy({ $0.count == 4 && $0.allSatisfy { $0.count == MP.chunkArea } }) else {
+            throw SaveFile.Failure(stage: "decode", detail: "not a battle this version can read")
+        }
+        return Skirmish(saved: c)
+    }
+
+    init(saved c: SkSave) {
+        seed = c.seed; cx = c.cx; cy = c.cy
+        layers = c.layers.map { $0.map { [UInt8]($0) } }
+        blocked = c.blocked.map { $0 != 0 }
+        occupied = c.occupied; ore = c.ore
+        entities = Dictionary(uniqueKeysWithValues: c.entities.map { ($0.id, $0) })
+        sides = c.sides; time = c.time; winner = c.winner; rng = c.rng; nextID = c.nextID; acc = c.acc; shells = c.shells; mapVersion = c.mapVersion
+    }
+
+    /// For tests: put a wall on a tile (or take it away).
+    func setBlocked(_ x: Int, _ y: Int, _ v: Bool) { blocked[Skirmish.idx(x, y)] = v; mapVersion += 1; fields.removeAll(); fieldAge.removeAll() }
 
     func clear(around c: TilePos, radius: Int) {
         for y in (c.y - radius)...(c.y + radius) { for x in (c.x - radius)...(c.x + radius) where Skirmish.inside(x, y) { open(x, y) } }
@@ -431,8 +484,8 @@ public final class Skirmish {
         }
         // keep a little apart from the others
         var push = Vec2.zero
-        for oid in ids where oid != id {                    // in id order, so the sum is the same every run
-            guard let o = entities[oid], !o.def.structure else { continue }
+        for oid in unitsNear(e.pos, 12) where oid != id {    // in id order, so the sum is the same every run
+            guard let o = entities[oid] else { continue }
             let v = e.pos - o.pos
             let l = v.length
             if l < 10 && l > 0.01 { push = push + v.normalized * ((10 - l) / 10) }
@@ -459,6 +512,8 @@ public final class Skirmish {
     func step(_ dt: Double) {
         guard winner == nil else { return }
         time += dt
+        ids = entities.keys.sorted()
+        index()
         // the lines
         for s in sides.indices {
             for line in 0..<3 {
@@ -483,7 +538,6 @@ public final class Skirmish {
             if sides[s].computer { think(s, dt) }
         }
         // everyone
-        ids = entities.keys.sorted()
         for id in ids {
             guard var e = entities[id] else { continue }
             e.cooldown = max(0, e.cooldown - dt); e.sinceShot += dt; e.sinceHurt += dt
@@ -507,17 +561,85 @@ public final class Skirmish {
                 else { entities[id]?.moving = false }
             }
         }
+        // shells land: the damage and the blast are the same moment
+        var flying: [SkShell] = []
+        var landed: [SkShell] = []
+        for var sh in shells { sh.left -= dt; if sh.left <= 0 { landed.append(sh) } else { flying.append(sh) } }
+        shells = flying
+        for sh in landed { land(sh) }
         // the end: a side with no structure left has lost
         for s in sides.indices where !entities.values.contains(where: { $0.side == s && $0.def.structure }) { winner = 1 - s }
     }
 
+    /// Fill the grid from where everyone stands now (once a step).
+    func index() {
+        let g = Skirmish.gn
+        if grid.count != g * g { grid = [[Int]](repeating: [], count: g * g) } else { for i in grid.indices where !grid[i].isEmpty { grid[i].removeAll(keepingCapacity: true) } }
+        structureIDs.removeAll(keepingCapacity: true)
+        for id in ids {
+            guard let e = entities[id] else { continue }
+            if e.def.structure { structureIDs.append(id); continue }
+            grid[cellOf(e.pos)].append(id)
+        }
+    }
+
+    @inline(__always) func cellOf(_ p: Vec2) -> Int {
+        let g = Skirmish.gn
+        let x = min(g - 1, max(0, Int(p.x / Skirmish.cell))), y = min(g - 1, max(0, Int(p.y / Skirmish.cell)))
+        return y * g + x
+    }
+
+    /// Ids of units that stood within `r` (plus a step's walk) of a point at the start of the step, ascending.
+    func unitsNear(_ p: Vec2, _ r: Double) -> [Int] {
+        let g = Skirmish.gn, m = r + 4
+        let x0 = max(0, Int((p.x - m) / Skirmish.cell)), x1 = min(g - 1, Int((p.x + m) / Skirmish.cell))
+        let y0 = max(0, Int((p.y - m) / Skirmish.cell)), y1 = min(g - 1, Int((p.y + m) / Skirmish.cell))
+        guard x0 <= x1, y0 <= y1, grid.count == g * g else { return [] }
+        var out: [Int] = []
+        for y in y0...y1 { for x in x0...x1 { out.append(contentsOf: grid[y * g + x]) } }
+        out.sort()
+        return out
+    }
+
+    /// The nearest enemy within reach (ties to the lower id). Direct-fire weapons only consider what they can see.
     func nearestEnemy(of e: SkEntity, within r: Double) -> SkEntity? {
         var best: (SkEntity, Double)?
-        for o in entities.values where o.side != e.side {
+        let sight = !e.def.indirect
+        func consider(_ o: SkEntity) {
+            guard o.side != e.side else { return }
             let d = reach(e.pos, o)
-            if d <= r && (best == nil || d < best!.1 || (d == best!.1 && o.id < best!.0.id)) { best = (o, d) }
+            guard d <= r, best == nil || d < best!.1 || (d == best!.1 && o.id < best!.0.id) else { return }
+            if sight && !clearShot(e, o) { return }
+            best = (o, d)
         }
+        for id in unitsNear(e.pos, r) { if let o = entities[id] { consider(o) } }
+        for id in structureIDs { if let o = entities[id] { consider(o) } }
         return best?.0
+    }
+
+    /// The point of something nearest to a place (a structure is as big as its footprint).
+    func nearestPoint(_ p: Vec2, _ o: SkEntity) -> Vec2 {
+        if !o.def.structure { return o.pos }
+        let x0 = Double(o.tile.x * 16), y0 = Double(o.tile.y * 16), x1 = Double((o.tile.x + o.def.w) * 16), y1 = Double((o.tile.y + o.def.h) * 16)
+        return Vec2(min(x1 - 0.5, max(x0 + 0.5, p.x)), min(y1 - 0.5, max(y0 + 0.5, p.y)))
+    }
+
+    /// Nothing solid between a shooter and its target: no rock, wall or tree, and no structure but the
+    /// target and the shooter itself. Units do not block.
+    public func clearShot(_ e: SkEntity, _ t: SkEntity) -> Bool {
+        let a = e.pos, b = nearestPoint(a, t)
+        let d = a.distance(to: b)
+        let steps = max(1, Int(d / 4))
+        for k in 1..<steps {
+            let p = a + (b - a) * (Double(k) / Double(steps))
+            let tp = p.tile
+            guard Skirmish.inside(tp.x, tp.y) else { return false }
+            let i = Skirmish.idx(tp.x, tp.y)
+            let o = occupied[i]
+            if o != 0 { if o == t.id || o == e.id { continue } else { return false } }
+            if blocked[i] { return false }
+        }
+        return true
     }
 
     /// Distance from a point to the nearest part of something (a structure is as big as its footprint).
@@ -531,7 +653,8 @@ public final class Skirmish {
     func engage(_ id: Int, _ target: SkEntity, _ dt: Double, chase: Bool) {
         guard var e = entities[id] else { return }
         let d = e.def
-        if reach(e.pos, target) > d.range {
+        // out of range, or (shooting straight) something solid in the way: close in, round the obstacle
+        if reach(e.pos, target) > d.range || (!d.indirect && !clearShot(e, target)) {
             if chase { _ = walk(id, to: target.pos, near: 0, dt: dt) }
             return
         }
@@ -540,9 +663,29 @@ public final class Skirmish {
         if e.cooldown <= 0 {
             e.cooldown = d.cooldown; e.sinceShot = 0
             entities[id] = e
-            events.append(SkEvent(kind: "shot", a: e.pos, b: target.pos, side: e.side, what: e.kind))
-            hurt(target.id, d.damage * d.vs[target.def.armor.rawValue], by: e.side)
+            if d.indirect {
+                let to = nearestPoint(e.pos, target), flight = 0.6 + e.pos.distance(to: to) / 240
+                shells.append(SkShell(from: e.pos, to: to, left: flight, total: flight, kind: e.kind, side: e.side))
+                var ev = SkEvent(kind: "shell", a: e.pos, b: to, side: e.side, what: e.kind); ev.time = flight
+                events.append(ev)
+            } else {
+                events.append(SkEvent(kind: "shot", a: e.pos, b: nearestPoint(e.pos, target), side: e.side, what: e.kind))
+                hurt(target.id, d.damage * d.vs[target.def.armor.rawValue], by: e.side)
+            }
         } else { entities[id] = e }
+    }
+
+    /// A shell comes down: full damage to enemies within 14 pixels of where it lands, half within 28.
+    func land(_ sh: SkShell) {
+        let d = SkKind.all[sh.kind]
+        events.append(SkEvent(kind: "impact", a: sh.to, b: sh.to, side: sh.side, what: sh.kind))
+        var hit: [(Int, Double)] = []
+        for id in unitsNear(sh.to, 28) { if let o = entities[id], o.side != sh.side { let r = reach(sh.to, o); if r <= 28 { hit.append((id, r <= 14 ? 1 : 0.5)) } } }
+        for id in structureIDs { if let o = entities[id], o.side != sh.side { let r = reach(sh.to, o); if r <= 28 { hit.append((id, r <= 14 ? 1 : 0.5)) } } }
+        for (id, f) in hit.sorted(by: { $0.0 < $1.0 }) {
+            guard let o = entities[id] else { continue }
+            hurt(id, d.damage * d.vs[o.def.armor.rawValue] * f, by: sh.side)
+        }
     }
 
     func hurt(_ id: Int, _ dmg: Double, by side: Int) {
@@ -741,4 +884,23 @@ public extension PixelArt {
         }
         return b
     }
+}
+
+/// A battle as written to disk.
+struct SkSave: Codable {
+    var v = 1
+    var seed: Int, cx: Int, cy: Int
+    var layers: [[Data]]
+    var blocked: Data
+    var occupied: [Int]
+    var ore: [Double]
+    var entities: [SkEntity]
+    var sides: [SkSide]
+    var time: Double
+    var winner: Int?
+    var rng: RNG
+    var nextID: Int
+    var acc: Double
+    var shells: [SkShell]
+    var mapVersion: Int
 }

@@ -12,7 +12,19 @@ extension GameModel {
         let a = (mine?.name(zh: GameModel.zh) ?? L("蔚蓝", "Azure"), mine?.color ?? "#4a8af0")
         let b = (foe?.name(zh: GameModel.zh) ?? L("绯红", "Crimson"), foe?.color ?? "#e8504a")
         commandCount += 1
-        let session = SkirmishSession(sim: Skirmish(seed: w.seed &+ commandCount &* 977, worldSeed: w.seed, player: a, enemy: b))
+        // an unfinished battle is taken up again where it was left
+        let store = SaveFile(url: saveDir.appendingPathComponent("battle.json"))
+        if CommandLine.arguments.contains("--new-battle") || CommandLine.arguments.contains("--command-auto") { store.discard() }
+        let got = store.load { try Skirmish.decode($0) }
+        if got.locked {
+            showToast(L("对局存档损坏且无法移开，未开始对局", "The battle save is damaged and could not be moved aside; no battle was started"))
+            return
+        }
+        var sim = got.value.flatMap { $0.winner == nil ? $0 : nil }
+        if sim != nil { showToast(got.source == .previous ? L("继续上次的对局（载入上一版存档）", "Taking up the last battle (from the previous save)") : L("继续上次的对局", "Taking up the last battle")) }
+        else if got.keptAside != nil { showToast(L("对局存档损坏，已另存，开始新对局", "The battle save was damaged; it was kept aside and a new battle started")) }
+        if sim == nil { sim = Skirmish(seed: w.seed &+ commandCount &* 977, worldSeed: w.seed, player: a, enemy: b) }
+        let session = SkirmishSession(sim: sim!, store: CommandLine.arguments.contains("--command-auto") ? nil : store)
         session.onExit = { [weak self] in self?.command = nil }
         session.refresh()
         command = session

@@ -16,7 +16,7 @@ struct MoonPixelApp: App {
                 .persistentSystemOverlays(.hidden)
         }
         .onChange(of: phase) { _, p in
-            if p != .active { model.save(announce: false); model.metro?.save() }      // iOS may kill a backgrounded app at any time
+            if p != .active { model.save(announce: false); model.metro?.save(); model.command?.save() }      // iOS may kill a backgrounded app at any time
         }
     }
 }

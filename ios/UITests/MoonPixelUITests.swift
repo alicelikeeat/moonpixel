@@ -240,7 +240,7 @@ final class MoonPixelUITests: XCTestCase {
     func testCommandModeBuildsAndReturnsToTheWorld() {
         continueAfterFailure = true
         let app = XCUIApplication()
-        app.launchArguments = ["--autostart", "7", "--2d"]
+        app.launchArguments = ["--autostart", "7", "--2d", "--new-battle"]
         app.launch()
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "the game started")
         sleep(3)

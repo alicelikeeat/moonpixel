@@ -141,4 +141,81 @@ final class SkirmishTests: XCTestCase {
         XCTAssertEqual(Set(SkKind.all.map { $0.key }).count, SkKind.all.count)
         for d in SkKind.all { for n in d.needs { XCTAssertNotNil(SkKind.index[n], "\(d.key) needs something that exists") } }
     }
+
+    // MARK: sight, shells, saving
+
+    /// An open square in the middle with two riflemen facing each other across it, nobody else near.
+    func duel(_ s: Skirmish, _ a: String = "rifle", gap: Int = 4) -> (Int, Int) {
+        s.setComputer(0, false); s.setComputer(1, false)
+        s.clear(around: TilePos(48, 40), radius: 9)
+        let x = s.spawn(k(a), side: 0, at: TilePos(48 - gap / 2, 40).center)
+        let y = s.spawn(k("rifle"), side: 1, at: TilePos(48 + gap - gap / 2, 40).center)
+        return (x, y)
+    }
+
+    func testDirectFireNeedsAClearLineAndGoesRoundAWall() {
+        let s = make()
+        let (a, b) = duel(s)
+        for y in 36...44 { s.setBlocked(48, y, true) }                       // a wall between them
+        s.step(1.0 / 20)
+        XCTAssertFalse(s.clearShot(s.entities[a]!, s.entities[b]!))
+        s.order([a], attack: b)
+        let hp0 = s.entities[b]!.hp
+        run(s, 0.5)
+        XCTAssertEqual(s.entities[b]!.hp, hp0, "nobody shoots through a wall")
+        run(s, 20)
+        XCTAssertLessThan(s.entities[b]?.hp ?? 0, hp0, "the attacker walked round the wall and fired")
+    }
+
+    func testStandingSoldiersOnlyShootWhatTheySee() {
+        let s = make()
+        let (a, b) = duel(s)
+        for y in 36...44 { s.setBlocked(48, y, true) }
+        run(s, 3)
+        XCTAssertEqual(s.entities[a]!.hp, SkKind.all[k("rifle")].hp, "neither fires through the wall")
+        XCTAssertEqual(s.entities[b]!.hp, SkKind.all[k("rifle")].hp)
+        for y in 36...44 { s.setBlocked(48, y, false) }
+        run(s, 3)
+        XCTAssertLessThan(min(s.entities[a]?.hp ?? 0, s.entities[b]?.hp ?? 0), SkKind.all[k("rifle")].hp, "with the wall gone they fight")
+    }
+
+    func testMortarShellsFlyOverWallsAndHitWhenTheyLand() {
+        let s = make()
+        let (m, r) = duel(s, "mortar", gap: 8)
+        for y in 36...44 { s.setBlocked(48, y, true) }
+        s.order([m], attack: r)
+        var fired = false, landed = false
+        let hp0 = s.entities[r]!.hp
+        for _ in 0..<200 {
+            s.step(1.0 / 20)
+            let ev = s.takeEvents()
+            if ev.contains(where: { $0.kind == "shell" }) {
+                fired = true
+                XCTAssertEqual(s.entities[r]!.hp, hp0, "no damage while the shell is in the air")
+                XCTAssertEqual(s.shells.count, 1)
+            }
+            if ev.contains(where: { $0.kind == "impact" }) {
+                landed = true
+                XCTAssertLessThan(s.entities[r]?.hp ?? 0, hp0, "the damage comes with the blast")
+                break
+            }
+            if fired { XCTAssertEqual(s.entities[r]!.hp, hp0) }
+        }
+        XCTAssertTrue(fired && landed)
+    }
+
+    func testABattleSavedAndLoadedGoesOnExactlyTheSame() throws {
+        let s = make(5)
+        s.setComputer(0, true)
+        run(s, 150)
+        let data = try s.encode()
+        let t = try Skirmish.decode(data)
+        XCTAssertEqual(t.summary, s.summary)
+        run(s, 150); run(t, 150)
+        XCTAssertEqual(t.summary, s.summary, "the loaded battle plays out identically")
+        XCTAssertEqual(t.entities.keys.sorted(), s.entities.keys.sorted())
+        for id in s.entities.keys { XCTAssertEqual(t.entities[id]!.pos, s.entities[id]!.pos); XCTAssertEqual(t.entities[id]!.hp, s.entities[id]!.hp) }
+        XCTAssertEqual(t.shells, s.shells)
+        XCTAssertThrowsError(try Skirmish.decode(Data("{}".utf8)))
+    }
 }
