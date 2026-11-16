@@ -87,4 +87,17 @@ final class SwarmTests: XCTestCase {
         print("SWARM 2 shapes x \(n) points: \(String(format: "%.2f", took)) s")
         XCTAssertLessThan(took, 6, "preparing the full swarm stays a short wait (done off the main thread)")
     }
+
+    func testTheSwarmSizeFollowsHeatMemoryAndFrameTime() {
+        let big = SwarmShapes.sizes[3], s = SwarmShapes.sizes
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: nil, availableMB: 4000, thermal: 0, lastWorstMs: nil), big)
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: nil, availableMB: 4000, thermal: 2, lastWorstMs: nil), s[2], "hot: one smaller")
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: nil, availableMB: 4000, thermal: 3, lastWorstMs: nil), s[1], "critical: two smaller")
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: nil, availableMB: 60, thermal: 0, lastWorstMs: nil), s[1], "six buffers must fit in half of what is left")
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: big, availableMB: 4000, thermal: 0, lastWorstMs: 40), s[2], "a slow last show: smaller")
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: s[2], availableMB: 4000, thermal: 0, lastWorstMs: 8), big, "a quick one: back up")
+        XCTAssertEqual(SwarmShapes.tier(base: s[1], last: s[1], availableMB: 4000, thermal: 0, lastWorstMs: 5), s[1], "never above what memory allows")
+        XCTAssertEqual(SwarmShapes.tier(base: big, last: nil, availableMB: 1, thermal: 3, lastWorstMs: 90), s[0], "always something")
+        XCTAssertEqual(SwarmShapes.fallbacks(from: s[2]), [s[2], s[1], s[0]])
+    }
 }

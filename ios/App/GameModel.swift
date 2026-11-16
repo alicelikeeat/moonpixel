@@ -84,6 +84,8 @@ final class GameModel: ObservableObject {
     weak var solid: SolidRenderer?
     /// The nanite swarm's view, and how many points a swarm has on this device (by its memory; --swarm-count overrides).
     weak var swarm: SwarmView?
+    /// `--swarm-count` asks for one size exactly (pictures, tests): no adapting.
+    var swarmFixed = false
     var swarmCount = SwarmShapes.size(forMemoryGB: Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824)
     /// What the last swarm cost (shown in the performance panel).
     var swarmReport = ""
@@ -231,7 +233,7 @@ final class GameModel: ObservableObject {
         if args.contains("--perf") { showPerf = true }
         if args.contains("--plain-render") { plainRender = true }
         if args.contains("--3d") { render3D = true } else if args.contains("--2d") { render3D = false }
-        if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)) }
+        if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)); swarmFixed = true }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7
         start(id: "w-autostart", name: "Autostart", seed: seed, overrideMB: 0, load: false)

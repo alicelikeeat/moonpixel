@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import MetalKit
 import simd
+import os
 import MoonPixelCore
 
 // The nanite swarm on screen: a transparent Metal view over the game (2D or 3D) and under the HUD.
@@ -37,6 +38,15 @@ final class SwarmView: MTKView, MTKViewDelegate {
     private var anchor = Vec2.zero
     private var generation = 0
     private let work = DispatchQueue(label: "moonpixel.swarm", qos: .userInitiated)
+    /// Set when the show it belongs to is stopped or replaced: shape filling in the background gives up.
+    private final class Ticket: @unchecked Sendable {
+        private let lock = NSLock(); private var off = false
+        var cancelled: Bool { lock.lock(); defer { lock.unlock() }; return off }
+        func cancel() { lock.lock(); off = true; lock.unlock() }
+    }
+    private var ticket = Ticket()
+    /// The size and worst frame of the last show, which the next one's size is chosen from.
+    private var lastCount: Int?, lastWorst: Double?
     /// Frames drawn and the longest one of the last show (for the performance panel and the log).
     private(set) var frames = 0
     private(set) var worst = 0.0
@@ -81,11 +91,18 @@ final class SwarmView: MTKView, MTKViewDelegate {
         stop()
         generation += 1
         let gen = generation
-        let n = model.swarmCount
-        let bytes = n * MemoryLayout<SIMD4<Float>>.stride
-        guard let p = dev.makeBuffer(length: bytes, options: .storageModeShared), let v = dev.makeBuffer(length: bytes, options: .storageModeShared) else { return }
-        var made: [MTLBuffer] = []
-        for _ in 0..<4 { guard let b = dev.makeBuffer(length: bytes, options: .storageModeShared) else { return }; made.append(b) }
+        let mine = Ticket(); ticket = mine
+        // as many points as memory, heat and the last show's frame times allow; smaller if the buffers cannot be had
+        let pick = model.swarmFixed ? model.swarmCount : SwarmShapes.tier(base: model.swarmCount, last: lastCount, availableMB: Double(os_proc_available_memory()) / 1_048_576,
+                                                                           thermal: ProcessInfo.processInfo.thermalState.rawValue, lastWorstMs: lastWorst.map { $0 * 1000 })
+        var got: (Int, MTLBuffer, MTLBuffer, [MTLBuffer])?
+        for n in SwarmShapes.fallbacks(from: pick) {
+            let bytes = n * MemoryLayout<SIMD4<Float>>.stride
+            guard let p = dev.makeBuffer(length: bytes, options: .storageModeShared), let v = dev.makeBuffer(length: bytes, options: .storageModeShared) else { continue }
+            let made = (0..<4).compactMap { _ in dev.makeBuffer(length: bytes, options: .storageModeShared) }
+            if made.count == 4 { got = (n, p, v, made); break }
+        }
+        guard let (n, p, v, made) = got else { model.swarmReport = "swarm: no memory for even the smallest size"; return }
         let off = SIMD4<Float>(Float((caster.x - impact.x) / 16), 0, Float((caster.y - impact.y) / 16), 0)
         let wolf = Species.all.first { $0.key == "wolf" } ?? Species.all[0]
         func points(_ b: MTLBuffer) -> UnsafeMutableBufferPointer<SIMD4<Float>> {
@@ -93,14 +110,17 @@ final class SwarmView: MTKView, MTKViewDelegate {
         }
         let pp = points(p), vv = points(v), s = made.map(points)
         work.async { [weak self] in
-            SwarmShapes.dust(into: pp)
-            for i in 0..<n { pp[i] += off; vv[i] = .zero }
-            SwarmShapes.sphere(into: s[0])
-            SwarmShapes.mesh(Figure3D.human(look, frame: 3, held: "sword", child: false, female: false), into: s[1], scale: 3)
-            SwarmShapes.mesh(Figure3D.animal(wolf, frame: 0), into: s[2], scale: 4.5)
-            SwarmShapes.helix(into: s[3])
+            // each step looks whether the show was called off meanwhile (a new cast, leaving the world)
+            let steps: [() -> Void] = [
+                { SwarmShapes.dust(into: pp); for i in 0..<n { pp[i] += off; vv[i] = .zero } },
+                { SwarmShapes.sphere(into: s[0]) },
+                { SwarmShapes.mesh(Figure3D.human(look, frame: 3, held: "sword", child: false, female: false), into: s[1], scale: 3) },
+                { SwarmShapes.mesh(Figure3D.animal(wolf, frame: 0), into: s[2], scale: 4.5) },
+                { SwarmShapes.helix(into: s[3]) },
+            ]
+            for f in steps { if mine.cancelled { return }; f() }
             DispatchQueue.main.async {
-                guard let self = self, self.generation == gen else { return }
+                guard let self = self, self.generation == gen, !mine.cancelled else { return }
                 self.pos = p; self.vel = v; self.shapes = made; self.count = n
                 self.anchor = impact
                 self.started = CACurrentMediaTime(); self.last = self.started
@@ -113,6 +133,7 @@ final class SwarmView: MTKView, MTKViewDelegate {
 
     /// Put the swarm away and give its memory back.
     func stop() {
+        ticket.cancel()
         generation += 1
         isPaused = true
         isHidden = true
@@ -127,7 +148,8 @@ final class SwarmView: MTKView, MTKViewDelegate {
         let now = CACurrentMediaTime()
         let t = Float(now - started)
         if t > SwarmShapes.showLength || model.scene == nil {
-            model.swarmReport = String(format: "swarm %d points: %d frames, longest %.1f ms", count, frames, worst * 1000)
+            model.swarmReport = String(format: "swarm %d points: %d frames, longest %.1f ms (thermal %d)", count, frames, worst * 1000, ProcessInfo.processInfo.thermalState.rawValue)
+            lastCount = count; lastWorst = worst
             stop()
             return
         }

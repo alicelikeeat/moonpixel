@@ -18,6 +18,24 @@ public enum SwarmShapes {
         gb >= 7.5 ? sizes[3] : (gb >= 5.5 ? sizes[2] : (gb >= 3.5 ? sizes[1] : sizes[0]))
     }
 
+    /// The size for the next cast: at most `base` (what the device's memory allows), one size smaller for
+    /// each step the device is running hot (thermal state 2 serious, 3 critical), smaller still until six
+    /// buffers fit in half the memory the app may still take, and one smaller if the last show had a frame
+    /// over 33 ms (one larger, up to `base`, if its worst frame was under 12 ms).
+    public static func tier(base: Int, last: Int?, availableMB: Double, thermal: Int, lastWorstMs: Double?) -> Int {
+        guard var i = sizes.lastIndex(where: { $0 <= base }) else { return sizes[0] }
+        if let last = last, let w = lastWorstMs, let j = sizes.lastIndex(where: { $0 <= last }) {
+            i = Swift.min(i, w > 33 ? j - 1 : (w < 12 ? j + 1 : j))
+        }
+        i -= Swift.max(0, thermal - 1)
+        i = Swift.max(0, i)
+        while i > 0 && Double(sizes[i] * 16 * 6) / 1_048_576 > availableMB * 0.5 { i -= 1 }
+        return sizes[i]
+    }
+
+    /// Sizes to try in turn when buffers cannot be had: the chosen one, then each smaller one.
+    public static func fallbacks(from n: Int) -> [Int] { [n] + sizes.filter { $0 < n }.reversed() }
+
     @inline(__always) public static func pack(_ c: RGBA) -> Float {
         Float(UInt32(c.r) | (UInt32(c.g) << 8) | (UInt32(c.b) << 16))
     }
