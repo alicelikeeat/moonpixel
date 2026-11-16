@@ -449,8 +449,8 @@ struct MetroView: View {
             HStack(spacing: 10) {
                 Text(session.city.name).font(.system(size: 13, weight: .bold, design: .rounded))
                 Label("\(session.money)", systemImage: "dollarsign.circle.fill").font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(session.money < 0 ? Color.red : Color.white).accessibilityIdentifier("metro-money")
-                Label("\(session.population)", systemImage: "person.3.fill").font(.system(size: 13, weight: .semibold, design: .rounded)).accessibilityIdentifier("metro-pop")
+                    .foregroundStyle(session.money < 0 ? Color.red : Color.white).accessibilityElement(children: .combine).accessibilityIdentifier("metro-money")
+                Label("\(session.population)", systemImage: "person.3.fill").font(.system(size: 13, weight: .semibold, design: .rounded)).accessibilityElement(children: .combine).accessibilityIdentifier("metro-pop")
                 Text(session.date).font(.system(size: 11, design: .rounded)).opacity(0.85)
                 demandBars
             }.padding(.horizontal, 14).padding(.vertical, 8).background(Color.black.opacity(0.55), in: Capsule()).glass(Capsule())

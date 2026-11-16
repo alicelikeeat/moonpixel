@@ -410,7 +410,7 @@ struct CommandView: View {
             HStack(spacing: 8) {
                 Circle().fill(Color(UIColor(hex: session.sim.sides[0].color))).frame(width: 10, height: 10)
                 Text(session.sim.sides[0].name).font(.system(size: 13, weight: .bold, design: .rounded))
-                Label("\(session.credits)", systemImage: "diamond.fill").font(.system(size: 13, weight: .semibold, design: .rounded)).accessibilityIdentifier("cmd-credits")
+                Label("\(session.credits)", systemImage: "diamond.fill").font(.system(size: 13, weight: .semibold, design: .rounded)).accessibilityElement(children: .combine).accessibilityIdentifier("cmd-credits")
                 Label("\(session.powerUsed)/\(session.powerMade)", systemImage: "bolt.fill").font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(session.powerUsed > session.powerMade ? Color.red : Color.white)
                 Text(String(format: "%d:%02d", session.clock / 60, session.clock % 60)).font(.system(size: 12, design: .monospaced)).opacity(0.8)
