@@ -129,7 +129,14 @@ public final class CivCity: Codable {
     public var rev: Int { get { revBox ?? 0 } set { revBox = newValue } }
     public init() {}
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
-    public var pop: Int { people.total }
+    public var pop: Int { people.total + upstairs }
+    var upstairsBox: Int?, towerBedsBox: Int?
+    /// When the city last decided to build upwards, and why its last idea did not go ahead.
+    var lastPlanBox: Int?
+    public var planNote: String?
+    /// People living in the city's towers (counted there, floor by floor), and the beds the towers give.
+    public var upstairs: Int { get { upstairsBox ?? 0 } set { upstairsBox = newValue == 0 ? nil : newValue } }
+    public var towerBeds: Int { get { towerBedsBox ?? 0 } set { towerBedsBox = newValue == 0 ? nil : newValue } }
     public var regionKey: Int64 { MP.chunkKey(rx, ry) }
     public func has(_ f: String) -> Int { facilities[f] ?? 0 }
     public func free(_ k: String) -> Double { max(0, (stock[k] ?? 0) - (reserved[k] ?? 0)) }
@@ -160,6 +167,8 @@ public final class Civ: Codable {
     public var wrecks: [CivWreck] = []
     public var news: [CivNews] = []
     public var fights: [CivFight] = []
+    /// Buildings that grow upwards (Vertical.swift): their floors, plans and people.
+    public var towerIndex = TowerIndex()
     /// How many times each kind of news has happened, ever (the news list itself keeps only the latest).
     public var happened: [String: Int] = [:]
     /// Results of the commands seen lately, by id (a repeated id is not carried out twice), oldest first.
@@ -182,7 +191,7 @@ public final class Civ: Codable {
     // read if present, so a save from before a field existed still opens (with that field's default).
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
-        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands
+        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -202,6 +211,7 @@ public final class Civ: Codable {
         try c.encode(nextUnit, forKey: .nextUnit); try c.encode(nextProject, forKey: .nextProject); try c.encode(nextNation, forKey: .nextNation)
         try c.encode(totals, forKey: .totals); try c.encode(rng, forKey: .rng); try c.encode(born, forKey: .born)
         try c.encode(commandOrder.compactMap { commandResults[$0] }, forKey: .commandResults); try c.encode(pendingCommands, forKey: .pendingCommands)
+        try c.encode(towerIndex, forKey: .towerIndex)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -236,6 +246,7 @@ public final class Civ: Codable {
         born = try c.decodeIfPresent([Int].self, forKey: .born) ?? []
         for r in try c.decodeIfPresent([CommandResult].self, forKey: .commandResults) ?? [] { commandResults[r.id] = r; commandOrder.append(r.id) }
         pendingCommands = try c.decodeIfPresent([WorldCommand].self, forKey: .pendingCommands) ?? []
+        towerIndex = try c.decodeIfPresent(TowerIndex.self, forKey: .towerIndex) ?? TowerIndex()
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -353,6 +364,8 @@ public final class Civ: Codable {
             guard let c = cities[id], c.detail == nil else { continue }
             c.yesterday = c.today; c.today = CivLedger()
             cityDay(c)
+            towersDay(c)
+            planTowers(c)
         }
     }
 
@@ -410,7 +423,7 @@ public final class Civ: Codable {
         if let next = c.rationNext, time >= c.rationAt { c.ration = next; c.rationNext = nil }
         let pop = c.pop
         // --- shelter and water
-        let beds = Double(c.has("house")) * cfg.housePeople + 18
+        let beds = Double(c.has("house")) * cfg.housePeople + 18 + Double(c.towerBeds)
         c.crowding = Double(pop) / beds
         let water = Double(c.has("well")) * cfg.wellWater + (reg.river || reg.coast ? cfg.riverWater : 30)
         c.thirst = pop == 0 ? 0 : max(0, 1 - water / Double(pop))
@@ -815,7 +828,8 @@ public final class Civ: Codable {
 
     /// Everyone alive in the regional layer: in cities, on the road and under arms.
     public var people: Int {
-        cities.values.reduce(0) { $0 + ($1.detail == nil ? $1.pop : 0) } + trips.values.reduce(0) { $0 + $1.people.total } + forces.values.reduce(0) { $0 + $1.crew.total }
+        cities.values.reduce(0) { $0 + ($1.detail == nil ? $1.people.total : 0) }
+            + towerIndex.towers.values.reduce(0) { a, t in a + t.floors.reduce(0) { $0 + $1.people.total } } + trips.values.reduce(0) { $0 + $1.people.total } + forces.values.reduce(0) { $0 + $1.crew.total }
     }
 
     /// What must hold every day. Empty when everything adds up.
@@ -829,6 +843,14 @@ public final class Civ: Codable {
             if c.sick > c.pop { out.append("more sick than people in \(c.nameEn)") }
         }
         for t in trips.values where t.people.n.contains(where: { $0 < 0 }) { out.append("negative people on trip \(t.id)") }
+        for t in towerIndex.towers.values {
+            guard let c = cities[t.city] else { out.append("tower \(t.id) of a missing city"); continue }
+            let up = t.floors.reduce(0) { $0 + $1.people.total }
+            if t.floors.contains(where: { $0.people.n.contains { $0 < 0 } }) { out.append("negative people in tower \(t.id)") }
+            if towers(of: c.id).reduce(0, { a, x in a + x.floors.reduce(0) { $0 + $1.people.total } }) != c.upstairs && up > 0 { out.append("tower people of \(c.nameEn) not counted") }
+            for f in t.floors where f.people.total > 0 && f.stage != .inUse { out.append("people living on an unfinished or damaged floor of tower \(t.id)") }
+            for f in t.floors where towerIndex.plans[f.plan] == nil { out.append("tower \(t.id) floor uses a missing plan \(f.plan)") }
+        }
         // what is held aside is exactly what the city's projects hold, and never more than is there
         for c in cities.values where c.detail == nil {
             var held: [String: Double] = [:]
