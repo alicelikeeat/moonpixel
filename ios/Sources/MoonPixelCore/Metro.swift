@@ -509,52 +509,144 @@ public final class Metro: Codable {
         }
     }
 
-    /// Everyone who works goes to the nearest job by road; shoppers go to the nearest shop. Each trip is
-    /// laid on every road it uses, which gives the traffic on each road and how jammed each commute is.
+    /// Traffic in three separate steps, so that no house is favoured for coming first in the map:
+    ///
+    /// 1. **Who goes where.** Workers are shared out among jobs and shoppers among shops, nearest first,
+    ///    and no place takes more than it holds (a job lot its workers, a shop three customers per worker).
+    ///    In each round every house with people left over asks all of its nearest places that still have
+    ///    room, equally; a place asked for more than it has gives each asker the same fraction. People left
+    ///    over try the next nearest in the following round. Workers nobody can take are unemployed.
+    /// 2. **What the roads carry.** Every trip is laid on the roads between its house and its place; where
+    ///    shortest ways part, the trips are split over them by how much each road can carry.
+    /// 3. **How it feels.** Only then, with the day's whole load known, each house's commute is rated by
+    ///    how full the roads are along its trips.
     func traffic() {
         let count = Metro.n * Metro.n
         load = [Float](repeating: 0, count: count)
         commute = [Float](repeating: 0, count: count)
-        func field(_ zones: Set<UInt8>) -> [Int32] {
-            var dist = [Int32](repeating: -1, count: count)
-            var q: [Int] = []
-            for i in 0..<count where zones.contains(zone[i]) && level[i] > 0 && abandoned[i] == 0 && pop[i] > 0 {
-                let a = Int(access[i]); if a >= 0 && dist[a] < 0 { dist[a] = 0; q.append(a) }
-            }
-            var h = 0
-            while h < q.count {
-                let i = q[h]; h += 1
-                for j in neighbours(i) where road[j] != 0 && dist[j] < 0 { dist[j] = dist[i] + 1; q.append(j) }
-            }
-            return dist
-        }
-        let work = field([2, 3]), shops = field([2])
-        func walk(from start: Int, _ f: [Int32], trips: Float) -> (Float, Int) {
-            var i = start, jam: Float = 0, steps = 0
-            while f[i] > 0 && steps < 400 {
-                load[i] += trips
-                let r = MetroRoad(rawValue: road[i]) ?? .street
-                jam += load[i] / Float(r.capacity)
-                var next = -1, bestCap = -1.0
-                for j in neighbours(i) where road[j] != 0 && f[j] == f[i] - 1 {
-                    let c = (MetroRoad(rawValue: road[j]) ?? .street).capacity
-                    if c > bestCap { bestCap = c; next = j }               // the bigger road when there is a choice
-                }
-                if next < 0 { break }
-                i = next; steps += 1
-            }
-            if f[i] == 0 { load[i] += trips }
-            return (jam, steps + 1)
-        }
         unemployed = 0
-        for i in 0..<count where zone[i] == 1 && level[i] > 0 && abandoned[i] == 0 && pop[i] > 0 {
-            let a = Int(access[i])
-            let workers = Float(pop[i]) * 0.6
-            guard a >= 0, work[a] >= 0 else { commute[i] = -1; unemployed += Int(workers); continue }
-            let (jam, steps) = walk(from: a, work, trips: workers)
-            _ = walk(from: a, shops, trips: Float(pop[i]) * 0.25)
-            commute[i] = jam / Float(max(1, steps))
+        func live(_ i: Int) -> Bool { level[i] > 0 && abandoned[i] == 0 && pop[i] > 0 && access[i] >= 0 }
+        // houses and places, gathered by the road tile they reach
+        var houseAt: [Int: Int] = [:], houses: [(road: Int, workers: Float, shoppers: Float)] = []
+        var jobAt: [Int: Int] = [:], jobs: [(road: Int, room: Float)] = []
+        var shopAt: [Int: Int] = [:], shops: [(road: Int, room: Float)] = []
+        for i in 0..<count where live(i) {
+            let a = Int(access[i]), p = Float(pop[i])
+            switch zone[i] {
+            case 1:
+                if let h = houseAt[a] { houses[h].workers += p * 0.6; houses[h].shoppers += p * 0.25 }
+                else { houseAt[a] = houses.count; houses.append((a, p * 0.6, p * 0.25)) }
+            case 2, 3:
+                if let k = jobAt[a] { jobs[k].room += p } else { jobAt[a] = jobs.count; jobs.append((a, p)) }
+                if zone[i] == 2 { if let k = shopAt[a] { shops[k].room += p * 3 } else { shopAt[a] = shops.count; shops.append((a, p * 3)) } }
+            default: break
+            }
         }
+        // one search over the roads from each house: the order it reached them, how far, and its places by distance
+        var dist = [Int32](repeating: -1, count: count)
+        func search(_ from: Int) -> [Int] {
+            var order = [from]; dist[from] = 0
+            var h = 0
+            while h < order.count {
+                let i = order[h]; h += 1
+                for j in neighbours(i) where road[j] != 0 && dist[j] < 0 { dist[j] = dist[i] + 1; order.append(j) }
+            }
+            return order
+        }
+        func clear(_ order: [Int]) { for i in order { dist[i] = -1 } }
+        let reach = 48                                                   // places a house considers, nearest first
+        var jobOptions: [[(Int, Int32)]] = [], shopOptions: [[(Int, Int32)]] = []
+        for h in houses {
+            let order = search(h.road)
+            var js: [(Int, Int32)] = [], ss: [(Int, Int32)] = []
+            for i in order {                                            // in order of distance already
+                if js.count < reach, let k = jobAt[i] { js.append((k, dist[i])) }
+                if ss.count < reach, let k = shopAt[i] { ss.append((k, dist[i])) }
+            }
+            jobOptions.append(js); shopOptions.append(ss)
+            clear(order)
+        }
+        // 1. who goes where
+        func share(_ want: [Float], _ room0: [Float], _ options: [[(Int, Int32)]]) -> [[Int: Float]] {
+            var left = want, room = room0
+            var sent = [[Int: Float]](repeating: [:], count: want.count)
+            for _ in 0..<8 {
+                var asks = [[(Int, Float)]](repeating: [], count: want.count)
+                var asked = [Float](repeating: 0, count: room.count)
+                var any = false
+                for h in want.indices where left[h] > 0.001 {
+                    // the nearest places with room left, all of them at that distance
+                    guard let d = options[h].first(where: { room[$0.0] > 0.001 })?.1 else { continue }
+                    let near = options[h].filter { $0.1 == d && room[$0.0] > 0.001 }
+                    let each = left[h] / Float(near.count)
+                    for (k, _) in near { asks[h].append((k, each)); asked[k] += each }
+                    any = true
+                }
+                if !any { break }
+                let fill = asked.indices.map { asked[$0] > room[$0] ? room[$0] / asked[$0] : 1 }
+                for h in want.indices { for (k, v) in asks[h] {
+                    let got = v * fill[k]
+                    sent[h][k, default: 0] += got; left[h] -= got
+                } }
+                for k in room.indices { room[k] -= min(room[k], asked[k] * fill[k]) }
+            }
+            return sent
+        }
+        let toWork = share(houses.map { $0.workers }, jobs.map { $0.room }, jobOptions)
+        let toShop = share(houses.map { $0.shoppers }, shops.map { $0.room }, shopOptions)
+        // 2. what the roads carry: back from every place towards the house, split by road size
+        var flow = [Float](repeating: 0, count: count)
+        func cap(_ i: Int) -> Float { Float((MetroRoad(rawValue: road[i]) ?? .street).capacity) }
+        func lay(_ order: [Int], _ trips: [Int: Float], _ places: [(road: Int, room: Float)], _ visit: (Int, Float) -> Void) {
+            for (k, v) in trips { flow[places[k].road] += v }
+            for i in order.reversed() where flow[i] > 0 {
+                let f = flow[i]
+                visit(i, f)
+                let back = dist[i] > 0 ? neighbours(i).filter { road[$0] != 0 && dist[$0] == dist[i] - 1 } : []
+                flow[i] = 0
+                if back.isEmpty { continue }
+                let total = back.reduce(Float(0)) { $0 + cap($1) }
+                for j in back { flow[j] += f * cap(j) / total }
+            }
+        }
+        for (h, house) in houses.enumerated() {
+            let order = search(house.road)
+            lay(order, toWork[h], jobs) { i, f in load[i] += f }
+            lay(order, toShop[h], shops) { i, f in load[i] += f }
+            clear(order)
+        }
+        // 3. how it feels: the fullness of the roads along each house's way to work, per step
+        var rating = [Float](repeating: -1, count: houses.count)
+        for (h, house) in houses.enumerated() {
+            let total = toWork[h].values.reduce(0, +)
+            guard total > 0.001 else {
+                unemployed += Int(house.workers.rounded())
+                rating[h] = jobOptions[h].isEmpty ? -1 : 0
+                continue
+            }
+            unemployed += Int(max(0, house.workers - total).rounded())
+            let order = search(house.road)
+            var jam: Float = 0, steps: Float = 0
+            for (k, v) in toWork[h] { steps += v * Float(dist[jobs[k].road] + 1) }
+            lay(order, toWork[h], jobs) { i, f in jam += f * load[i] / cap(i) }
+            clear(order)
+            rating[h] = jam / max(1, steps)
+        }
+        for i in 0..<count where zone[i] == 1 && live(i) { if let h = houseAt[Int(access[i])] { commute[i] = rating[h] } }
+        for i in 0..<count where zone[i] == 1 && level[i] > 0 && abandoned[i] == 0 && pop[i] > 0 && access[i] < 0 {
+            commute[i] = -1; unemployed += Int((Float(pop[i]) * 0.6).rounded())
+        }
+    }
+
+    /// For tests: lay out a city tile by tile, on flat land.
+    func place(_ i: Int, road r: UInt8 = 0, zone z: UInt8 = 0, level lv: UInt8 = 0, pop p: Int16 = 0) {
+        blocked[i] = false
+        road[i] = r; zone[i] = z; level[i] = lv; pop[i] = p; abandoned[i] = 0
+        dirty = true
+    }
+    func clearAll() {
+        for i in road.indices { place(i) }
+        services = []; owner = [Int32](repeating: 0, count: owner.count)
     }
 
     func moods() {

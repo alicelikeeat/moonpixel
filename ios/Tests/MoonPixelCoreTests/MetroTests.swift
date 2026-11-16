@@ -174,4 +174,56 @@ final class MetroTests: XCTestCase {
         for mask in 0..<16 { XCTAssertEqual(PixelArt.metroRoad(mask: mask, avenue: mask % 2 == 0).w, 16) }
         XCTAssertFalse(m.describe(Metro.size / 2, Metro.size / 2, zh: true).isEmpty)
     }
+
+    // MARK: traffic
+
+    /// A street along row 30 from x 8 to 55, houses on one side, jobs on the other; `mirror` flips it left-right.
+    func strip(_ m: Metro, mirror: Bool, houses: [Int], jobs: [(Int, Int16)]) {
+        m.clearAll()
+        func X(_ x: Int) -> Int { mirror ? Metro.n - 1 - x : x }
+        for x in 8...55 { m.place(Metro.idx(X(x), 30), road: 1) }
+        for x in houses { m.place(Metro.idx(X(x), 29), zone: 1, level: 2, pop: 10) }
+        for (x, p) in jobs { m.place(Metro.idx(X(x), 31), zone: 3, level: 2, pop: p) }
+        m.network(); m.traffic()
+    }
+
+    func testTrafficIsTheSameOnAMirroredMap() {
+        let a = Metro(seed: 2, worldSeed: 7), b = Metro(seed: 2, worldSeed: 7)
+        let houses = [10, 11, 12, 13, 30, 31, 50, 51], jobs: [(Int, Int16)] = [(20, 6), (40, 5), (53, 4)]
+        strip(a, mirror: false, houses: houses, jobs: jobs)
+        strip(b, mirror: true, houses: houses, jobs: jobs)
+        XCTAssertEqual(a.unemployed, b.unemployed)
+        for y in 28...32 { for x in 0..<Metro.n {
+            let i = Metro.idx(x, y), j = Metro.idx(Metro.n - 1 - x, y)
+            XCTAssertEqual(a.load[i], b.load[j], accuracy: 0.001, "road load at \(x),\(y) does not depend on which way the map faces")
+            XCTAssertEqual(a.commute[i], b.commute[j], accuracy: 0.001, "commute at \(x),\(y)")
+        } }
+    }
+
+    func testHousesAtTheSameDistanceShareAJobFairly() {
+        // two houses, the job exactly between them, room for only half the workers
+        let m = Metro(seed: 2, worldSeed: 7)
+        strip(m, mirror: false, houses: [20, 40], jobs: [(30, 6)])
+        let left = Metro.idx(20, 30), right = Metro.idx(40, 30)
+        XCTAssertEqual(m.load[left], m.load[right], accuracy: 0.001, "neither house is served first")
+        XCTAssertEqual(m.load[left], 3, accuracy: 0.001, "each sends three of its six workers")
+        XCTAssertEqual(m.unemployed, 6, "the other six have no job")
+    }
+
+    func testJobsAreFilledNearestFirstAndNeverOverfilled() {
+        let m = Metro(seed: 2, worldSeed: 7)
+        strip(m, mirror: false, houses: [10], jobs: [(14, 2), (40, 10)])   // 6 workers: 2 near, 4 far
+        XCTAssertEqual(m.load[Metro.idx(14, 30)], 6, accuracy: 0.001, "all six pass the near job's door")
+        XCTAssertEqual(m.load[Metro.idx(20, 30)], 4, accuracy: 0.001, "four go on: the near job takes only two")
+        XCTAssertEqual(m.load[Metro.idx(40, 30)], 4, accuracy: 0.001)
+        XCTAssertEqual(m.load[Metro.idx(41, 30)], 0, accuracy: 0.001, "nobody goes past their job")
+        XCTAssertEqual(m.unemployed, 0)
+    }
+
+    func testWorkersWithNoRoadToAnyJobAreUnemployed() {
+        let m = Metro(seed: 2, worldSeed: 7)
+        strip(m, mirror: false, houses: [10, 11], jobs: [])
+        XCTAssertEqual(m.unemployed, 12)
+        XCTAssertLessThan(m.commute[Metro.idx(10, 29)], 0, "no way to work")
+    }
 }
