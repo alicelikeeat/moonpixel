@@ -329,4 +329,38 @@ final class CivTests: XCTestCase {
         for k in ["war", "captured", "exile", "city_founded", "tech"] { XCTAssertGreaterThan(events[k] ?? 0, 0, "\(k) happened somewhere") }
         XCTAssertGreaterThan((events["restored"] ?? 0) + (events["seceded"] ?? 0) + (events["submitted"] ?? 0) + (events["federated"] ?? 0), 0, "nations broke away, came back or joined")
     }
+
+    /// From the ground up, with no stock of anything made: ore and coal are mined, steel smelted, parts,
+    /// engines, electronics, armour, weapons and reactor cores made, and from them a frame, a carrier with
+    /// its aircraft and a sky carrier, each crewed from the city and put into service.
+    func testFromOreToFrameCarrierAndSkyCarrier() {
+        let c = Civ(seed: 1)
+        land(c, 0...0) { $0.ore = 1; $0.coal = 1; $0.water = 0.5; $0.deep = 0.5; $0.land = 0.6; $0.oil = 1 }
+        let n = c.newPolity(origin: "first", near: nil)
+        c.polities[n]!.techs = CivTech.all.map { $0.key }
+        c.polities[n]!.ai = false; c.polities[n]!.builds = false
+        let t = city(c, 0, nation: n, adults: 6000, farms: 1500, houses: 1600, grain: 2e6)
+        t.facilities = ["farm": 1500, "house": 1600, "well": 200, "granary": 2, "mine": 40, "oilwell": 4, "refinery": 4, "steelworks": 20, "factory": 30, "fab": 30,
+                        "plant": 20, "fusion_plant": 3, "frame_works": 1, "deep_yard": 1, "aircraft_works": 1, "sky_yard": 1, "airfield": 1, "clinic": 30]
+        XCTAssertNil(t.stock["steel"]); XCTAssertNil(t.stock["parts"])
+        for k in ["frame", "carrier", "fighter", "fighter", "sky_carrier"] { XCTAssertNotNil(c.order(k, nation: n, city: t.id), k) }
+        var done: Set<String> = []
+        for _ in 0..<200 {
+            run(c, days: 2)
+            done = Set(c.units.values.map { $0.kind })
+            if done.isSuperset(of: ["frame", "carrier", "fighter", "sky_carrier"]) && c.units.count == 5 { break }
+        }
+        XCTAssertEqual(done, ["frame", "carrier", "fighter", "sky_carrier"], "all made from mined ore (waiting on: \(c.projects.values.map { "\($0.kind):\($0.waiting)" }))")
+        XCTAssertGreaterThan(t.ledger.made["steel"] ?? 0, 400, "the steel was smelted here")
+        XCTAssertGreaterThan(t.ledger.made["core"] ?? 0, 6, "and the reactor cores made here")
+        // into service: crews from the city, aircraft aboard the carrier
+        let adults = t.people.band(1)
+        guard let carrier = c.units.values.first(where: { $0.kind == "carrier" }), let fleet = c.deploy(carrier.id) else { return XCTFail("carrier") }
+        for f in c.units.values.filter({ $0.kind == "fighter" }) { XCTAssertEqual(c.deploy(f.id, joining: fleet), fleet) }
+        guard let frame = c.units.values.first(where: { $0.kind == "frame" }), let sky = c.units.values.first(where: { $0.kind == "sky_carrier" }) else { return XCTFail("missing") }
+        XCTAssertNotNil(c.deploy(frame.id))
+        XCTAssertNotNil(c.deploy(sky.id))
+        XCTAssertEqual(adults - t.people.band(1), 400 + 2 * 2 + 1 + 300, "every crew member came from the city")
+        XCTAssertEqual(c.audit(), [])
+    }
 }

@@ -271,6 +271,26 @@ CI_RESULT_PLACEHOLDER
 
 都市交通在 970 人的示例城市上每模拟日约 5.4 ms（Linux 发布构建）。
 
+## 无限国度（文明层）
+
+| 测试 | 验证内容 |
+|---|---|
+| `CivTests.testRegionsAreFoundOnceAndTheSameEveryTime` | 地区只生成一次、顺序无关；首批人口记为“新纳入统计”；国家超过 3 个 |
+| `testPeopleAndFoodAddUpEveryDayOverYears` | 3 个种子 120 天，每天人口审计通过，粮食账目与现存一致 |
+| `testMoreFoodAndRoomGrowTheTownButRoomAloneDoesNot` | 有粮有房才增长；只有房子不增长，只有粮食增长更少 |
+| `testABesiegedCityStarvesThoughItsNationHasFoodAndRecoversWhenFreed` | 围城后饥饿、饿死、外逃，首都满仓也送不进去；解围后逐步恢复 |
+| `testRationsShareFoodByPolicyAndAPolicyTakesADay` / `testHungerComesOnSlowlyAndPassesSlowly` | 配给生效延迟、儿童优先；断一天不死、一周后饥荒、进食后逐级恢复 |
+| `testTheSameDaysGiveTheSameWorldAtAnySpeedAndAcrossASave` | 逐日推进 = 一次推进 30 天 = 中途存档读档，全部状态一致 |
+| `testAFrameIsBuiltStageByStage…` / `testACarrierKeepsToDeepWater…` | 分段扣料、仓库中无乘员无燃料、乘员来自城市；机兵过不了山口，航母上不了陆，步枪打不到高空 |
+| `testCarrierAircraftFlyAStrike…` | 舰载机出击与降落；母舰沉没时人员与飞机都有去处，审计通过 |
+| `testStrikesHurtWhenTheyLand…` | 炮弹飞行中不伤人，目标离开则落空 |
+| `testRebelCitiesFormNewNations…` | 相邻叛城合组建国，仍认同旧国的城恢复旧国，人数不变 |
+| `testFromOreToFrameCarrierAndSkyCarrier` | 只有粮、木、石起步，自采矿石冶炼，造出机兵、航母、两架舰载机、空天母舰并配员 |
+| `testLongRunsKeepTheBooksAndMakeHistory` | 3 个种子 × 400 天：每天审计、粮食账目、无无限积压，出现战争、占领、流亡、建城、科研与独立/复国/归附 |
+| `CivBridgeTests`（4） | 原三国 ID/名称保留并成为文明层国家；城镇人口不重复计数；镜头不发现土地、行走才发现；随世界存档往返一致；旧存档迁移不丢人；重启后是新国家；统一王朝按实际派别分裂、不按定时器分裂 |
+| `CivStressTests` | 10/50/100 国 × 1 万/10 万/100 万人，50/200/400 台装备同场；见 `docs/CIV.md` 的数据 |
+| UI：`testMenuWorldsAndHUDButtons` | 国度面板列出已知世界，打开一个国家看到人口账 |
+
 ## 未验证事项
 
 - **真机**：没有在任何真实 iPhone 上运行过。任务书要求的真机验收（连续运行、帧时间、内存、发热、卡顿、触摸手感）全部待做，不能标为通过。建议记录：机型与系统版本、运行时长、“更多 → 性能”面板的读数、是否发热降频、是否闪退。

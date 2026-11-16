@@ -331,7 +331,6 @@ extension Civ {
         let old = c.nation
         c.nation = n
         c.occupier = nil; c.occupyHours = 0
-        for b in c.builds.indices { _ = b }
         if polities[n]?.capital == nil { polities[n]?.capital = c.id }
         if polities[old]?.capital == c.id { polities[old]?.capital = nil }
     }

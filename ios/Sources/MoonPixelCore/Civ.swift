@@ -360,6 +360,28 @@ public final class Civ: Codable {
         return 0.8 + 0.4 * h.unit()
     }
 
+    /// Recipes, upstream first: what feeds others is made before what uses it.
+    static let recipeOrder: [CivRecipe] = ["bread", "meal", "ration", "synth", "steel", "fuel", "parts", "electronics", "armor", "engine", "weapons", "core", "ammo"].compactMap { CivRecipe.byKey[$0] }
+
+    /// What the city's works should make: everything its orders still need (and a reserve of fuel and
+    /// ammunition when its nation keeps forces), worked back through the recipes to the raw materials.
+    func industrialDemand(_ c: CivCity) -> [String: Double] {
+        var want: [String: Double] = [:]
+        for p in projects.values where p.city == c.id {
+            guard let d = CivUnitDef.byKey[p.kind] else { continue }
+            for (i, stage) in d.stages.enumerated() where i > p.stage || (i == p.stage && !p.taken) { for (k, v) in stage { want[k, default: 0] += v } }
+        }
+        if forces.values.contains(where: { $0.nation == c.nation }) { want["fuel", default: 0] += 100; want["ammo", default: 0] += 100 }
+        // each item short of what is wanted asks its recipe's inputs for the difference (downstream first)
+        for k in Civ.recipeOrder.reversed().compactMap({ $0.outputs.first?.key }) where !CivFood.isFood(k) {
+            guard let r = Civ.recipeOrder.first(where: { $0.outputs.keys.contains(k) }), let per = r.outputs[k] else { continue }
+            let short = (want[k] ?? 0) - (c.stock[k] ?? 0)
+            guard short > 0 else { continue }
+            for (i, v) in r.inputs { want[i, default: 0] += v * short / per }
+        }
+        return want
+    }
+
     func cityDay(_ c: CivCity) {
         let cfg = self.cfg
         guard let reg = regions[c.regionKey] else { return }
@@ -425,15 +447,27 @@ public final class Civ: Codable {
         // the hungry go out and find what the land gives, whatever the stores hold: no one starves while standing still
         let hungryAdults = (1..<6).reduce(0) { $0 + c.people.n[6 + $1] }
         make("vegetable", Double(hungryAdults) * cfg.forage * (0.3 + reg.fertility) * (s == 3 ? 0.4 : 1) * fields)
-        // processing: kitchens, works and plants turn stock into stock
-        for r in CivRecipe.all {
+        // processing. Kitchens cook what there is; works make what is wanted (what the city's orders still
+        // need, worked back through every ingredient), upstream first, each facility's crew sharing one day.
+        var hoursLeft: [String: Double] = [:]
+        for (f, k) in c.facilities { hoursLeft[f] = Double(k) * (staffed[f] ?? 0) * 24 }
+        let demand = industrialDemand(c)
+        for r in Civ.recipeOrder {
             guard c.has(r.facility) > 0, r.tech == nil || knows(c.nation, r.tech!) else { continue }
-            let crews = Double(c.has(r.facility)) * (staffed[r.facility] ?? 0) * (r.energy > 0 ? power : 1)
-            var batches = (crews * 24 / r.hours).rounded(.down)
+            let power1 = r.energy > 0 ? power : 1
+            var batches = ((hoursLeft[r.facility] ?? 0) * power1 / r.hours).rounded(.down)
             for (k, v) in r.inputs { batches = min(batches, (c.free(k) / v).rounded(.down)) }
-            // kitchens do not bake away grain a hungry city still needs whole
-            if r.facility == "bakery" && c.foodDays < 2 && r.key == "bread" { batches = min(batches, 2) }
+            let food = r.outputs.keys.contains { CivFood.isFood($0) }
+            if food {
+                // kitchens do not bake away grain a hungry city still needs whole
+                if r.facility == "bakery" && c.foodDays < 2 && r.key == "bread" { batches = min(batches, 2) }
+            } else {
+                let (out, per) = r.outputs.first!
+                let short = (demand[out] ?? 0) - (c.stock[out] ?? 0)
+                batches = min(batches, max(0, (short / per).rounded(.up)))
+            }
             guard batches > 0 else { continue }
+            hoursLeft[r.facility, default: 0] -= batches * r.hours / power1
             for (k, v) in r.inputs { c.stock[k, default: 0] -= v * batches; c.today.add(\.used, k, v * batches); c.ledger.add(\.used, k, v * batches); totals.add(\.used, k, v * batches) }
             for (k, v) in r.outputs { make(k, v * batches) }
         }
