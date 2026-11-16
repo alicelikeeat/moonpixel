@@ -36,9 +36,10 @@ final class MetroSession: ObservableObject {
     var onExit: () -> Void = {}
     static let daysPerSecond: [Double] = [0, 0.7, 2.5, 8]
 
-    init(city: Metro, file: URL) {
+    init(city: Metro, file: URL, store: SaveFile? = nil) {
         self.city = city
         self.file = file
+        self.store = store ?? SaveFile(url: file)
         scene = MetroScene(size: CGSize(width: 874, height: 402))
         scene.scaleMode = .resizeFill
         scene.session = self
@@ -51,20 +52,38 @@ final class MetroSession: ObservableObject {
 
     func setTax(_ z: Int, _ v: Double) { city.setTax(z, v); taxes = city.taxes }
 
-    /// Write the city to its file (whole, then swapped in, so a crash leaves the old one).
+    /// The city's file: written whole beside the old one, the old one kept as `.prev`, then swapped in.
+    let store: SaveFile
+    /// `--fail-metro-saves N`: the next N saves fail (UI tests).
+    static var failSaves = 0
+    /// The last save failed (shown on the HUD until a save works).
+    @Published var saveError: String?
+    /// Leaving was refused because the save failed: the city stays open and paused.
+    @Published var exitBlocked: String?
+
+    /// Save now. On failure the old file is untouched, the reason is kept and false is returned.
     @discardableResult func save() -> Bool {
-        guard let data = try? JSONEncoder().encode(city) else { return false }
-        let tmp = file.appendingPathExtension("tmp")
+        if MetroSession.failSaves > 0 { store.failAt = [.swap] } else { store.failAt = [] }
         do {
-            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: tmp)
-            _ = try? FileManager.default.removeItem(at: file)
-            try FileManager.default.moveItem(at: tmp, to: file)
+            let data = try JSONEncoder().encode(city)
+            try store.write(data) { (try? JSONDecoder().decode(Metro.self, from: $0)) != nil }
+            if MetroSession.failSaves > 0 { MetroSession.failSaves -= 1 }
+            saveError = nil
             return true
-        } catch { return false }
+        } catch {
+            if MetroSession.failSaves > 0 { MetroSession.failSaves -= 1 }
+            saveError = "\(error)"
+            return false
+        }
     }
 
-    func leave() { save(); onExit() }
+    /// Leave only once the city is safely on disk; otherwise stay, paused, and offer to try again.
+    func leave() {
+        if save() { exitBlocked = nil; onExit() } else { exitBlocked = saveError ?? L("保存失败", "Saving failed") }
+    }
+    func stayAfterFailedExit() { exitBlocked = nil }
+    /// The city stands still while a failed exit is being dealt with.
+    var paused: Bool { exitBlocked != nil }
 
     func refresh() {
         money = Int(city.money); population = city.population
@@ -168,7 +187,7 @@ final class MetroScene: SKScene {
         let city = session.city
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
-        city.tick(dt, daysPerSecond: MetroSession.daysPerSecond[session.speed])
+        city.tick(dt, daysPerSecond: session.paused ? 0 : MetroSession.daysPerSecond[session.speed])
         syncTiles(city)
         syncOverlay(city, session.overlay)
         hudAcc += dt
@@ -178,7 +197,7 @@ final class MetroScene: SKScene {
         groundAcc += dt
         if groundAcc > 1 { groundAcc = 0; bakeGround() }
         saveAcc += dt
-        if saveAcc > 60 { saveAcc = 0; session.save() }
+        if saveAcc > 60 && !session.paused { saveAcc = 0; session.save() }
     }
 
     private func syncTiles(_ city: Metro) {
@@ -433,6 +452,8 @@ struct MetroView: View {
             SpriteView(scene: session.scene, preferredFramesPerSecond: 60).ignoresSafeArea()
             VStack(spacing: 6) {
                 top
+                if session.exitBlocked != nil { exitBlockedBar }
+                else if session.saveError != nil { saveFailedBar }
                 if !session.notice.isEmpty {
                     Text(session.notice).font(.system(size: 12, weight: .medium, design: .rounded)).padding(.horizontal, 12).padding(.vertical, 6)
                         .background(Color.black.opacity(0.6), in: Capsule()).accessibilityIdentifier("metro-notice")
@@ -445,6 +466,34 @@ struct MetroView: View {
             if session.showBudget { budget }
         }
         .foregroundStyle(.white)
+    }
+
+    /// Leaving was refused because the save failed: the city is still open, paused, and can be saved again.
+    private var exitBlockedBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.exclamationmark").foregroundStyle(.yellow)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L("保存失败，城市没有关闭", "Saving failed, so the city was not closed")).font(.system(size: 12, weight: .bold, design: .rounded))
+                Text(session.exitBlocked ?? "").font(.system(size: 10, design: .rounded)).opacity(0.85).lineLimit(2)
+            }
+            Button { session.leave() } label: {
+                Label(L("重试保存并离开", "Retry and leave"), systemImage: "arrow.clockwise").font(.system(size: 12, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12).frame(minHeight: 44).background(Color.white.opacity(0.22), in: Capsule())
+            }.buttonStyle(PressStyle()).accessibilityIdentifier("metro-retry-exit")
+            Button { session.stayAfterFailedExit() } label: {
+                Text(L("继续经营", "Keep playing")).font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .padding(.horizontal, 12).frame(minHeight: 44).background(Color.white.opacity(0.12), in: Capsule())
+            }.buttonStyle(PressStyle()).accessibilityIdentifier("metro-stay")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8).background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .accessibilityElement(children: .contain).accessibilityIdentifier("metro-exit-blocked")
+    }
+
+    /// An autosave failed: the old file is intact; the next save tries again.
+    private var saveFailedBar: some View {
+        Label(L("自动保存失败，旧存档完好，稍后重试", "Autosave failed; the old save is intact and will be retried"), systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 11, weight: .semibold, design: .rounded)).padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.black.opacity(0.6), in: Capsule()).accessibilityElement(children: .combine).accessibilityIdentifier("metro-save-failed")
     }
 
     private var top: some View {

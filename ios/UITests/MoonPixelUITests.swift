@@ -315,4 +315,25 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["metro-speed-1"].tap()
         app.buttons["metro-exit"].tap()
     }
+
+    /// A city whose save fails is not closed: leaving is refused with an explanation, the city stays,
+    /// and a retry that saves leaves.
+    func testMetroFailedSaveKeepsTheCityAndRetryLeaves() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--2d", "--fail-metro-saves", "1"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "the game started")
+        sleep(3)
+        more(app, "Metro")
+        XCTAssertTrue(app.descendants(matching: .any)["metro-money"].waitForExistence(timeout: 15), "the city's HUD is up")
+        sleep(1)
+        app.buttons["metro-exit"].tap()
+        XCTAssertTrue(app.buttons["metro-retry-exit"].waitForExistence(timeout: 8), "leaving was refused with a way to retry")
+        shot("metro-05-exit-blocked")
+        XCTAssertTrue(app.descendants(matching: .any)["metro-money"].exists, "the city is still open")
+        XCTAssertFalse(app.buttons["Map"].exists, "not back in the world")
+        app.buttons["metro-retry-exit"].tap()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "after a good save it leaves")
+    }
 }

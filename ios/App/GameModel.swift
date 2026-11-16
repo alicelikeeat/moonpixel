@@ -225,6 +225,7 @@ final class GameModel: ObservableObject {
         refreshWorlds()
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "--fail-saves"), i + 1 < args.count { failSaves = Int(args[i + 1]) ?? 0 }
+        if let i = args.firstIndex(of: "--fail-metro-saves"), i + 1 < args.count { MetroSession.failSaves = Int(args[i + 1]) ?? 0 }
         if let i = args.firstIndex(of: "--fail-exit-saves"), i + 1 < args.count { failExitSaves = Int(args[i + 1]) ?? 0 }
         if let i = args.firstIndex(of: "--perf-log"), i + 1 < args.count { perfLogEvery = Double(args[i + 1]) ?? 0 }
         if args.contains("--perf") { showPerf = true }

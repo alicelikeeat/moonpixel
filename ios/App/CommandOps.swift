@@ -25,15 +25,26 @@ extension GameModel {
     /// Open this world's city (or found one): it is kept in the world's folder and goes with the world.
     func startMetro(fresh: Bool = false) {
         guard metro == nil, let w = world else { return }
+        let store = SaveFile(url: metroFile)
         var city: Metro?
-        if !fresh, let data = try? Data(contentsOf: metroFile) { city = try? JSONDecoder().decode(Metro.self, from: data) }
-        if city == nil && !fresh && FileManager.default.fileExists(atPath: metroFile.path) {
-            // a city that cannot be read is kept aside, never overwritten
-            try? FileManager.default.moveItem(at: metroFile, to: saveDir.appendingPathComponent("metro.unreadable-\(Int(Date().timeIntervalSince1970)).json"))
-            showToast(L("城市存档无法读取，已另存并新建城市", "The city could not be read; it was kept aside and a new one founded"))
+        if !fresh {
+            let got = store.load { try JSONDecoder().decode(Metro.self, from: $0) }
+            if got.locked {
+                // the unreadable file could not even be moved aside: open nothing rather than risk writing over it
+                showToast(L("城市存档损坏且无法移开，未打开城市以免覆盖", "The city save is damaged and could not be moved aside; the city was not opened, so nothing overwrites it"))
+                return
+            }
+            city = got.value
+            if let aside = got.keptAside {
+                showToast(got.source == .previous
+                    ? L("城市存档损坏，已另存为 \(aside.lastPathComponent)，载入上一版", "The city save was damaged; it was kept as \(aside.lastPathComponent) and the previous version loaded")
+                    : L("城市存档损坏，已另存为 \(aside.lastPathComponent)，新建城市", "The city save was damaged; it was kept as \(aside.lastPathComponent) and a new city founded"))
+            } else if got.source == .previous {
+                showToast(L("城市存档缺失，已载入上一版", "The city save was missing; the previous version was loaded"))
+            }
         }
         let c = city ?? Metro(seed: w.seed &+ 4049, worldSeed: w.seed, name: worldName.isEmpty ? L("新月城", "Moonhaven") : worldName + L("市", " City"))
-        let session = MetroSession(city: c, file: metroFile)
+        let session = MetroSession(city: c, file: metroFile, store: store)
         session.onExit = { [weak self] in self?.metro = nil }
         session.refresh()
         metro = session
