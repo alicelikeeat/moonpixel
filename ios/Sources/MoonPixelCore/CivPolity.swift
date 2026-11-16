@@ -445,8 +445,8 @@ extension Civ {
         guard let def = CivFacility.byKey[f], def.tech == nil || knows(c.nation, def.tech!) else { return false }
         if def.needs == "coast" && !(regions[c.regionKey]?.coast ?? false) { return false }
         if def.needs == "deep" && (regions[c.regionKey]?.deep ?? 0) < 0.3 { return false }
-        guard def.cost.allSatisfy({ c.free($0.key) >= $0.value }) else { return false }
-        for (k, v) in def.cost { c.stock[k, default: 0] -= v; c.today.add(\.used, k, v); c.ledger.add(\.used, k, v) }
+        guard Goods.take(def.cost, from: c.holding) == nil else { return false }
+        for (k, v) in def.cost { c.today.add(\.used, k, v); c.ledger.add(\.used, k, v) }
         c.builds.append(CivBuild(facility: f, daysLeft: 2 + Double(def.workers) / 4))
         return true
     }

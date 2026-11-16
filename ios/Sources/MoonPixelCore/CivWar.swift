@@ -129,8 +129,8 @@ extension Civ {
             }
             if !p.taken {
                 let need = def.stages[p.stage]
-                if need.allSatisfy({ c.free($0.key) >= $0.value }) {
-                    for (k, v) in need { c.stock[k, default: 0] -= v; p.invested[k, default: 0] += v; c.today.add(\.used, k, v) }
+                if Goods.take(need, from: c.holding) == nil {
+                    for (k, v) in need { p.invested[k, default: 0] += v; c.today.add(\.used, k, v) }
                     p.taken = true; p.waiting = ""
                 } else { p.waiting = "materials"; projects[id] = p; continue }
             }
@@ -414,6 +414,14 @@ extension Civ {
     // MARK: - fighting
 
     func battle() {
+        // who is where, on which layer, once for the hour (not looked up again for every weapon of every machine)
+        struct Mark { let id: Int, nation: Int, layer: CivLayer, region: Int64, armor: Int, parked: Bool }
+        var marks: [Mark] = []
+        for fid in forces.keys.sorted() {
+            guard let f = forces[fid] else { continue }
+            for uid in f.units { guard let o = units[uid] else { continue }; let d = o.def
+                marks.append(Mark(id: uid, nation: f.nation, layer: o.layer, region: o.at ?? f.region, armor: d.armor, parked: o.air == .parked)) }
+        }
         for fid in forces.keys.sorted() {
             guard let f = forces[fid] else { continue }
             let foes = Set(wars(of: f.nation))
@@ -428,23 +436,20 @@ extension Civ {
                     if w.energy > 0 && (u.energy < w.energy || !u.ok("power")) { continue }
                     if w.heat > 0 && u.heat + w.heat > d.heatCap * (u.ok("cooling") ? 1 : 0.5) { continue }
                     // the nearest seen enemy this weapon can reach on its layers, lowest id first
-                    var best: (CivUnit, Int)?
-                    for of in forces.values where foes.contains(of.nation) {
-                        for oid in of.units {
-                            guard let o = units[oid], w.layers.contains(o.layer), o.air != .parked || o.layer == .ground, sees(f.nation, oid) else { continue }
-                            let dd = dist(at, o.at ?? of.region)
-                            guard dd <= w.range else { continue }
-                            if best == nil || dd < best!.1 || (dd == best!.1 && oid < best!.0.id) { best = (o, dd) }
-                        }
+                    var best: (Mark, Int)?
+                    for m in marks where foes.contains(m.nation) && w.layers.contains(m.layer) && (!m.parked || m.layer == .ground) {
+                        let dd = dist(at, m.region)
+                        guard dd <= w.range, units[m.id] != nil, sees(f.nation, m.id) else { continue }
+                        if best == nil || dd < best!.1 || (dd == best!.1 && m.id < best!.0.id) { best = (m, dd) }
                     }
-                    guard let (t, _) = best else { continue }
+                    guard let (mark, _) = best, let t = units[mark.id] else { continue }
                     u.ammo -= w.ammo; u.energy -= w.energy; u.heat += w.heat
                     u.ready[w.key] = time + w.cooldown * MP.daySeconds / 24
                     let hungry = 1 - f.crew.hungerIndex * 0.8
                     let aim = (u.ok("control") ? 1.0 : 0.5) * hungry * (0.6 + 0.4 * f.morale)
-                    let dmg = w.damage * w.vs[min(3, t.def.armor)] * aim
-                    let tAt = t.at ?? forces[t.force ?? 0]?.region ?? at
-                    fight("fire", d.key, t.def.key, [f.nation, t.nation], at)
+                    let dmg = Combat.damage(w.damage, vs: w.vs, armor: mark.armor, aim: aim)
+                    let tAt = mark.region
+                    fight("fire", d.key, t.kind, [f.nation, t.nation], at)
                     if w.flight > 0 {
                         strikes.append(CivStrike(shooter: uid, nation: f.nation, target: t.id, weapon: w.key, region: tAt, fired: time, impact: time + w.flight * MP.daySeconds / 24, damage: dmg))
                     } else { hit(t.id, dmg, by: f.nation, weapon: w.key, shooterKind: d.key, region: tAt) }
@@ -471,7 +476,7 @@ extension Civ {
         if !d.parts.isEmpty && t.hp > 0 {
             let part = d.parts[rng.index(d.parts.count)]
             let before = t.parts[part] ?? 1
-            t.parts[part] = max(0, before - dmg / d.hp * 3)
+            t.parts[part] = Combat.wear(part: before, hit: dmg, hp: d.hp)
             if before > 0 && t.parts[part]! <= 0 { fight("part", shooterKind, d.key, [n, t.nation], region, part: part) }
         }
         units[id] = t

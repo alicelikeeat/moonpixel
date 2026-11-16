@@ -185,8 +185,7 @@ extension Society {
         var found = false
         for dy in -2...2 { for dx in -2...2 where w.tile(2, pos.tile.x + dx, pos.tile.y + dy) == want { found = true } }
         if !found { return "station:" + r.station }
-        if let lack = r.inputs.first(where: { carried($0.0) < $0.1 }) { return "input:" + lack.0 }
-        for (g, q) in r.inputs { carry(g, -q) }
+        if let lack = Goods.take(r.inputs, from: pack) { return "input:" + lack }
         realm.player.craft = CraftJob(recipe: key, done: world.time + r.hours * Society.hour * realm.cfg.playerCraftSpeed)
         return nil
     }

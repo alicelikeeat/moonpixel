@@ -382,7 +382,7 @@ public final class Civ: Codable {
     }
 
     /// Recipes, upstream first: what feeds others is made before what uses it.
-    static var recipeOrder: [CivRecipe] { recipeOrderKeys.compactMap { CivRecipe.byKey[$0] } + CivRecipe.all.filter { !recipeOrderKeys.contains($0.key) } }
+    static var recipeOrder: [CivRecipe] { ContentRegistry.shared.recipeOrder }
     static let recipeOrderKeys = ["bread", "meal", "ration", "synth", "steel", "fuel", "parts", "electronics", "armor", "engine", "weapons", "core", "ammo"]
 
     /// What the city's works should make: everything its orders still need (and a reserve of fuel and

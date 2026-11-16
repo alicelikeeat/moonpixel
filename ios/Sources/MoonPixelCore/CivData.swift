@@ -345,7 +345,7 @@ public struct CivUnitDef: Codable, Equatable {
     public var cool: Double { thermal?.cool ?? 0 }
     public var sensor: Int { eyes?.range ?? 0 }
     public var stealth: Int { eyes?.stealth ?? 0 }
-    public var weapons: [CivWeapon] { weaponKeys.compactMap { CivWeapon.byKey[$0] } }
+    public var weapons: [CivWeapon] { ContentRegistry.shared.unitWeapons[key] ?? weaponKeys.compactMap { CivWeapon.byKey[$0] } }
     public var hangar: Int { hangarBay?.capacity ?? 0 }
     public var deckPerHour: Int { hangarBay?.deckPerHour ?? 0 }
     public var carrierBased: Bool { flight?.carrierBased ?? false }

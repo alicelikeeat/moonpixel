@@ -74,6 +74,9 @@ public final class ContentRegistry {
     public private(set) var foodsByKey: [String: CivFood] = [:], itemsByKey: [String: CivItem] = [:], facilitiesByKey: [String: CivFacility] = [:]
     public private(set) var recipesByKey: [String: CivRecipe] = [:], techsByKey: [String: CivTech] = [:], weaponsByKey: [String: CivWeapon] = [:], unitsByKey: [String: CivUnitDef] = [:]
     public private(set) var eatOrder: [String] = []
+    /// Worked out once when content changes, not on every use: recipes upstream first, each machine's weapons.
+    public private(set) var recipeOrder: [CivRecipe] = []
+    public private(set) var unitWeapons: [String: [CivWeapon]] = [:]
     public private(set) var packs: [String] = [ContentKey.builtin]
     /// Pictures the game can draw (a machine whose art is missing is refused rather than drawn as something else).
     public var art: Set<String> = []
@@ -98,6 +101,8 @@ public final class ContentRegistry {
         weaponsByKey = Dictionary(weapons.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
         unitsByKey = Dictionary(units.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
         eatOrder = CivFood.eatOrder(foods)
+        recipeOrder = Civ.recipeOrderKeys.compactMap { recipesByKey[$0] } + recipes.filter { !Civ.recipeOrderKeys.contains($0.key) }
+        unitWeapons = Dictionary(units.map { u in (u.key, u.weaponKeys.compactMap { weaponsByKey[$0] }) }, uniquingKeysWith: { a, _ in a })
     }
 
     func copy() -> ContentRegistry {

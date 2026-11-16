@@ -324,10 +324,10 @@ public final class Skirmish {
     /// Ask a line to make something. The price is taken now and given back if it is cancelled.
     @discardableResult public func queue(_ side: Int, _ kind: Int) -> Bool {
         let d = SkKind.all[kind]
-        guard winner == nil, available(side, kind), sides[side].credits >= d.cost else { return false }
+        guard winner == nil, available(side, kind) else { return false }
         if d.line == 0 && (sides[side].ready != nil || sides[side].making[0] != nil) { return false }       // one structure at a time
         if sides[side].queued[d.line].count >= 9 { return false }
-        sides[side].credits -= d.cost
+        guard Goods.take([("credits", d.cost)], from: chest(side)) == nil else { return false }
         if sides[side].making[d.line] == nil { sides[side].making[d.line] = kind; sides[side].progress[d.line] = 0 }
         else { sides[side].queued[d.line].append(kind) }
         return true
@@ -670,7 +670,7 @@ public final class Skirmish {
                 events.append(ev)
             } else {
                 events.append(SkEvent(kind: "shot", a: e.pos, b: nearestPoint(e.pos, target), side: e.side, what: e.kind))
-                hurt(target.id, d.damage * d.vs[target.def.armor.rawValue], by: e.side)
+                hurt(target.id, Combat.damage(d.damage, vs: d.vs, armor: target.def.armor.rawValue), by: e.side)
             }
         } else { entities[id] = e }
     }
@@ -684,7 +684,7 @@ public final class Skirmish {
         for id in structureIDs { if let o = entities[id], o.side != sh.side { let r = reach(sh.to, o); if r <= 28 { hit.append((id, r <= 14 ? 1 : 0.5)) } } }
         for (id, f) in hit.sorted(by: { $0.0 < $1.0 }) {
             guard let o = entities[id] else { continue }
-            hurt(id, d.damage * d.vs[o.def.armor.rawValue] * f, by: sh.side)
+            hurt(id, Combat.damage(d.damage, vs: d.vs, armor: o.def.armor.rawValue, aim: f), by: sh.side)
         }
     }
 
