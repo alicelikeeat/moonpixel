@@ -16,14 +16,18 @@ final class MetroSession: ObservableObject {
     @Published var tool = ""                 // "", street, avenue, R, C, I, dezone, bulldoze, or a service key
     @Published var overlay = ""
     @Published var speed = 1
-    @Published var money = 0, population = 0, income = 0, expense = 0
+    @Published var money = 0
+    @Published var population = 0
+    @Published var income = 0
+    @Published var expense = 0
     @Published var demand: (Double, Double, Double) = (0, 0, 0)
     @Published var date = ""
     @Published var info: [String] = []
     @Published var notice = ""
     @Published var showBudget = false
     @Published var taxes: [Double] = [0.09, 0.09, 0.09]
-    @Published var power = "", water = ""
+    @Published var power = ""
+    @Published var water = ""
     @Published var tick = 0
     var noticeUntil = 0.0
     var onExit: () -> Void = {}
