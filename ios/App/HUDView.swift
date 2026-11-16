@@ -66,6 +66,7 @@ struct HUDView: View {
             }
         }
         .overlay { if model.showRealm { RealmPanel() } }
+        .overlay { if let id = model.civDetail { CivNationSheet(id: id) } }
         .overlay { if model.showLaws { LawsPanel() } }
         .overlay { if model.showArsenal { ArsenalPanel() } }
         .overlay { if model.showBuild { BuildPanel() } }
@@ -337,7 +338,7 @@ struct HUDView: View {
             tab(L("城市", "Cities"), "building.columns.fill") { model.showCities = true }
             tab(L("战争", "War"), "shield.lefthalf.filled") { model.showWar = true }
             tab(L("纪事", "History"), "book.closed.fill") { model.showChronicle = true }
-            tab(L("三国", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
+            tab(L("国度", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
             tab(L("能力", "Powers"), "bolt.fill") { model.showArsenal = true }
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
             tab("", "plus.magnifyingglass") { model.scene?.zoomBy(0.5) }

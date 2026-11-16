@@ -12,7 +12,8 @@ extension Society {
     public struct RelationInfo { public var a = "", b = "", ca = "", cb = "", state = 0, value = 0.0, pact = false, years = 0.0 }
 
     public func nationInfos() -> [NationInfo] {
-        realm.nations.map { n in
+        // nations that have passed into history are read in the chronicle and the world list, not as cards
+        realm.nations.filter { ($0.status ?? 0) != 2 }.map { n in
             var i = NationInfo()
             i.id = n.id; i.name = n.name(zh: zh); i.color = n.color
             i.leader = agents[n.leader]?.name(zh: zh) ?? "-"

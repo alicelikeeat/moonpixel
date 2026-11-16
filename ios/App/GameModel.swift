@@ -56,6 +56,10 @@ final class GameModel: ObservableObject {
     @Published var eraLine = ""
     @Published var playerLine = ""
     @Published var showRealm = false
+    /// A nation of the known world shown in full (CivPanel.swift).
+    @Published var civDetail: Int?
+    /// The regional nation the player governs, if any (its rations, building, orders and forces are theirs).
+    @Published var civCommand: Int?
     @Published var showLaws = false
     @Published var lawBusy = false
     @Published var lawProgress = 0.0

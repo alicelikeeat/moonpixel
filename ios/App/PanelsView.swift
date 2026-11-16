@@ -59,21 +59,25 @@ struct Meter: View {
     }
 }
 
-/// Three nations: land, people, relations, pressure and fatigue, and what the player can do about them.
+/// The nations around the player's towns (cards: land, people, relations, pressure, fatigue and what the
+/// player can do about them), then every nation of the known world (CivWorldSection: as many as there are).
 struct RealmPanel: View {
     @EnvironmentObject var model: GameModel
 
     var body: some View {
-        GlassSheet(title: L("三国", "Three nations"), subtitle: model.eraLine, close: { model.showRealm = false }) {
+        GlassSheet(title: L("国度", "Nations"), subtitle: model.eraLine, close: { model.showRealm = false }) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(model.nationCards) { c in card(c) }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 8) {
+                        ForEach(model.nationCards) { c in card(c).frame(width: 236) }
+                    }
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(model.relationLines, id: \.self) { Text($0).font(.system(size: 12, design: .rounded)) }
                 }
                 Text(model.playerLine).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(Color(red: 0.75, green: 0.92, blue: 1))
                 actions
+                CivWorldSection()
                 Text(L("捐赠、战斗、修路拆桥、补给站和接纳难民都会真实改变粮食、补给、兵力和国家关系。斧砍树得木，镐采石得石，镐和斧可拆毁道路、桥梁和补给站。",
                        "Giving, fighting, building or breaking roads, bridges and depots, and sheltering refugees really change food, supply, armies and relations. The axe gives wood, the pick gives stone; both can break roads, bridges and depots."))
                     .font(.system(size: 10, design: .rounded)).opacity(0.6)

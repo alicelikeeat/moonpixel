@@ -119,7 +119,7 @@ extension GameModel {
         } else if e.era == 2 {
             eraLine = L("文明重启中：世间暂无人烟", "Civilisation is restarting: nobody is alive")
         } else {
-            eraLine = String(format: L("三国时代 %.1f 年 · 战争烈度 %d%% · 难民 %d", "Three nations for %.1f y · war intensity %d%% · refugees %d"), e.years, Int(e.intensity * 100), s.refugeeCount)
+            eraLine = String(format: L("列国并立 %.1f 年 · 战争烈度 %d%% · 难民 %d", "Many nations for %.1f y · war intensity %d%% · refugees %d"), e.years, Int(e.intensity * 100), s.refugeeCount)
         }
     }
 
