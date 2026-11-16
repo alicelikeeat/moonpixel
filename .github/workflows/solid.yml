@@ -53,6 +53,8 @@ jobs:
           # (a cast every 10 s for two minutes; the simulator's own delays decide which shape each picture catches)
           run --autostart 7 --3d --demo-swarm; sleep 20; for i in 5 6 7 8; do shot solid-$i-swarm.png; sleep 3; done
           run --autostart 7 --2d --demo-swarm; sleep 22; shot solid-9-swarm-flat.png; sleep 3; shot solid-10-swarm-flat.png
+          # command mode: the computer plays both sides at three times the speed
+          run --autostart 7 --2d --command-auto; sleep 30; shot command-1.png; sleep 25; shot command-2.png; sleep 25; shot command-3.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
           ls -la solid-*.png
           echo "===== crash reports ====="
@@ -63,7 +65,7 @@ jobs:
         if: always() && github.event_name == 'push'
         run: |
           mkdir -p docs/media/3d
-          for f in ios/solid-*.png ios/ui-3d-*.png; do
+          for f in ios/solid-*.png ios/command-*.png ios/ui-3d-*.png ios/ui-cmd-*.png; do
             [ -f "$f" ] || continue
             sips -Z 1280 -s format jpeg -s formatOptions 70 "$f" --out "docs/media/3d/$(basename "${f%.png}").jpg" > /dev/null 2>&1
           done
@@ -80,6 +82,7 @@ jobs:
           path: |
             ios/simbuild.log
             ios/solid-*.png
+            ios/command-*.png
 
   ui:
     runs-on: macos-latest
@@ -113,7 +116,7 @@ jobs:
         if: always() && github.event_name == 'push'
         run: |
           mkdir -p docs/media/3d
-          for f in ios/solid-*.png ios/ui-3d-*.png; do
+          for f in ios/solid-*.png ios/command-*.png ios/ui-3d-*.png ios/ui-cmd-*.png; do
             [ -f "$f" ] || continue
             sips -Z 1280 -s format jpeg -s formatOptions 70 "$f" --out "docs/media/3d/$(basename "${f%.png}").jpg" > /dev/null 2>&1
           done

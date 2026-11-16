@@ -87,6 +87,9 @@ final class GameModel: ObservableObject {
     var swarmCount = SwarmShapes.size(forMemoryGB: Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824)
     /// What the last swarm cost (shown in the performance panel).
     var swarmReport = ""
+    /// A battle of command mode, while one is being fought (the world waits meanwhile).
+    @Published var command: SkirmishSession?
+    var commandCount = 0
     private var perfLogAcc = 0.0
     @Published var mapPick: TilePos?
     @Published var mapZoom = 1.0
@@ -243,6 +246,14 @@ final class GameModel: ObservableObject {
                 guard let self = self else { return }
                 self.cheat("powers"); self.cheat("weather:3"); self.cheat("animals")
                 self.showArsenal = true
+            }
+        }
+        if args.contains("--command") || args.contains("--command-auto") {
+            // straight into a battle of command mode; with -auto the computer plays both sides, faster, for pictures
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self = self else { return }
+                self.startCommand()
+                if args.contains("--command-auto") { self.command?.sim.setComputer(0, true); self.command?.scene.speed = 3 }
             }
         }
         if args.contains("--demo-swarm") {

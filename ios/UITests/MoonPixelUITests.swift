@@ -232,4 +232,40 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertFalse(solid.exists, "back in 2D")
         XCTAssertTrue(status.exists, "the same game is still running")
     }
+
+    /// Command mode: a battle of its own beside the world. Enter it, order a reactor, see it finish, leave; the world is still there.
+    func testCommandModeBuildsAndReturnsToTheWorld() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--2d"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "the game started")
+        sleep(3)
+        more(app, "Command")
+        let credits = app.staticTexts["cmd-credits"].exists ? app.staticTexts["cmd-credits"] : app.descendants(matching: .any)["cmd-credits"]
+        XCTAssertTrue(credits.waitForExistence(timeout: 15), "the battle's HUD is up")
+        sleep(3)
+        shot("cmd-00-start")
+        XCTAssertFalse(app.buttons["Map"].exists, "the world's HUD is away while the battle runs")
+        let reactor = app.buttons["cmd-build-reactor"]
+        XCTAssertTrue(reactor.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["cmd-build-works"].isEnabled, "an engine works needs a refinery first")
+        reactor.tap()
+        // eight seconds of work: then it waits to be put down, and tapping it and the map puts it down
+        XCTAssertTrue(app.descendants(matching: .any)["cmd-cancel"].waitForExistence(timeout: 5), "a structure is being made")
+        sleep(11)
+        shot("cmd-01-ready")
+        reactor.tap(); sleep(1)
+        let win = app.windows.firstMatch
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.32)).tap(); sleep(2)
+        shot("cmd-02-placed")
+        app.buttons["cmd-army"].tap(); sleep(1)
+        XCTAssertTrue(app.descendants(matching: .any)["cmd-selection"].waitForExistence(timeout: 4), "the army is selected")
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap(); sleep(3)
+        shot("cmd-03-ordered")
+        app.buttons["cmd-exit"].tap()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "back in the world")
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS 'people'")).firstMatch.exists, "and the world went on waiting")
+        shot("cmd-04-back")
+    }
 }
