@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "namespace": "example",
+  "foods": [
+    {
+      "key": "example:canned_fish",
+      "en": "Canned fish",
+      "zh": "鱼罐头",
+      "nutrition": 1.6,
+      "shelfDays": 700,
+      "tech": "preserving"
+    }
+  ],
+  "facilities": [
+    {
+      "key": "example:cannery",
+      "en": "Cannery",
+      "zh": "罐头厂",
+      "tech": "preserving",
+      "cost": {
+        "timber": 10,
+        "stone": 10
+      },
+      "workers": 4,
+      "energy": 0
+    }
+  ],
+  "recipes": [
+    {
+      "key": "example:can_fish",
+      "facility": "example:cannery",
+      "inputs": {
+        "fish": 4,
+        "timber": 1
+      },
+      "outputs": {
+        "example:canned_fish": 3
+      },
+      "hours": 4,
+      "energy": 0,
+      "tech": "preserving"
+    }
+  ],
+  "variants": [
+    {
+      "key": "example:great_carrier",
+      "base": "moonpixel:carrier",
+      "en": "Great carrier",
+      "zh": "巨型航母",
+      "hangarBay": {
+        "capacity": 20,
+        "deckPerHour": 6
+      },
+      "crewing": {
+        "people": 600,
+        "upkeep": 30
+      },
+      "build": {
+        "tech": [
+          "carrier_ops"
+        ],
+        "facility": "deep_yard",
+        "stages": [
+          {
+            "steel": 300,
+            "engine": 12
+          },
+          {
+            "armor": 40,
+            "parts": 60
+          },
+          {
+            "electronics": 40,
+            "weapons": 8
+          }
+        ],
+        "hours": 120
+      }
+    }
+  ]
+}

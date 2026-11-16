@@ -33,7 +33,9 @@ final class RegistryTests: XCTestCase {
     """
 
     func testAPackAddsAWorksARecipeAndAVariantThatTheRulesUseAsTheyAre() throws {
-        let r = try ContentRegistry.builtin().adding(Data(RegistryTests.goodPack.utf8))
+        // the example pack shipped in the repository is the one tested
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../content/packs/example-cannery.json")
+        let r = try ContentRegistry.builtin().adding(try Data(contentsOf: file))
         ContentRegistry.shared = r
         XCTAssertNotNil(CivFacility.byKey["example:cannery"]); XCTAssertNotNil(CivUnitDef.byKey["example:great_carrier"])
         XCTAssertEqual(CivUnitDef.byKey["example:great_carrier"]!.hangar, 20)
