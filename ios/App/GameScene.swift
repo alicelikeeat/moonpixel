@@ -166,6 +166,7 @@ final class GameScene: SKScene {
             // wards last by the real clock; companions and animals need to know where the traveller is
             society.playerWarded = CACurrentMediaTime() < (society.realm.player.wardUntil ?? 0)
             society.viewer = player
+            society.explorer = player.tile                // where the traveller walks: lands are found as they go
             society.playerRest(dt)
             let threat = under ? Society.Threat() : society.playerThreat(at: player, dt: dt)
             var hurt = threat.died

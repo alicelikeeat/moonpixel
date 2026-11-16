@@ -420,6 +420,9 @@ public final class Society {
     var wardActive = false
     /// Where the player is, so companions can follow. Set by the scene; never saved.
     public var viewer: Vec2?
+    /// Where the traveller has walked to (set by the game, not by the camera): regions around it are found.
+    /// Saved in the civilisation layer as regions found, so it never needs saving itself.
+    public var explorer: TilePos?
     public var stats = SocietyStats()
     public internal(set) var log: [(t: Double, text: String)] = []
     public var onEvent: ((String, String, Vec2) -> Void)?

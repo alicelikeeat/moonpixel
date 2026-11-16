@@ -134,6 +134,8 @@ public struct Nation: Codable {
     public var powers: [String]?           // weapons, spells and arts this nation has learned
     public var arsenalPts: Double?
     public var studying: String?
+    /// 2: passed into history (no land, no people who still hold to it); its name and records remain.
+    public var status: Int?
     // refreshed every game hour
     public var pressure = 0.0, pFood = 0.0, pHousing = 0.0, pJobs = 0.0, pLand = 0.0
     public var pop = 0, identity = 0, towns = 0, soldiers = 0, food = 0.0
@@ -240,6 +242,8 @@ public struct Realm: Codable {
     var faunaBox: Fauna?
     var ledgerBox: CasualtyLedger?              // optional so that earlier saves load
     var contribBox: ContributionLog?
+    /// Nations, people, food, industry and arms beyond the detailed towns (Civ.swift); nil in older saves.
+    public var civBox: Civ?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
     public var fauna: Fauna { get { faunaBox ?? Fauna() } set { faunaBox = newValue } }
     public init() {}
@@ -249,6 +253,13 @@ public struct Realm: Codable {
     public func legion(_ id: Int) -> Legion? { legions.first { $0.id == id } }
     func ri(_ a: Int, _ b: Int) -> Int? { relations.firstIndex { ($0.a == a && $0.b == b) || ($0.a == b && $0.b == a) } }
     public func relation(_ a: Int, _ b: Int) -> Relation? { ri(a, b).map { relations[$0] } }
+    /// Relations exist only between nations that have met; this makes one when they do.
+    @discardableResult mutating func meet(_ a: Int, _ b: Int, at t: Double) -> Int {
+        if let r = ri(a, b) { return r }
+        var r = Relation(); r.a = min(a, b); r.b = max(a, b); r.since = t
+        relations.append(r)
+        return relations.count - 1
+    }
     public func atWar(_ a: Int, _ b: Int) -> Bool { relation(a, b)?.state == 1 }
     public func atWar(_ a: Int) -> Bool { relations.contains { $0.state == 1 && ($0.a == a || $0.b == a) } }
     public func active(_ kind: String, _ nation: Int, _ now: Double) -> Bool { mods.contains { $0.kind == kind && $0.nation == nation && $0.until > now } }
@@ -261,7 +272,7 @@ extension Society {
         "captured": ("%@ took %@ from %@", "%@ 从 %@ 手中夺取了 %@"), "repelled": ("%@ held against %@", "%@ 击退了 %@ 的进攻"),
         "fell": ("%@ has lost all its land; its people remember", "%@ 失去了全部领土，但国人未忘故国"),
         "unified": ("%@ united the land. An age of unity begins", "%@ 统一了天下，统一时代开始"),
-        "split": ("The united realm broke apart: %@, %@ and %@ stand again", "统一王朝分裂：%@、%@、%@ 再度鼎立"),
+        "split": ("The united realm broke apart: %@ stand again", "统一王朝分裂：%@ 各自独立"),
         "revived": ("%@ rose again at %@", "%@ 在 %@ 复国"), "submitted": ("%@ submitted to %@", "%@ 归附于 %@"),
         "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
         "harvest_good": ("Bumper harvest in %@", "%@ 喜获丰收"), "harvest_bad": ("Poor harvest in %@", "%@ 遭遇歉收"),
@@ -269,7 +280,7 @@ extension Society {
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
         "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
-        "resettled": ("New settlers begin again as three peoples", "新的移民以三国之名重新开始"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
+        "resettled": ("New settlers begin again: %@", "新的移民重新开始：%@"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
         "capital_named": ("%@ made %@ its capital", "%@ 定都 %@"), "capital_lost": ("%@ lost its capital %@", "%@ 的首都 %@ 失守"),
         "capital_moved": ("%@ moved its capital to %@", "%@ 迁都至 %@"), "capital_restored": ("%@ raised a new capital at %@", "%@ 在 %@ 重建首都"),
         "palace_ruined": ("The palace of %@ lies in ruins", "%@ 的王宫损毁"), "city_founded": ("%@ was founded for %@", "%@ 建城，归属 %@"),
@@ -293,7 +304,8 @@ extension Society {
                 nat.id = i + 1; nat.nameEn = n.0; nat.nameZh = n.1; nat.color = n.2; nat.techCount = legacyTech
                 realm.nations.append(nat)
             }
-            realm.relations = [(1, 2), (1, 3), (2, 3)].map { var r = Relation(); r.a = $0.0; r.b = $0.1; r.since = world.time; return r }
+            // they start out knowing each other: their villages lie close together
+            for a in realm.nations { for b in realm.nations where b.id > a.id { realm.meet(a.id, b.id, at: world.time) } }
             realm.eraSince = world.time
         }
         let towns = settlements.values.filter { !$0.abandoned }.sorted { $0.id < $1.id }
@@ -302,7 +314,7 @@ extension Society {
             // farthest-point seeds, then nearest seed
             var seeds: [Settlement] = []
             for n in realm.nations { if let t = towns.first(where: { $0.nation == n.id }) { seeds.append(t) } }
-            var free = realm.nations.map { $0.id }.filter { id in !towns.contains { $0.nation == id } }
+            var free = realm.nations.filter { ($0.status ?? 0) != 2 }.map { $0.id }.filter { id in !towns.contains { $0.nation == id } }
             var pool = open
             while !free.isEmpty && !pool.isEmpty {
                 let pick: Settlement
@@ -703,10 +715,13 @@ extension Society {
         // truces become peace after the minimum rest
         for r in realm.relations.indices where realm.relations[r].state == 2 && now - realm.relations[r].since >= cfg.minTruce * MP.year { setState(r, 0) }
         // balance of power: the two weaker nations lean on each other
-        let landed = realm.nations.filter { $0.exileSince == nil }
-        if landed.count == 3, let strong = landed.max(by: { power($0) < power($1) }) {
+        let landed = realm.nations.filter { $0.exileSince == nil && ($0.status ?? 0) != 2 }
+        // nations with towns side by side have met
+        for a in landed { for b in landed where b.id > a.id { realm.meet(a.id, b.id, at: now) } }
+        if landed.count >= 3, let strong = landed.max(by: { power($0) < power($1) }) {
             let share = powerShare(strong.id)
-            let others = landed.filter { $0.id != strong.id }
+            // the two strongest of the rest lean on each other (however many nations there are)
+            let others = landed.filter { $0.id != strong.id }.sorted { power($0) != power($1) ? power($0) > power($1) : $0.id < $1.id }
             if let r = realm.ri(others[0].id, others[1].id) {
                 if share > cfg.dominance && !realm.relations[r].pact && now >= (realm.cool["pact"] ?? 0) {
                     realm.relations[r].pact = true
@@ -868,48 +883,32 @@ extension Society {
             emit("independence", [s.name(zh: zh)], s.center.center)
         }
         let age = (world.time - realm.eraSince) / MP.year
-        if (realm.fracture >= 1 && age >= cfg.unityMin) || age >= cfg.unityMax { split() }
+        // a united realm breaks only when it has really come apart; it is never split on a timer
+        if realm.fracture >= 1 && age >= cfg.unityMin { split() }
     }
 
-    /// End of a united age: three nations that really hold land, drawn from where
-    /// people's loyalties, the map and the garrisons are now - not from old borders.
+    /// End of a united age. The nations that stand again are the ones people still hold to and that
+    /// really hold a town: as many as there are (two, five...), never a fixed number. The unifier keeps
+    /// what is loyal to it. Fewer than two such peoples: the realm stays one, and the strain eases.
     @discardableResult func split() -> Bool {
         let cfg = realm.cfg
-        var towns = settlements.values.filter { !$0.abandoned }.sorted { $0.id < $1.id }
-        var guardN = 0
-        while towns.count < 3 && guardN < 3 {
-            guardN += 1
-            // not enough towns: people leave the biggest one and found another
-            let lacking = realm.nations.map { $0.id }.filter { $0 != realm.unifier }
-            for s in towns { s.nation = realm.unifier }
-            if !secede(lacking[min(guardN - 1, lacking.count - 1)]) { break }
-            towns = settlements.values.filter { !$0.abandoned }.sorted { $0.id < $1.id }
-        }
-        if towns.count < 3 { return false }           // too few people to divide; tried again next hour
+        let towns = settlements.values.filter { !$0.abandoned }.sorted { $0.id < $1.id }
         func military(_ s: Settlement, _ n: Int) -> Double {
             guard let g = garrison(s, create: false), !g.members.isEmpty else { return 0 }
             return Double(g.members.filter { agents[$0]?.nation == n }.count) / Double(g.members.count)
         }
+        // each town goes to whoever its people and its garrison hold to most
         var owner: [Int: Int] = [:]
-        var seed: [Int: Settlement] = [:]
-        let order = realm.nations.sorted { $0.identity != $1.identity ? $0.identity > $1.identity : $0.id < $1.id }
-        for n in order {
-            let free = towns.filter { owner[$0.id] == nil }
-            let pick = free.max { a, b in
-                let sa = cfg.splitIdentity * identityShare(a, n.id) + cfg.splitMilitary * military(a, n.id)
-                let sb = cfg.splitIdentity * identityShare(b, n.id) + cfg.splitMilitary * military(b, n.id)
-                return sa != sb ? sa < sb : a.id > b.id }!
-            owner[pick.id] = n.id; seed[n.id] = pick
-        }
-        for s in towns where owner[s.id] == nil {
-            var best = 0, bestScore = -1.0
-            for n in realm.nations {
-                let d = (seed[n.id]!.center.center - s.center.center).length
-                let score = cfg.splitIdentity * identityShare(s, n.id) + cfg.splitGeography / (1 + d / 1500) + cfg.splitMilitary * military(s, n.id)
-                if score > bestScore { bestScore = score; best = n.id }
+        for s in towns {
+            var best = realm.unifier, bestScore = -1.0
+            for n in realm.nations where (n.status ?? 0) != 2 {
+                let score = cfg.splitIdentity * identityShare(s, n.id) + cfg.splitMilitary * military(s, n.id) + (n.id == realm.unifier ? 0.05 : 0)
+                if score > bestScore || (score == bestScore && n.id < best) { bestScore = score; best = n.id }
             }
             owner[s.id] = best
         }
+        let factions = Set(owner.values)
+        if factions.count < 2 { realm.fracture = 0.4; return false }
         for lg in realm.legions where lg.state != 0 { if let h = settlements[lg.home] { disband(lg, into: h) } }
         for s in towns {
             s.nation = owner[s.id]
@@ -918,15 +917,18 @@ extension Society {
         }
         realm.era = 0; realm.eraSince = world.time; realm.unifier = 0; realm.fracture = 0
         realm.counts.splits += 1
-        for r in realm.relations.indices { realm.relations[r].state = 2; realm.relations[r].since = world.time; realm.relations[r].value = 0; realm.relations[r].pact = false }
-        for k in realm.nations.indices {
+        let ids = factions.sorted()
+        for a in ids { for b in ids where b > a {
+            let r = realm.meet(a, b, at: world.time)
+            realm.relations[r].state = 2; realm.relations[r].since = world.time; realm.relations[r].value = 0; realm.relations[r].pact = false
+        } }
+        for k in realm.nations.indices where factions.contains(realm.nations[k].id) {
             realm.nations[k].exileSince = nil; realm.nations[k].leader = pickLeader(realm.nations[k].id); realm.nations[k].overT = 0
             realm.nations[k].moving = nil
-            // each new nation takes its seat where history and numbers point
             if let seat = bestSeat(realm.nations[k].id) { setCapital(realm.nations[k].id, seat, kind: "capital_restored", cause: "division"); realm.nations[k].everCapital = true }
         }
-        let names = realm.nations.map { $0.name(zh: zh) }
-        emit("split", names, .zero, nations: realm.nations.map { $0.id }, cause: "fracture", result: "three nations")
+        let names = ids.compactMap { realm.nation($0)?.name(zh: zh) }.joined(separator: zh ? "、" : ", ")
+        emit("split", [names], .zero, nations: ids, cause: "fracture", result: "\(ids.count) nations")
         refreshNations()
         return true
     }
@@ -1040,6 +1042,7 @@ extension Society {
         spouseHourly()
         for a in agents.values { if let r = a.refugee, now >= r { a.refugee = nil } }
         realm.depots.removeAll { world.tile(2, $0.x, $0.y) != T["crate"] }
+        civHourly()
     }
 
     /// Nobody is left. Say so, wait out any hold, then let new settlers begin as three peoples.
@@ -1055,8 +1058,23 @@ extension Society {
         if world.time < realm.immigrationHold || minPopulation <= 0 { return }
         let origin = settlements.values.sorted { $0.id < $1.id }.last?.center ?? TilePos(0, 0)
         for s in settlements.values where !s.abandoned { s.abandoned = true; detach(s) }
+        // the old nations have no one left: they pass into history. The newcomers are new peoples,
+        // one for each village they found (as many as there are), with names and ids never used before.
+        for k in realm.nations.indices where (realm.nations[k].status ?? 0) != 2 { realm.nations[k].status = 2 }
+        let before = Set(settlements.keys)
         bootstrap(origin: origin, villages: 3, per: 4)
-        if !agents.isEmpty { realm.era = 0; realm.eraSince = world.time; emit("resettled", [], origin.center) }
+        let villages = settlements.values.filter { !before.contains($0.id) && !$0.abandoned }.sorted { $0.id < $1.id }
+        var made: [Int] = []
+        for v in villages {
+            let id = newRealmNation(origin: "restart")
+            v.nation = id; made.append(id)
+            for m in v.members { agents[m]?.nation = id }
+        }
+        for a in made { for b in made where b > a { realm.meet(a, b, at: world.time) } }
+        if !agents.isEmpty {
+            realm.era = 0; realm.eraSince = world.time
+            emit("resettled", [made.compactMap { realm.nation($0)?.name(zh: zh) }.joined(separator: zh ? "、" : ", ")], origin.center)
+        }
     }
 
     /// Called for every death: armies shrink, nations tire, leaders are succeeded.

@@ -23,6 +23,7 @@ public struct CivPolity: Codable, Equatable {
     /// Figures of the day (for panels and choices).
     public var pop = 0, cityCount = 0, soldiers = 0, foodDays = 0.0, power = 0.0
     public var detailed = false                                 // also has towns at the detailed level (Society)
+    public var detailPop = 0                                    // its people in those towns (counted there)
     /// Run by the computer (arms, war, peace). Cities still look after their own food and roofs either way.
     public var ai = true
     /// Its cities choose what to build themselves (off: only what they are given, as in some tests).

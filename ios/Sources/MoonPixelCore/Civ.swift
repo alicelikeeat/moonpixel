@@ -167,6 +167,63 @@ public final class Civ: Codable {
     public var born: [Int] = []
     public init(seed: Int) { self.seed = seed; rng = RNG(seed: seed &* 7919 &+ 17) }
 
+    // Saving. The rules (`cfg`) are not saved: they belong to the version of the game. Every field is
+    // read if present, so a save from before a field existed still opens (with that field's default).
+    enum CodingKeys: String, CodingKey {
+        case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
+        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born
+    }
+    public func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: CodingKeys.self)
+        try c.encode(schema, forKey: .schema); try c.encode(seed, forKey: .seed); try c.encode(time, forKey: .time); try c.encode(day, forKey: .day); try c.encode(hourAcc, forKey: .hourAcc)
+        // dictionaries are written as lists in id order, so the same world always gives the same file
+        try c.encode(regions.keys.sorted().map { regions[$0]! }, forKey: .regions)
+        try c.encode(cities.keys.sorted().map { cities[$0]! }, forKey: .cities)
+        try c.encode(trips.keys.sorted().map { trips[$0]! }, forKey: .trips)
+        try c.encode(polities.keys.sorted().map { polities[$0]! }, forKey: .polities)
+        try c.encode(relations.keys.sorted().map { relations[$0]! }, forKey: .relations)
+        try c.encode(forces.keys.sorted().map { forces[$0]! }, forKey: .forces)
+        try c.encode(units.keys.sorted().map { units[$0]! }, forKey: .units)
+        try c.encode(projects.keys.sorted().map { projects[$0]! }, forKey: .projects)
+        try c.encode(strikes, forKey: .strikes); try c.encode(wrecks, forKey: .wrecks); try c.encode(news, forKey: .news); try c.encode(fights, forKey: .fights)
+        try c.encode(happened, forKey: .happened); try c.encode(intel, forKey: .intel)
+        try c.encode(nextCity, forKey: .nextCity); try c.encode(nextTrip, forKey: .nextTrip); try c.encode(nextForce, forKey: .nextForce)
+        try c.encode(nextUnit, forKey: .nextUnit); try c.encode(nextProject, forKey: .nextProject); try c.encode(nextNation, forKey: .nextNation)
+        try c.encode(totals, forKey: .totals); try c.encode(rng, forKey: .rng); try c.encode(born, forKey: .born)
+    }
+    public required init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        schema = try c.decodeIfPresent(Int.self, forKey: .schema) ?? 1
+        guard schema <= Civ.schemaVersion else { throw DecodingError.dataCorruptedError(forKey: .schema, in: c, debugDescription: "made by a newer version") }
+        seed = try c.decodeIfPresent(Int.self, forKey: .seed) ?? 0
+        time = try c.decodeIfPresent(Double.self, forKey: .time) ?? 0
+        day = try c.decodeIfPresent(Int.self, forKey: .day) ?? 0
+        hourAcc = try c.decodeIfPresent(Double.self, forKey: .hourAcc) ?? 0
+        for r in try c.decodeIfPresent([CivRegion].self, forKey: .regions) ?? [] { regions[r.key] = r }
+        for x in try c.decodeIfPresent([CivCity].self, forKey: .cities) ?? [] { cities[x.id] = x }
+        for x in try c.decodeIfPresent([CivTrip].self, forKey: .trips) ?? [] { trips[x.id] = x }
+        for x in try c.decodeIfPresent([CivPolity].self, forKey: .polities) ?? [] { polities[x.id] = x }
+        for x in try c.decodeIfPresent([CivRelation].self, forKey: .relations) ?? [] { relations[CivRelation.key(x.a, x.b)] = x }
+        for x in try c.decodeIfPresent([CivForce].self, forKey: .forces) ?? [] { forces[x.id] = x }
+        for x in try c.decodeIfPresent([CivUnit].self, forKey: .units) ?? [] { units[x.id] = x }
+        for x in try c.decodeIfPresent([CivProject].self, forKey: .projects) ?? [] { projects[x.id] = x }
+        strikes = try c.decodeIfPresent([CivStrike].self, forKey: .strikes) ?? []
+        wrecks = try c.decodeIfPresent([CivWreck].self, forKey: .wrecks) ?? []
+        news = try c.decodeIfPresent([CivNews].self, forKey: .news) ?? []
+        fights = try c.decodeIfPresent([CivFight].self, forKey: .fights) ?? []
+        happened = try c.decodeIfPresent([String: Int].self, forKey: .happened) ?? [:]
+        intel = try c.decodeIfPresent([String: CivSighting].self, forKey: .intel) ?? [:]
+        nextCity = try c.decodeIfPresent(Int.self, forKey: .nextCity) ?? (cities.keys.max() ?? 0) + 1
+        nextTrip = try c.decodeIfPresent(Int.self, forKey: .nextTrip) ?? (trips.keys.max() ?? 0) + 1
+        nextForce = try c.decodeIfPresent(Int.self, forKey: .nextForce) ?? (forces.keys.max() ?? 0) + 1
+        nextUnit = try c.decodeIfPresent(Int.self, forKey: .nextUnit) ?? (units.keys.max() ?? 0) + 1
+        nextProject = try c.decodeIfPresent(Int.self, forKey: .nextProject) ?? (projects.keys.max() ?? 0) + 1
+        nextNation = try c.decodeIfPresent(Int.self, forKey: .nextNation) ?? (polities.keys.max() ?? 0) + 1
+        totals = try c.decodeIfPresent(CivLedger.self, forKey: .totals) ?? CivLedger()
+        rng = try c.decodeIfPresent(RNG.self, forKey: .rng) ?? RNG(seed: seed)
+        born = try c.decodeIfPresent([Int].self, forKey: .born) ?? []
+    }
+
     var dayLength: Double { MP.daySeconds }
     public var yearDays: Double { cfg.daysPerYear }
     public var years: Double { Double(day) / cfg.daysPerYear }
