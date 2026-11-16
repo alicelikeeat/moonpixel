@@ -272,4 +272,41 @@ final class SolidTests: XCTestCase {
         try head.withUnsafeBufferPointer { Data(buffer: $0) }.write(to: URL(fileURLWithPath: path))
         print("SOLID preview: \(out.count / 12) triangles around \(town.center) -> \(path)")
     }
+
+    /// Building, breaking or felling changes the structure hash (shown at once); growth does not (it can wait);
+    /// only changes on a chunk's border change what its neighbours read.
+    func testStructureAndEdgeHashesTellUrgentChanges() {
+        let solid = Content.shared.solid
+        let soft = (1..<solid.count).filter { !solid[$0] }, hard = (1..<solid.count).first { solid[$0] }!
+        var l = [[UInt8]](repeating: [UInt8](repeating: 0, count: 1024), count: 4)
+        let base = Mesher3D.structureHash(l), edge = Mesher3D.edgeHash(l)
+        var grow = l; grow[2][5 * 32 + 5] = UInt8(soft[0]); var grown = grow; grown[2][5 * 32 + 5] = UInt8(soft[1])
+        XCTAssertEqual(Mesher3D.structureHash(grow), Mesher3D.structureHash(grown), "a crop growing is not urgent")
+        XCTAssertEqual(Mesher3D.structureHash(grow), base)
+        var wall = l; wall[1][5 * 32 + 5] = 3
+        XCTAssertNotEqual(Mesher3D.structureHash(wall), base, "a wall going up is")
+        var tree = l; tree[2][5 * 32 + 5] = UInt8(hard)
+        XCTAssertNotEqual(Mesher3D.structureHash(tree), base, "so is something solid appearing or going")
+        XCTAssertEqual(Mesher3D.edgeHash(wall), edge, "inside the chunk: the neighbours need not know")
+        for t in [0, 31, 31 * 32, 1023, 7 * 32 + 31] {
+            var e = l; e[1][t] = 3
+            XCTAssertNotEqual(Mesher3D.edgeHash(e), edge, "on the border at \(t): they must")
+        }
+        l[0][17 * 32] = 9
+        XCTAssertNotEqual(Mesher3D.edgeHash(l), edge, "ground on the border counts too")
+    }
+
+    func testPickingHitsWhatStandsInFrontOfTheGround() {
+        // flat ground; a wall on tile (10, 5) and a tree on (14, 5); the eye looks along +x, slightly down
+        func standing(_ x: Int, _ z: Int) -> (Float, Terrain3D.Hit) { z == 5 && x == 10 ? (1.5, .wall) : (z == 5 && x == 14 ? (2.5, .object) : (0, .ground)) }
+        let eye = SIMD3<Float>(2.5, 1.2, 5.5)
+        let low = Terrain3D.pickThing(origin: eye, direction: SIMD3(1, -0.02, 0), ground: { _, _ in 0 }, standing: standing)
+        XCTAssertEqual(low?.1, .wall, "the wall's side is hit, not the ground behind it")
+        XCTAssertEqual(low?.0, TilePos(10, 5).center)
+        let over = Terrain3D.pickThing(origin: SIMD3(2.5, 3, 5.5), direction: SIMD3(1, -0.08, 0), ground: { _, _ in 0 }, standing: standing)
+        XCTAssertEqual(over?.1, .object, "over the wall, the tall tree")
+        let down = Terrain3D.pickThing(origin: SIMD3(6.5, 10, 2.5), direction: SIMD3(0, -1, 0), ground: { _, _ in 0 }, standing: standing)
+        XCTAssertEqual(down?.1, .ground)
+        XCTAssertEqual(down!.0.x, 6.5 * 16, accuracy: 0.5)
+    }
 }

@@ -131,6 +131,19 @@ public enum Terrain3D {
         return groundY(level: lv, ground: world.tile(MP.lGround, t.x, t.y), structure: world.tile(MP.lStruct, t.x, t.y), depth: world.depth)
     }
 
+    public enum Hit: Equatable { case ground, wall, object }
+
+    /// What a ray meets first: the ground, or something standing on it (a wall, a tree, a rock) which
+    /// is as tall as `standing` says and is hit on its sides as well as its top. Something standing is
+    /// reported at the middle of its tile, so a tap on a tree's crown means that tree, not the ground behind.
+    public static func pickThing(origin: SIMD3<Float>, direction: SIMD3<Float>, maxDistance: Float = 400,
+                                 ground: (Int, Int) -> Float, standing: (Int, Int) -> (Float, Hit)) -> (Vec2, Hit)? {
+        guard let p = pick(origin: origin, direction: direction, maxDistance: maxDistance, height: { ground($0, $1) + standing($0, $1).0 }) else { return nil }
+        let t = TilePos(Int((p.x / 16).rounded(.down)), Int((p.y / 16).rounded(.down)))
+        let s = standing(t.x, t.y)
+        return s.0 > 0 ? (t.center, s.1) : (p, .ground)
+    }
+
     /// Where a ray meets the ground, as a point of the world; nil when it leaves upwards or runs out.
     /// `height` gives the top of the ground of a tile.
     public static func pick(origin: SIMD3<Float>, direction: SIMD3<Float>, maxDistance: Float = 400, height: (Int, Int) -> Float) -> Vec2? {
@@ -216,6 +229,25 @@ public enum Mesher3D {
         case "wall": return t.key == "cave_wall" ? 30 : 24
         default: return 0
         }
+    }
+
+    /// What the player builds, breaks or opens in a chunk: every structure, and whether each tile holds
+    /// something solid (a tree felled, a rock broken). Crops growing and the like leave it unchanged, so
+    /// a renderer can tell a change it must show at once from one that can wait.
+    public static func structureHash(_ layers: [[UInt8]]) -> UInt64 {
+        let solid = Content.shared.solid
+        var h: UInt64 = 1469598103934665603
+        for v in layers[1] { h = (h ^ UInt64(v)) &* 1099511628211 }
+        for v in layers[2] { h = (h ^ (solid[Int(v)] ? 1 : 0)) &* 1099511628211 }
+        return h
+    }
+
+    /// The edge rows and columns of the ground and structure layers: what the four neighbours read
+    /// (`ChunkInput3D`). When it changes, they must be meshed again too.
+    public static func edgeHash(_ layers: [[UInt8]]) -> UInt64 {
+        var h: UInt64 = 1469598103934665603
+        for l in 0..<2 { for k in 0..<32 { for t in [k, 31 * 32 + k, k * 32, k * 32 + 31] { h = (h ^ UInt64(layers[l][t])) &* 1099511628211 } } }
+        return h
     }
 
     public static func build(_ input: ChunkInput3D, gen: Generator) -> ChunkMesh3D {

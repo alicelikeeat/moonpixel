@@ -41,7 +41,15 @@ final class SolidRenderer {
     private var distance: Float = 12
 
     // chunks
-    private struct ChunkEntry { var entity: ModelEntity; var key: BakeKey; var heights: [Float]; var ground: TextureResource; var groundHash: UInt64; var builtAt: Double; var props: [Entity] }
+    private struct ChunkEntry { var entity: ModelEntity; var key: BakeKey; var heights: [Float]; var ground: TextureResource; var groundHash: UInt64; var builtAt: Double; var props: [Entity]
+        /// What was built, broken or opened in it, and what its neighbours read of its border, as shown.
+        var structHash: UInt64; var edgeHash: UInt64 }
+    /// Chunks to mesh again although their own revision did not change: a neighbour's border did.
+    private var forced: Set<Int64> = []
+    /// Chunks sent at once because something was built, broken or opened (no waiting behind growth).
+    private var urgent: Set<Int64> = []
+    private var urgentSent = 0, staleShown = 0, oldestStale = 0.0
+    private var staleSince: [Int64: Double] = [:]
     /// When a chunk already on screen was last sent to be re-meshed (see `updateChunks`).
     private var lastRefresh = 0.0
     private var chunks: [Int64: ChunkEntry] = [:]
@@ -56,7 +64,8 @@ final class SolidRenderer {
     private var lightColor = UIColor.white
 
     // figures
-    private var meshes: [String: MeshResource] = [:]
+    /// Figure meshes, bounded by an estimate of their bytes; the least used go first.
+    private let meshes = ByteLRU<String, MeshResource>(budget: 24 << 20)
     private var agents: [Int: ModelEntity] = [:]
     private var soldiers: [Int: ModelEntity] = [:]
     private var shownSoldiers: Set<Int> = []
@@ -122,10 +131,10 @@ final class SolidRenderer {
 
     /// A cached model of a flat-coloured mesh (figures, roofs, markers).
     private func model3D(key: String, _ make: () -> Mesh3D) -> ModelComponent? {
-        if let r = meshes[key] { return ModelComponent(mesh: r, materials: [solidMaterial]) }
-        if meshes.count > 3000 { meshes.removeAll() }                 // bounded: rebuilt on demand
-        guard let r = resource(make()) else { return nil }
-        meshes[key] = r
+        if let r = meshes.get(key) { return ModelComponent(mesh: r, materials: [solidMaterial]) }
+        let m = make()
+        guard let r = resource(m) else { return nil }
+        meshes.put(key, r, bytes: m.positions.count * 32 + m.indices.count * 4 + 256)
         return ModelComponent(mesh: r, materials: [solidMaterial])
     }
 
@@ -248,18 +257,27 @@ final class SolidRenderer {
             let k = MP.chunkKey(cx, cy)
             visible.insert(k)
             let key = BakeKey(world: wid, epoch: ep, depth: depth, chunk: k, revision: world.revision(cx, cy))
-            if chunks[k]?.key == key { continue }
-            // a chunk that is already drawn and has changed (crops grow, walls go up; at 64x this is
-            // constant) is re-meshed at most every two seconds, so the picture never starves the game
-            if let shown = chunks[k], now - shown.builtAt < 2 { continue }
+            if chunks[k]?.key == key && !forced.contains(k) { staleSince[k] = nil; continue }
+            if chunks[k] != nil && staleSince[k] == nil { staleSince[k] = now }
+            // what the player built, broke or opened is shown at once; other changes (crops grow; at 64x
+            // this is constant) are re-meshed at most every two seconds, so the picture never starves the game
+            var now1 = false
+            if let shown = chunks[k] {
+                let hash = Mesher3D.structureHash(world.chunk(cx, cy).layers)
+                now1 = hash != shown.structHash || forced.contains(k)
+                if now1 { urgent.insert(k) } else if now - shown.builtAt < 2 { continue }
+            }
             let dx = Float(cx * 32 + 16) - target.x, dz = Float(cy * 32 + 16) - target.z
-            queue.want(key, priority: Double(dx * dx + dz * dz) + (chunks[k] != nil ? 1e6 : 0))      // missing chunks first
+            queue.want(key, priority: now1 ? -1e6 + Double(dx * dx + dz * dz) : Double(dx * dx + dz * dz) + (chunks[k] != nil ? 1e6 : 0))      // urgent, then missing, then the rest
         } }
+        staleShown = staleSince.count
+        oldestStale = staleSince.values.map { now - $0 }.max() ?? 0
         queue.drop { !visible.contains($0.chunk) || $0.world != wid || $0.epoch != ep || $0.depth != depth }
         for key in queue.next() {
             // refreshes of chunks already on screen are also spaced out as a whole: four a second at most
             let had = chunks[key.chunk]
-            if had != nil {
+            if urgent.remove(key.chunk) != nil { urgentSent += 1; forced.remove(key.chunk) }
+            else if had != nil {
                 if now - lastRefresh < 0.25 { _ = queue.finished(key, current: nil); continue }
                 lastRefresh = now
             }
@@ -274,8 +292,9 @@ final class SolidRenderer {
                 var hash: UInt64 = 1469598103934665603
                 for l in 0..<2 { for v in input.layers[l] { hash = (hash ^ UInt64(v)) &* 1099511628211 } }
                 let cg = hash == oldHash ? nil : PixelArt.bakeGround(layers: input.layers).cgImage
+                let sh = Mesher3D.structureHash(input.layers), eh = Mesher3D.edgeHash(input.layers)
                 let took = CACurrentMediaTime() - t0
-                DispatchQueue.main.async { self?.built(key, mesh, cg, hash, took) }
+                DispatchQueue.main.async { self?.built(key, mesh, cg, hash, took, structHash: sh, edgeHash: eh) }
             }
         }
         for (k, e) in chunks {
@@ -284,11 +303,12 @@ final class SolidRenderer {
                 e.entity.removeFromParent()
                 billboards.removeAll { b in e.props.contains { $0 === b } }
                 chunks[k] = nil
+                staleSince[k] = nil; forced.remove(k); urgent.remove(k)
             }
         }
     }
 
-    private func built(_ key: BakeKey, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ groundHash: UInt64, _ took: Double) {
+    private func built(_ key: BakeKey, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ groundHash: UInt64, _ took: Double, structHash: UInt64, edgeHash: UInt64) {
         guard let model = model, model.world != nil, model.render3D else { _ = queue.finished(key, current: nil); return }
         let world = model.activeWorld
         let cx = MP.keyCX(key.chunk), cy = MP.keyCY(key.chunk)
@@ -316,7 +336,12 @@ final class SolidRenderer {
             for p in old.props { p.removeFromParent() }
             billboards.removeAll { b in old.props.contains { $0 === b } }
         }
-        var entry = ChunkEntry(entity: entity, key: key, heights: mesh.heights, ground: tex, groundHash: groundHash, builtAt: CACurrentMediaTime(), props: [])
+        var entry = ChunkEntry(entity: entity, key: key, heights: mesh.heights, ground: tex, groundHash: groundHash, builtAt: CACurrentMediaTime(), props: [],
+                               structHash: structHash, edgeHash: edgeHash)
+        // its border changed: the neighbours on screen read it, so they are meshed again too, at once
+        if let old = old, old.edgeHash != edgeHash {
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { let n = MP.chunkKey(cx + dx, cy + dy); if chunks[n] != nil { forced.insert(n) } }
+        }
         entity.model = ModelComponent(mesh: res, materials: mesh.solid.isEmpty ? [material(tex)] : [material(tex), solidMaterial])
         // imported pictures placed in the world stand upright and turn to the camera
         for p in world.chunk(cx, cy).props {
@@ -591,12 +616,22 @@ final class SolidRenderer {
     func pickGround(_ p: CGPoint) -> Vec2? {
         guard let model = model, model.world != nil, let ray = view.ray(through: p) else { return nil }
         let world = model.activeWorld
-        // walls count as ground one and a half tiles up, so a tap on a wall means that wall
-        return Terrain3D.pick(origin: ray.origin, direction: ray.direction) { [weak self] x, z in
-            guard let self = self else { return 0 }
-            return self.groundY(world, TilePos(x, z).center)
-        }
+        // walls and solid things (trees, rocks, furniture) are hit on their sides and tops, so a tap on
+        // them means them, not the ground behind
+        let solid = Content.shared.solid
+        let hit = Terrain3D.pickThing(origin: ray.origin, direction: ray.direction, ground: { [weak self] x, z in
+            self?.groundY(world, TilePos(x, z).center) ?? 0
+        }, standing: { x, z in
+            let l = world.chunk(x >> 5, z >> 5).layers, t = (z & 31) * 32 + (x & 31)
+            if solid[Int(l[1][t])] { return (1.5, .wall) }
+            if l[2][t] != 0 && solid[Int(l[2][t])] { return (1.2, .object) }
+            return (0, .ground)
+        })
+        lastHit = hit?.1
+        return hit?.0
     }
+    /// What the last tap in 3D landed on (for the info shown and for tests).
+    private(set) var lastHit: Terrain3D.Hit?
 
     // MARK: effects
 
@@ -732,9 +767,12 @@ final class SolidRenderer {
     var chunkKeys: Set<Int64> { Set(chunks.keys) }
 
     /// Memory is short: forget every cached figure mesh and spare entity (they are rebuilt when needed).
-    func trim() { meshes.removeAll(); pool.removeAll() }
+    func trim() { meshes.trim(to: 0); pool.removeAll() }
 
-    var report: String { "3D: \(chunks.count) chunks, \(agents.count + soldiers.count) figures, \(particles.count) particles" }
+    var report: String {
+        String(format: "3D: %d chunks (%d behind, oldest %.1f s; %d urgent sent, %d stale dropped), %d figures, %d particles, meshes %.1f MB (%d evicted)",
+               chunks.count, staleShown, oldestStale, urgentSent, queue.stale, agents.count + soldiers.count, particles.count, Double(meshes.bytes) / 1048576, meshes.evictions)
+    }
 }
 
 private extension Prop {
