@@ -268,4 +268,46 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS 'people'")).firstMatch.exists, "and the world went on waiting")
         shot("cmd-04-back")
     }
+
+    /// Metro mode: found a city, lay a street, zone along it, open the budget, leave; the city is kept.
+    func testMetroModeBuildsAndKeepsTheCity() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--2d"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "the game started")
+        sleep(3)
+        more(app, "Metro")
+        let money = app.descendants(matching: .any)["metro-money"]
+        XCTAssertTrue(money.waitForExistence(timeout: 15), "the city's HUD is up")
+        sleep(2)
+        shot("metro-00-start")
+        let before = money.label
+        app.buttons["metro-group-roads"].tap(); sleep(1)
+        app.buttons["metro-tool-street"].tap(); sleep(1)
+        let win = app.windows.firstMatch
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45)).press(forDuration: 0.2, thenDragTo: win.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.45)))
+        sleep(2)
+        shot("metro-01-street")
+        XCTAssertNotEqual(money.label, before, "a street was paid for")
+        app.buttons["metro-group-zones"].tap(); sleep(1)
+        app.buttons["metro-tool-R"].tap(); sleep(1)
+        win.coordinate(withNormalizedOffset: CGVector(dx: 0.32, dy: 0.38)).press(forDuration: 0.2, thenDragTo: win.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.52)))
+        sleep(2)
+        shot("metro-02-zoned")
+        app.buttons["metro-done"].tap(); sleep(1)
+        app.buttons["metro-budget"].tap(); sleep(1)
+        XCTAssertTrue(app.descendants(matching: .any)["metro-budget-line"].waitForExistence(timeout: 4), "the budget opens")
+        shot("metro-03-budget")
+        app.buttons["metro-budget-close"].tap(); sleep(1)
+        let spent = money.label
+        app.buttons["metro-exit"].tap()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "back in the world")
+        more(app, "Metro")
+        XCTAssertTrue(money.waitForExistence(timeout: 15))
+        sleep(1)
+        XCTAssertEqual(money.label, spent, "the city was kept as it was left")
+        shot("metro-04-reopened")
+        app.buttons["metro-exit"].tap()
+    }
 }

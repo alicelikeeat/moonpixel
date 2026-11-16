@@ -89,6 +89,8 @@ final class GameModel: ObservableObject {
     var swarmReport = ""
     /// A battle of command mode, while one is being fought (the world waits meanwhile).
     @Published var command: SkirmishSession?
+    /// The city of metro mode, while it is open (the world waits meanwhile).
+    @Published var metro: MetroSession?
     var commandCount = 0
     private var perfLogAcc = 0.0
     @Published var mapPick: TilePos?
@@ -254,6 +256,15 @@ final class GameModel: ObservableObject {
                 guard let self = self else { return }
                 self.startCommand()
                 if args.contains("--command-auto") { self.command?.sim.setComputer(0, true); self.command?.scene.pace = 3 }
+            }
+        }
+        if args.contains("--metro") || args.contains("--metro-auto") {
+            // straight into metro mode; with -auto a ready-made town grows at full speed (for pictures)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self = self else { return }
+                self.startMetro(fresh: args.contains("--metro-auto"))
+                if args.contains("--metro-auto") { self.metro?.city.layOutDemo(); self.metro?.speed = 3 }
+                if let i = args.firstIndex(of: "--metro-view"), i + 1 < args.count { self.metro?.overlay = args[i + 1] }
             }
         }
         if args.contains("--demo-swarm") {

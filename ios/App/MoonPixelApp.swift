@@ -16,7 +16,7 @@ struct MoonPixelApp: App {
                 .persistentSystemOverlays(.hidden)
         }
         .onChange(of: phase) { _, p in
-            if p != .active { model.save(announce: false) }      // iOS may kill a backgrounded app at any time
+            if p != .active { model.save(announce: false); model.metro?.save() }      // iOS may kill a backgrounded app at any time
         }
     }
 }
@@ -26,7 +26,9 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            if let battle = model.command {
+            if let city = model.metro {
+                MetroView(session: city)
+            } else if let battle = model.command {
                 CommandView(session: battle)
             } else if let scene = model.scene {
                 SpriteView(scene: scene, preferredFramesPerSecond: 60).ignoresSafeArea()

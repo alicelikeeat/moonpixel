@@ -55,6 +55,10 @@ jobs:
           run --autostart 7 --2d --demo-swarm; sleep 22; shot solid-9-swarm-flat.png; sleep 3; shot solid-10-swarm-flat.png
           # command mode: the computer plays both sides at three times the speed
           run --autostart 7 --2d --command-auto; sleep 30; shot command-1.png; sleep 25; shot command-2.png; sleep 25; shot command-3.png
+          # metro mode: a ready-made town at full speed, then the traffic and land-value views
+          run --autostart 7 --2d --metro-auto; sleep 45; shot metro-1.png; sleep 30; shot metro-2.png
+          run --autostart 7 --2d --metro-auto --metro-view traffic; sleep 50; shot metro-3-traffic.png
+          run --autostart 7 --2d --metro-auto --metro-view value; sleep 50; shot metro-4-value.png
           xcrun simctl terminate "$UDID" org.moonpixel.game
           ls -la solid-*.png
           echo "===== crash reports ====="
@@ -65,7 +69,7 @@ jobs:
         if: always() && github.event_name == 'push'
         run: |
           mkdir -p docs/media/3d
-          for f in ios/solid-*.png ios/command-*.png ios/ui-3d-*.png ios/ui-cmd-*.png; do
+          for f in ios/solid-*.png ios/command-*.png ios/metro-*.png ios/ui-3d-*.png ios/ui-cmd-*.png ios/ui-metro-*.png; do
             [ -f "$f" ] || continue
             sips -Z 1280 -s format jpeg -s formatOptions 70 "$f" --out "docs/media/3d/$(basename "${f%.png}").jpg" > /dev/null 2>&1
           done
@@ -83,6 +87,7 @@ jobs:
             ios/simbuild.log
             ios/solid-*.png
             ios/command-*.png
+            ios/metro-*.png
 
   ui:
     runs-on: macos-latest
@@ -116,7 +121,7 @@ jobs:
         if: always() && github.event_name == 'push'
         run: |
           mkdir -p docs/media/3d
-          for f in ios/solid-*.png ios/command-*.png ios/ui-3d-*.png ios/ui-cmd-*.png; do
+          for f in ios/solid-*.png ios/command-*.png ios/metro-*.png ios/ui-3d-*.png ios/ui-cmd-*.png ios/ui-metro-*.png; do
             [ -f "$f" ] || continue
             sips -Z 1280 -s format jpeg -s formatOptions 70 "$f" --out "docs/media/3d/$(basename "${f%.png}").jpg" > /dev/null 2>&1
           done

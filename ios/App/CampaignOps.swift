@@ -527,6 +527,7 @@ struct MorePanel: View {
                     Chip(title: model.showPerf ? L("关闭性能", "Hide perf") : L("性能", "Performance"), icon: "speedometer", id: "Perf") {
                         model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
                     }
+                    Chip(title: L("都市模式", "Metro"), icon: "building.2.crop.circle.fill", id: "Metro") { model.showMore = false; model.startMetro() }
                     Chip(title: L("指挥模式", "Command"), icon: "flag.2.crossed.fill", id: "Command") { model.showMore = false; model.startCommand() }
                     Chip(title: model.render3D ? L("2D 视角", "2D view") : L("3D 视角", "3D view"), icon: model.render3D ? "square.grid.3x3.fill" : "cube.fill", id: "View3D") {
                         model.showMore = false; model.render3D.toggle()

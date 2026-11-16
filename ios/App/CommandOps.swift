@@ -18,3 +18,24 @@ extension GameModel {
         command = session
     }
 }
+
+extension GameModel {
+    var metroFile: URL { saveDir.appendingPathComponent("metro.json") }
+
+    /// Open this world's city (or found one): it is kept in the world's folder and goes with the world.
+    func startMetro(fresh: Bool = false) {
+        guard metro == nil, let w = world else { return }
+        var city: Metro?
+        if !fresh, let data = try? Data(contentsOf: metroFile) { city = try? JSONDecoder().decode(Metro.self, from: data) }
+        if city == nil && !fresh && FileManager.default.fileExists(atPath: metroFile.path) {
+            // a city that cannot be read is kept aside, never overwritten
+            try? FileManager.default.moveItem(at: metroFile, to: saveDir.appendingPathComponent("metro.unreadable-\(Int(Date().timeIntervalSince1970)).json"))
+            showToast(L("城市存档无法读取，已另存并新建城市", "The city could not be read; it was kept aside and a new one founded"))
+        }
+        let c = city ?? Metro(seed: w.seed &+ 4049, worldSeed: w.seed, name: worldName.isEmpty ? L("新月城", "Moonhaven") : worldName + L("市", " City"))
+        let session = MetroSession(city: c, file: metroFile)
+        session.onExit = { [weak self] in self?.metro = nil }
+        session.refresh()
+        metro = session
+    }
+}
