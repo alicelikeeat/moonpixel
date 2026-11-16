@@ -24,6 +24,7 @@ public struct WorldCommand: Codable, Equatable {
         case ration(city: Int, policy: CivRation)
         case ship(from: Int, to: Int, goods: [String: Double])
         case foundNation(city: Int, people: Int, region: Int64)
+        case protectTower(tower: Int, on: Bool)
         case declare(on: Int)
         case peace(with: Int)
     }
@@ -132,6 +133,11 @@ extension Civ {
             guard let n = foundNation(from: c.id, people: k, at: region) else { return no("cannot_found") }
             c.rev += 1
             return yes(n)
+        case .protectTower(let tid, let on):
+            guard let t = towerIndex.towers[tid], t.nation == cmd.issuer || cmd.issuer == t.nation else { return no("not_yours") }
+            t.protected = on
+            t.history.append("d\(day): " + (on ? "protected by its owner" : "protection lifted"))
+            return yes(tid)
         case .declare(let o):
             guard polities[o] != nil, o != cmd.issuer else { return no("no_nation") }
             declare(cmd.issuer, on: o)

@@ -67,6 +67,7 @@ struct HUDView: View {
         }
         .overlay { if model.showRealm { RealmPanel() } }
         .overlay { if let id = model.civDetail { CivNationSheet(id: id) } }
+        .overlay { if let id = model.towerDetail { TowerSheet(id: id) } }
         .overlay { if model.showLaws { LawsPanel() } }
         .overlay { if model.showArsenal { ArsenalPanel() } }
         .overlay { if model.showBuild { BuildPanel() } }

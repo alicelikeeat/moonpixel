@@ -151,6 +151,7 @@ struct CivNationSheet: View {
                         CivFoodCard(c: c, nation: id)
                         research(p)
                         CivArmsCard(c: c, nation: id, commanding: model.civCommand == id)
+                        TowerList(c: c, nation: id)
                         neighbours(p, c)
                         news(p, c)
                     }

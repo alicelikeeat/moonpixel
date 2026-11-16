@@ -60,6 +60,8 @@ final class GameModel: ObservableObject {
     @Published var civDetail: Int?
     /// The regional nation the player governs, if any (its rations, building, orders and forces are theirs).
     @Published var civCommand: Int?
+    /// A tower shown floor by floor (TowerPanel.swift).
+    @Published var towerDetail: Int?
     @Published var showLaws = false
     @Published var lawBusy = false
     @Published var lawProgress = 0.0
