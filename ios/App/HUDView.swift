@@ -11,7 +11,7 @@ struct HUDView: View {
     @State private var toastVisible = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {                         // whatever grows, the top row (clock, speed) stays on screen
             if model.showMap { mapOverlay }
             VStack(spacing: 8) {
                 HStack(alignment: .top, spacing: 8) {
@@ -38,8 +38,8 @@ struct HUDView: View {
                     Spacer(minLength: 0)
                     VStack(alignment: .trailing, spacing: 8) {
                         speedBar
-                        noticeStack
-                        if let info = model.selected { agentCard(info) }
+                        // the card of someone selected takes the place of the notices: both never fit together
+                        if let info = model.selected { agentCard(info) } else { noticeStack }
                     }
                 }
                 if model.lawSavePending { savePendingBar }
