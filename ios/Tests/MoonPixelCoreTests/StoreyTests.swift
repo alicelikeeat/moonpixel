@@ -108,4 +108,28 @@ final class StoreyTests: XCTestCase {
         XCTAssertFalse(mesh.ground.isEmpty); XCTAssertFalse(mesh.solid.isEmpty)
         XCTAssertLessThan(mesh.ground.positions.count, 4 * 40, "only the floors are drawn, not a whole plane of air")
     }
+
+    func testAFourStoreyHouseStandsByTheRulesAndCanBeClimbed() {
+        let s = makeSociety(5)
+        let o = site(s)
+        let stairs = s.raiseHouse(at: o, storeys: 4)
+        XCTAssertEqual(stairs.count, 3)
+        XCTAssertEqual(s.realm.storeyTop, 3)
+        for n in 1...3 {
+            let w = s.storeyWorld(n)
+            for y in 0..<7 { for x in 0..<7 {
+                let t = TilePos(o.x + x, o.y + y)
+                XCTAssertNotEqual(w.tile(0, t.x, t.y), 0, "a floor across storey \(n)")
+                XCTAssertTrue(s.supported(t, onStorey: n), "every floor of storey \(n) is carried")
+            } }
+            XCTAssertEqual(w.tile(2, o.x + 1, o.y + 1), s.content.tid("bed"), "beds on storey \(n)")
+        }
+        s.realm.player.depth = 0
+        var at = stairs[0]
+        for n in 1...3 {
+            guard let r = s.useStairs(at: at.center) else { return XCTFail("stuck below storey \(n)") }
+            XCTAssertEqual(r.depth, OpenWorld.storeyBase + n)
+            if n < 3 { at = stairs[n] }
+        }
+    }
 }

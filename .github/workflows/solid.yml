@@ -49,6 +49,8 @@ jobs:
           run --autostart 7 --3d --demo-city; sleep 22; shot solid-2-city.png
           run --autostart 7 --3d --demo-war; sleep 60; shot solid-3-war.png
           run --autostart 7 --3d --storm; sleep 16; shot solid-4-storm.png
+          run --autostart 7 --3d --storey-demo; sleep 30; shot solid-11-storeys.png
+          run --autostart 7 --2d --storey-demo; sleep 25; shot solid-12-storey-flat.png
           # the nanite swarm (2^20 points on the GPU): one cast every 10 s from the 8th second; pictures at the ball, the giant, the wolf, the helix
           # (a cast every 10 s for two minutes; the simulator's own delays decide which shape each picture catches)
           run --autostart 7 --3d --demo-swarm; sleep 20; for i in 5 6 7 8; do shot solid-$i-swarm.png; sleep 3; done

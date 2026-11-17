@@ -346,6 +346,34 @@ extension Society {
         return false
     }
 
+    /// A house of `storeys` levels (the ground floor and n - 1 above it), w x d tiles: on every level stone walls
+    /// round the edge with a door on the ground, a floor inside, beds, and stairs that alternate sides going up.
+    /// Every floor stands on the walls below it, by the same rules as anything the player builds.
+    /// Returns the stair positions, level by level.
+    @discardableResult public func raiseHouse(at o: TilePos, storeys: Int, w: Int = 7, d: Int = 7) -> [TilePos] {
+        var stairs: [TilePos] = []
+        let wall = content.tid("wall_stone"), floor = content.tid("wood_floor"), bed = content.tid("bed"), door = content.tid("door_wood")
+        for level in 0..<max(1, storeys) {
+            let lw = level == 0 ? world : storeyWorld(level)
+            for y in 0..<d { for x in 0..<w {
+                let t = TilePos(o.x + x, o.y + y)
+                if level > 0 && lw.tile(0, t.x, t.y) == 0 { lw.setTile(0, t.x, t.y, floor) }
+                else if level == 0 { lw.setTile(0, t.x, t.y, floor); lw.setTile(3, t.x, t.y, 0) }
+                let edge = x == 0 || y == 0 || x == w - 1 || y == d - 1
+                if edge { lw.setTile(2, t.x, t.y, level == 0 && x == w / 2 && y == d - 1 ? door : wall) }
+                else if lw.tile(2, t.x, t.y) != content.tid("stairs_down") { lw.setTile(2, t.x, t.y, 0) }
+            } }
+            lw.setTile(2, o.x + 1, o.y + 1, bed); lw.setTile(2, o.x + w - 2, o.y + 1, bed)
+            if level + 1 < storeys {
+                let st = TilePos(o.x + (level % 2 == 0 ? 2 : w - 3), o.y + d - 2)
+                lw.setTile(2, st.x, st.y, content.tid("stairs_up"))
+                linkUp(at: st, from: lw)
+                stairs.append(st)
+            }
+        }
+        return stairs
+    }
+
     /// A stair going up has its landing on the storey above: a floor round it and a stair down.
     func linkUp(at t: TilePos, from w: OpenWorld) {
         let n = w.storey + 1

@@ -371,6 +371,17 @@ final class GameModel: ObservableObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + t + 10) { _ = self.reach(TilePos(o.x + 7, o.y + 2)) }
             }
         }
+        if args.contains("--storey-demo") {
+            // a four-storey house beside the player, and the player on its second storey (for pictures)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in
+                guard let self = self, let s = self.society, let sc = self.scene else { return }
+                let o = self.world.findSite(from: sc.player.tile, minR: 4, maxR: 20, salt: 77, avoid: [], avoidDist: 0)
+                let stairs = s.raiseHouse(at: o.isNone ? sc.player.tile + TilePos(4, 0) : o, storeys: 4)
+                if let first = stairs.first, let r = s.useStairs(at: first.center), let second = stairs.dropFirst().first, let r2 = s.useStairs(at: second.center) {
+                    _ = r; self.switchLayer(to: r2.pos)
+                }
+            }
+        }
         if args.contains("--demo-city") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
                 guard let self = self, let s = self.society else { return }
