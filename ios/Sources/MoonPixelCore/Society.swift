@@ -154,6 +154,8 @@ public final class Agent: Codable {
     /// Who this person is courting, and since when.
     public var crush: Int?
     public var crushSince: Double?
+    /// A soldier lent by a regional force while the traveller is near: the force (id) they go back to.
+    public var lent: Int?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
@@ -168,7 +170,7 @@ public final class Agent: Codable {
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
              health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
-             nation, hp, legion, refugee, fun, crush, crushSince, unit
+             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent
     }
 
     public init() {}

@@ -91,21 +91,12 @@ extension Society {
             let lent = f.crew.takeAdults(k)
             for st in 0..<6 { for i in 0..<lent.n[6 + st] {
                 let a = newAgent(s, age: rng.range(19, 40), female: i % 2 == 1)
-                a.nation = f.nation
-                a.hunger = [0.1, 0.45, 0.65, 0.85, 0.97, 1.0][st]
+                a.nation = f.nation; a.lent = f.id
+                setHunger(a, state: st)
                 enlist(a, g)
             } }
-            f.lent = lent.total
+            f.lent = lent.total; f.lentTown = s.id
             c.totals.toDetail = (c.totals.toDetail ?? 0) + lent.total
-        }
-    }
-
-    /// When a shown town folds away its people went back to the city; the soldiers it was lent go back to their force.
-    func returnForces(_ c: Civ, city: CivCity) {
-        for f in c.forces.values.sorted(by: { $0.id < $1.id }) where f.nation == city.nation && f.lent != nil {
-            let back = city.people.takeAdults(f.lent!)
-            f.crew.add(back)
-            f.lent = nil
         }
     }
 
@@ -128,12 +119,28 @@ extension Society {
             let camp = foundSettlement(site)
             camp.nation = f.nation; camp.campOf = f.id
             camp.nameEn = p.nameEn + " camp"; camp.nameZh = p.nameZh + "军营"
-            camp.food = 200; camp.wood = 20
             guard let g = garrison(camp, create: true) else { continue }
             let lent = f.crew.takeAdults(k)
-            for i in 0..<lent.total { let a = newAgent(camp, age: rng.range(19, 40), female: i % 3 == 0); a.nation = f.nation; enlist(a, g) }
-            camp.addGood("engines", 2); camp.addGood("weapons", Double(k))
-            f.lent = lent.total
+            var i = 0
+            for st in 0..<6 { for _ in 0..<lent.n[6 + st] {
+                let a = newAgent(camp, age: rng.range(19, 40), female: i % 3 == 0); a.nation = f.nation; a.lent = f.id
+                setHunger(a, state: st)
+                enlist(a, g); i += 1
+            } }
+            // the camp eats what the force carries: twelve days for those who came, out of its own rations
+            var goods: [String: Double] = [:], food = 0.0
+            for key in CivFood.eatOrder.reversed() where food < Double(k) * 12 {
+                guard let def = CivFood.byKey[key], let have = f.food[key], have > 0 else { continue }
+                let u = min(have, (Double(k) * 12 - food) / def.nutrition)
+                f.food[key] = have - u; goods[key] = u; food += u * def.nutrition
+                c.totals.goodsToDetail = c.totals.goodsToDetail ?? [:]; c.totals.goodsToDetail![key, default: 0] += u
+            }
+            camp.food = food; camp.wood = 0; camp.goodsFromCiv = goods
+            // its guns are the guns of its own machines (a force of people alone brings none); they are
+            // the machines' own and go back with them, never into anyone's stores
+            let guns = f.units.compactMap { c.units[$0] }.filter { (CivUnitDef.byKey[$0.kind]?.size ?? .person) != .person && $0.layer == .ground }.count
+            if guns > 0 { camp.addGood("engines", Double(min(2, guns))) }
+            f.lent = lent.total; f.lentTown = camp.id
             c.totals.toDetail = (c.totals.toDetail ?? 0) + lent.total
             // the war is fought here as well
             let r = realm.meet(f.nation, town.nation ?? 0, at: world.time)
@@ -154,13 +161,23 @@ extension Society {
             guard abs(sx - rx) > 3 || abs(sy - ry) > 3 else { continue }
             if realm.legions.contains(where: { $0.nation == s.nation && $0.state != 0 }) { continue }
             let alive = agents.values.filter { $0.sid == s.id }.sorted { $0.id < $1.id }
+            // they go back as hungry (or as fed) as they are
+            var back = CivPeople()
+            for a in alive { back.n[6 + peopleSlot(a, world.time) % 6] += 1 }
             for a in alive { abort(a, s); leaveHome(a, s); agents[a.id] = nil }
             s.members = []
-            let back = CivPeople(adults: alive.count)
             c.totals.fromDetail = (c.totals.fromDetail ?? 0) + alive.count
-            if let f = c.forces[fid] { f.crew.add(back); f.lent = nil }
-            else if let home = c.cities.values.filter({ $0.nation == s.nation && $0.detail == nil }).min(by: { $0.id < $1.id }) { home.people.add(back) }
+            let left = foodBack(s)
+            if let f = c.forces[fid] {
+                f.crew.add(back); f.lent = nil; f.lentTown = nil
+                for (k, v) in left.sorted(by: { $0.key < $1.key }) where v > 0 { f.food[k, default: 0] += v; c.totals.goodsFromDetail = c.totals.goodsFromDetail ?? [:]; c.totals.goodsFromDetail![k, default: 0] += v }
+            }
+            else if let home = c.cities.values.filter({ $0.nation == s.nation && $0.detail == nil }).min(by: { $0.id < $1.id }) {
+                home.people.add(back)
+                for (k, v) in left.sorted(by: { $0.key < $1.key }) where v > 0 { home.stock[k, default: 0] += v; c.totals.goodsFromDetail = c.totals.goodsFromDetail ?? [:]; c.totals.goodsFromDetail![k, default: 0] += v }
+            }
             else { c.totals.deaths["battle", default: 0] += alive.count }
+            s.food = 0; s.goodsFromCiv = nil; s.goods?["engines"] = nil
             s.abandoned = true; detach(s)
             invalidateGrid(); repairReferences()
         }

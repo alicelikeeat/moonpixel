@@ -44,6 +44,8 @@ public final class CivForce: Codable {
     public var morale = 0.8
     /// Soldiers lent to the detailed world while the traveller is near (they come back when the town folds away).
     public var lent: Int?
+    /// The town (settlement id) its lent soldiers stand in.
+    public var lentTown: Int?
     public init() {}
 }
 

@@ -168,8 +168,7 @@ extension Society {
                 let age = b == 0 ? rng.range(2, 13) : (b == 1 ? rng.range(18, 55) : rng.range(63, 75))
                 let a = newAgent(s, age: age, female: made % 2 == 0)
                 a.nation = city.nation
-                a.hunger = [0.1, 0.45, 0.65, 0.85, 0.97, 1.0][st]
-                if st >= 4 { a.health = st == 4 ? 0.6 : 0.3 }
+                setHunger(a, state: st)
                 made += 1
             } } }
             city.sick = min(city.sick, city.people.total)
@@ -185,7 +184,7 @@ extension Society {
                 city.stock[f, default: 0] -= u; goods[f] = u; food += u * def.nutrition
             }
             for (k, v) in goods { c.totals.goodsToDetail = c.totals.goodsToDetail ?? [:]; c.totals.goodsToDetail![k, default: 0] += v }
-            s.food = food + 10; s.goodsFromCiv = goods
+            s.food = food; s.goodsFromCiv = goods          // exactly what left the city's stores: nothing is added on the way
             let wood = min(city.free("timber"), 40), stone = min(city.free("stone"), 20)
             city.stock["timber", default: 0] -= wood; city.stock["stone", default: 0] -= stone
             s.wood = wood; s.stone = stone
@@ -207,30 +206,61 @@ extension Society {
             guard abs(city.rx - rx) > 3 || abs(city.ry - ry) > 3 else { continue }
             // not while it is fought over
             if s.siege != nil || realm.legions.contains(where: { $0.target == s.id && $0.state != 0 }) || realm.legions.contains(where: { $0.home == s.id && !$0.members.isEmpty && $0.state != 0 }) { continue }
-            var back = CivPeople()
+            // everyone goes back as who they are (age band and hunger): residents to the city, soldiers
+            // a force lent to the very force that lent them
+            var back = CivPeople(), toForce: [Int: CivPeople] = [:]
             for id in s.members {
                 guard let a = agents[id] else { continue }
-                let b = a.stage(now) == "child" ? 0 : (a.stage(now) == "elder" ? 2 : 1)
-                let st = a.hunger < 0.4 ? 0 : (a.hunger < 0.6 ? 1 : (a.hunger < 0.8 ? 2 : (a.hunger < 0.95 ? 3 : (a.health > 0.4 ? 4 : 5))))
-                back.n[b * 6 + st] += 1
+                let slot = peopleSlot(a, now)
+                if let fid = a.lent, c.forces[fid] != nil { toForce[fid, default: CivPeople()].n[slot] += 1 } else { back.n[slot] += 1 }
             }
             for id in s.members { if let a = agents[id] { abort(a, s); leaveHome(a, s); agents[id] = nil } }
             s.members = []
             city.people.add(back)
             city.ledger.migIn += back.total
-            c.totals.fromDetail = (c.totals.fromDetail ?? 0) + back.total
-            // the food left goes back as grain
-            if s.food > 0 {
-                city.stock["grain", default: 0] += s.food
-                c.totals.goodsFromDetail = c.totals.goodsFromDetail ?? [:]; c.totals.goodsFromDetail!["grain", default: 0] += s.food
+            var returned = back.total
+            for (fid, grp) in toForce.sorted(by: { $0.key < $1.key }) { c.forces[fid]!.crew.add(grp); returned += grp.total }
+            c.totals.fromDetail = (c.totals.fromDetail ?? 0) + returned
+            // the food left goes back in the kinds it came in (what was eaten is gone; what the town grew is grain)
+            for (k, v) in foodBack(s).sorted(by: { $0.key < $1.key }) where v > 0 {
+                city.stock[k, default: 0] += v
+                c.totals.goodsFromDetail = c.totals.goodsFromDetail ?? [:]; c.totals.goodsFromDetail![k, default: 0] += v
             }
             city.stock["timber", default: 0] += s.wood; city.stock["stone", default: 0] += s.stone
-            s.food = 0; s.wood = 0; s.stone = 0
+            s.food = 0; s.wood = 0; s.stone = 0; s.goodsFromCiv = nil
             s.abandoned = true; detach(s)
             city.shownAs = nil
-            returnForces(c, city: city)
+            for f in c.forces.values where f.lentTown == s.id { f.lent = nil; f.lentTown = nil }
             invalidateGrid()
             repairReferences()
         }
+    }
+
+    /// Where a resident is counted in a regional group: age band x hunger state (the same thresholds both ways).
+    func peopleSlot(_ a: Agent, _ now: Double) -> Int {
+        let b = a.stage(now) == "child" ? 0 : (a.stage(now) == "elder" ? 2 : 1)
+        let st = a.hunger < 0.4 ? 0 : (a.hunger < 0.6 ? 1 : (a.hunger < 0.8 ? 2 : (a.hunger < 0.95 ? 3 : (a.health > 0.4 ? 4 : 5))))
+        return b * 6 + st
+    }
+
+    /// The hunger and health a member of a regional group has as a resident (the inverse of `peopleSlot`).
+    func setHunger(_ a: Agent, state st: Int) {
+        a.hunger = [0.1, 0.45, 0.65, 0.85, 0.97, 1.0][st]
+        if st >= 4 { a.health = st == 4 ? 0.6 : 0.3 }
+    }
+
+    /// What goes back to the regional stores when a shown town folds away: of each kind of food that was
+    /// handed over, the share that is still there (by nutrition); anything beyond that was grown here and
+    /// goes back as grain of the same nutrition. Never more nutrition than the town holds.
+    func foodBack(_ s: Settlement) -> [String: Double] {
+        let handed = s.goodsFromCiv ?? [:]
+        let nut = handed.reduce(0.0) { $0 + $1.value * (CivFood.byKey[$1.key]?.nutrition ?? 1) }
+        let left = max(0, s.food)
+        var out: [String: Double] = [:]
+        let share = nut > 0 ? min(1, left / nut) : 0
+        for (k, v) in handed { out[k] = v * share }
+        let extra = left - nut * share
+        if extra > 1e-9 { out["grain", default: 0] += extra / (CivFood.byKey["grain"]?.nutrition ?? 1) }
+        return out
     }
 }
