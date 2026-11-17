@@ -29,6 +29,15 @@ struct DriveHUD: View {
             if d.driving && !d.auto { controls }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
+        .overlay(alignment: .bottomLeading) {
+            // what the vehicle itself reports, for assistive technology and UI tests
+            Text(diag).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1).allowsHitTesting(false).accessibilityIdentifier("drive-state")
+        }
+    }
+
+    private var diag: String {
+        guard let s = model.society, let v = s.playerVehicle else { return "none" }
+        return "\(v.kind.rawValue) id \(v.id) ctl \(v.control.rawValue) driving \(v.playerDriving) asked \(String(format: "%.2f", model.driveInput.throttle)) in \(String(format: "%.2f/%.2f", v.input.throttle, v.input.brake)) v \(String(format: "%.2f", v.speed)) fuel \(String(format: "%.0f", v.fuel)) halt \(v.halted ?? "-") tile \(v.tile.x),\(v.tile.y) way \(s.wayKind(at: v.tile)?.rawValue ?? "none") time \(String(format: "%.1f", s.world.time))"
     }
 
     private var gauges: some View {

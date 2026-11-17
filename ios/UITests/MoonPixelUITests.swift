@@ -452,13 +452,15 @@ final class MoonPixelUITests: XCTestCase {
         slider.adjust(toNormalizedSliderPosition: 0.9)
         sleep(3)
         let moving = speed.label
-        print("UITEST drive: \(moving)")
+        print("UITEST drive: \(moving) | \(app.staticTexts["drive-state"].label) | toast \(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "-")")
         XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving)")
         shot("41-driving")
         // the autopilot takes over (no destination: it holds), then back to the driver
         app.buttons["drive-auto"].tap(); sleep(3)
+        print("UITEST drive auto: \(app.staticTexts["drive-state"].label)")
         shot("42-autopilot")
-        app.buttons["drive-auto"].tap(); sleep(1)
+        app.buttons["drive-auto"].tap(); sleep(2)
+        print("UITEST drive manual again: \(app.staticTexts["drive-state"].label)")
         slider.adjust(toNormalizedSliderPosition: 0)
         app.descendants(matching: .any)["drive-brake"].firstMatch.press(forDuration: 4)
         sleep(1)
