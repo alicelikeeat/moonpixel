@@ -218,6 +218,15 @@ public struct PlayerState: Codable {
     public var depth: Int?
 }
 
+/// A regional tower standing in a shown town. The tower itself (in the regional layer) is the one
+/// authority for how tall it is; this only says where its ground floor was put.
+public struct StandingTower: Codable, Equatable {
+    public var tower = 0, city = 0, town = 0
+    public var x = 0, y = 0, w = 12, d = 10
+    /// Levels including the ground floor, as last read from the tower.
+    public var levels = 1
+}
+
 public struct CraftJob: Codable, Equatable { public var recipe: String; public var done: Double }
 
 public struct Realm: Codable {
@@ -250,6 +259,11 @@ public struct Realm: Codable {
     public var civBox: Civ?
     /// The highest storey anyone has built up to (storeys are found again from it after loading).
     public var storeyTop: Int?
+    /// The storeys something was really built or changed on (sorted). Nothing ever walks 1...top:
+    /// a world with one thing on storey 900 has one entry here. Nil in saves before v2.6.
+    public var storeySet: [Int]?
+    /// Towers of regional cities standing in the detailed world: where, how wide, how many levels.
+    public var standing: [StandingTower]?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
     public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }

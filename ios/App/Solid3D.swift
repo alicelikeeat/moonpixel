@@ -25,6 +25,11 @@ struct Solid3DView: UIViewRepresentable {
     static func dismantleUIView(_ v: SolidInputView, coordinator: ()) { v.renderer.stop() }
 }
 
+enum Solid3DLimits {
+    /// Storeys drawn above and below the one you are on.
+    static let storeySpan = 6
+}
+
 @MainActor
 final class SolidRenderer {
     let view: ARView
@@ -371,7 +376,9 @@ final class SolidRenderer {
         let here = model.depth
         var show: [Int] = []
         if here != 1 {
-            show = society.builtStoreys().map { OpenWorld.storeyBase + $0 } + [0]
+            // the storeys near the one you are on (built ones and the floors of standing towers), never all of them
+            let n = here >= OpenWorld.storeyBase ? here - OpenWorld.storeyBase : 0
+            show = society.storeysNear(n, span: Solid3DLimits.storeySpan).map { OpenWorld.storeyBase + $0 } + [0]
             show.removeAll { $0 == here }
         }
         let r = min(3, Int(distance * 1.3 / 32) + 1)
@@ -382,7 +389,7 @@ final class SolidRenderer {
             let w = society.layer(d)
             for cy in (ccy - r)...(ccy + r) { for cx in (ccx - r)...(ccx + r) {
                 // the ground is drawn wherever you look; a storey only where something was built on it
-                if d != 0 && !w.touched(cx, cy) { continue }
+                if d != 0 && !w.touched(cx, cy) && !society.towerCovers(storey: d - OpenWorld.storeyBase, cx: cx, cy: cy) { continue }
                 let lk = LayerChunk(depth: d, chunk: MP.chunkKey(cx, cy))
                 wanted.insert(lk)
                 let rev = w.revision(cx, cy)

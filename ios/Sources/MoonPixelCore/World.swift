@@ -377,6 +377,10 @@ public final class OpenWorld {
     /// with no top). Each has its own chunks and files in the same store.
     public let depth: Int
     public static let storeyBase = 100
+    /// What stands in a freshly made chunk besides what the generator put there: on a storey, the floors
+    /// of the towers that reach it (they are made from the tower itself when first looked at, never stored
+    /// unless someone changes them).
+    public var overlay: ((Chunk) -> Void)?
     public var isUnder: Bool { depth == 1 }
     /// Which storey this layer is (0 for the surface and the underground).
     public var storey: Int { depth >= OpenWorld.storeyBase ? depth - OpenWorld.storeyBase : 0 }
@@ -434,7 +438,7 @@ public final class OpenWorld {
         if let c = cache[k] { c.lastUsed = clock; return c }
         var c: Chunk?
         if saved.contains(k), let data = store?.read(skey(k)) { c = Chunk.decode(data) }
-        if c == nil { c = gen.generate(cx, cy); generated += 1 }
+        if c == nil { c = gen.generate(cx, cy); generated += 1; overlay?(c!) }
         let ch = c!
         cache[k] = ch
         ch.lastUsed = clock
@@ -667,6 +671,7 @@ public final class OpenWorld {
         if cache[k] != nil {
             if pins[k] != nil {
                 let fresh = gen.generate(cx, cy)
+                overlay?(fresh)
                 fresh.lastUsed = clock
                 cache[k] = fresh
             } else { cache[k] = nil }

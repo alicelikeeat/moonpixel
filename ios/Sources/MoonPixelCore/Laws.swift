@@ -344,7 +344,14 @@ public final class LawRun {
                 // the land returns to nature all the way down: mines, ruins dug out and stairs under it go too
                 if plan.mode == .guixu { let u = s.underworld(); if u.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || u.loaded(c.cx, c.cy) { u.revertChunk(c.cx, c.cy); result.chunks += 1 } }
                 // and nothing is left hanging in the air: every storey above the land goes with it
+                // a standing tower on this land goes first, so its floors are not made again from it
+                if let st = s.realm.standing {
+                    let keep = st.filter { t in !(t.x + t.w > c.cx * 32 && t.x < c.cx * 32 + 32 && t.y + t.d > c.cy * 32 && t.y < c.cy * 32 + 32) }
+                    if keep.count != st.count { s.realm.standing = keep.isEmpty ? nil : keep }
+                }
                 for n in s.builtStoreys() { let up = s.storeyWorld(n); if up.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || up.loaded(c.cx, c.cy) { up.revertChunk(c.cx, c.cy); result.chunks += 1 } }
+                // storeys only a tower stood on, that are in memory now
+                for (n, up) in s.storeys.sorted(by: { $0.key < $1.key }) where up.loaded(c.cx, c.cy) && up.storedSize(MP.chunkKey(c.cx, c.cy)) == 0 { _ = n; up.revertChunk(c.cx, c.cy) }
                 s.pressed = s.pressed.filter { $0.x >> 5 != c.cx || $0.y >> 5 != c.cy }
                 i += 1; left -= 2; doneItems += 1
             case 5:     // history

@@ -65,15 +65,20 @@ extension Society {
         return (shown, at)
     }
 
-    /// A shown city's towers stand in its town as real buildings: as many storeys as the tower has in
-    /// use (forty at most are built out; the rest stay in the regional count), built by the storey rules.
+    /// A shown city's towers stand in its town as real buildings, every level of them: the ground floor
+    /// and the first storey are built at once; the rest are the tower's own floors, made storey by storey
+    /// as someone comes near them (`stampTowers`). A tower of 400 floors has a 400th storey you can stand
+    /// on, and looking at it builds none of the 398 under it.
     func raiseTowers(of city: CivCity, in s: Settlement, _ c: Civ) {
-        var k = 0
+        var k = (realm.standing ?? []).filter { $0.town == s.id }.count
         for t in c.towers(of: city.id) where t.real != true && k < 2 {
-            let n = min(40, t.floors.filter { $0.stage == .inUse }.count)
+            let n = t.floors.filter { $0.stage == .inUse }.count
             guard n >= 2 else { continue }
             let o = TilePos(s.center.x + 12 + k * 16, s.center.y - 16)
-            raiseHouse(at: o, storeys: n, w: 12, d: 10)
+            let st = StandingTower(tower: t.id, city: city.id, town: s.id, x: o.x, y: o.y, w: 12, d: 10, levels: n)
+            realm.standing = (realm.standing ?? []) + [st]
+            raiseHouse(at: o, storeys: 2, w: 12, d: 10)
+            realm.storeyTop = max(realm.storeyTop ?? 0, n - 1)
             t.real = true
             k += 1
             emit("tower_seen", [t.nameZh.isEmpty || !zh ? t.nameEn : t.nameZh, "\(n)"], o.center)

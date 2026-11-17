@@ -292,8 +292,9 @@ final class GameScene: SKScene {
             // the snapshot is taken here, on the main thread; the bitmap is made from it elsewhere
             let snap = ChunkSnapshot(world.chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)))
             // on a storey, the ground and the storeys under it show (darkened) through the open air
+            // (the ground and at most the three storeys right under this one: never every storey of a tall tower)
             let below: [[[UInt8]]]? = world.storey > 0
-                ? (0..<world.storey).map { model.society.layer($0 == 0 ? 0 : OpenWorld.storeyBase + $0).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)).layers } : nil
+                ? ([0] + Array(max(1, world.storey - 3)..<world.storey)).map { model.society.layer($0 == 0 ? 0 : OpenWorld.storeyBase + $0).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)).layers } : nil
             bakeWork.async { [weak self] in
                 let t0 = CACurrentMediaTime()
                 let cg = (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).cgImage

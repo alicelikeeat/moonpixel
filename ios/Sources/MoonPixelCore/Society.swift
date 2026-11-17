@@ -545,6 +545,7 @@ public final class Society {
     }
 
     public func bootstrap(origin: TilePos, villages: Int = 4, per: Int = 30) {
+        realm.storeySet = realm.storeySet ?? []          // a world made now keeps the exact list of storeys built on
         var centers: [TilePos] = []
         for i in 0..<villages {
             let from = centers.isEmpty ? origin : centers[rng.index(centers.count)]

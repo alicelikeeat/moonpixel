@@ -69,6 +69,7 @@ extension Society {
         if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t) }
         syncShownOwners(c)
         c.advance(to: world.time)
+        refreshStanding(c)
         c.born.removeAll()
     }
 

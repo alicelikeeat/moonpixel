@@ -318,17 +318,114 @@ extension Society {
     // MARK: storeys above the surface
 
     /// The n-th storey above the surface (created on first use, in the same store as the rest of the world).
+    /// Asking for a storey makes no storeys under it and reads nothing: storey 900 is as cheap as storey 1.
     public func storeyWorld(_ n: Int) -> OpenWorld {
         if let w = storeys[n] { return w }
         let w = OpenWorld(seed: world.seed, budget: world.budget, depth: OpenWorld.storeyBase + n)
         w.diskLimitBytes = world.diskLimitBytes
         if let st = world.store { w.open(store: st) }
+        w.overlay = { [unowned self] ch in self.stampTowers(ch, storey: n) }
+        w.onChunkChanged.append { [unowned self] _, _ in self.noteStorey(n) }
         storeys[n] = w
         return w
     }
 
-    /// Every storey that has been built (1 up to the highest), for saving, drawing and world laws.
-    public func builtStoreys() -> [Int] { (realm.storeyTop ?? 0) > 0 ? Array(1...(realm.storeyTop ?? 0)) : [] }
+    /// Something was built or changed on storey n: it is one of the storeys that exist.
+    func noteStorey(_ n: Int) {
+        var set = storeySet
+        guard let i = Society.insertion(set, n) else { return }
+        set.insert(n, at: i)
+        realm.storeySet = set
+        realm.storeyTop = max(realm.storeyTop ?? 0, n)
+    }
+
+    /// Where `n` goes in a sorted list, or nil when it is there already (binary search).
+    static func insertion(_ a: [Int], _ n: Int) -> Int? {
+        var lo = 0, hi = a.count
+        while lo < hi { let m = (lo + hi) / 2; if a[m] < n { lo = m + 1 } else { hi = m } }
+        return lo < a.count && a[lo] == n ? nil : lo
+    }
+
+    /// The storeys something was built on, sorted. Saves from before v2.6 only knew the highest storey:
+    /// for them it is every storey up to that one (they are all low), remembered from then on.
+    var storeySet: [Int] {
+        if let s = realm.storeySet { return s }
+        let top = realm.storeyTop ?? 0
+        return top > 0 ? Array(1...top) : []
+    }
+
+    /// Every storey something was built or changed on, for saving and world laws. Its length is the
+    /// number of such storeys, not the height of the tallest building.
+    public func builtStoreys() -> [Int] { storeySet }
+
+    /// Storeys to draw or collide with around storey `n` (n = 0 is the ground): the built ones and those a
+    /// standing tower reaches, no further than `span` away. Never more than 2 x span + 1 entries.
+    public func storeysNear(_ n: Int, span: Int) -> [Int] {
+        let lo = max(1, n - span), hi = n + span
+        guard hi >= lo else { return [] }
+        let set = storeySet
+        let top = (realm.standing ?? []).map { $0.levels - 1 }.max() ?? 0
+        var out: [Int] = []
+        for k in lo...hi where k <= top || Society.insertion(set, k) == nil { out.append(k) }
+        return out
+    }
+
+    /// True when a standing tower has a floor in this chunk of storey n (so there is something to draw
+    /// there although nobody has touched the chunk).
+    public func towerCovers(storey n: Int, cx: Int, cy: Int) -> Bool {
+        for t in realm.standing ?? [] where n >= 1 && n < t.levels {
+            if t.x + t.w > cx * 32 && t.x < cx * 32 + 32 && t.y + t.d > cy * 32 && t.y < cy * 32 + 32 { return true }
+        }
+        return false
+    }
+
+    /// The stair of a tower between level k and level k + 1 (alternating sides, as raiseHouse lays them).
+    static func towerStair(_ t: StandingTower, level k: Int) -> TilePos { TilePos(t.x + (k % 2 == 0 ? 2 : t.w - 3), t.y + t.d - 2) }
+
+    /// A fresh chunk of storey n gets the floors of the towers standing there: walls round the edge, a
+    /// floor inside, two beds, the stair down from below and (unless it is the top) the stair up. The same
+    /// rooms raiseHouse builds, made from the tower when the chunk is first needed. Changing anything
+    /// stores the chunk like any other, so what was changed stays changed.
+    func stampTowers(_ ch: Chunk, storey n: Int) {
+        guard n >= 1, let list = realm.standing, !list.isEmpty else { return }
+        let wall = content.tid("wall_stone"), floor = content.tid("wood_floor"), bed = content.tid("bed")
+        let up = content.tid("stairs_up"), down = content.tid("stairs_down")
+        let bx = ch.cx * 32, by = ch.cy * 32
+        for t in list where n < t.levels && t.x + t.w > bx && t.x < bx + 32 && t.y + t.d > by && t.y < by + 32 {
+            func put(_ l: Int, _ x: Int, _ y: Int, _ id: UInt8) {
+                guard x >= bx, x < bx + 32, y >= by, y < by + 32 else { return }
+                ch.layers[l][OpenWorld.idx(x, y)] = id
+            }
+            for y in 0..<t.d { for x in 0..<t.w {
+                put(0, t.x + x, t.y + y, floor)
+                if x == 0 || y == 0 || x == t.w - 1 || y == t.d - 1 { put(2, t.x + x, t.y + y, wall) }
+            } }
+            put(2, t.x + 1, t.y + 1, bed); put(2, t.x + t.w - 2, t.y + 1, bed)
+            let from = Society.towerStair(t, level: n - 1)
+            put(2, from.x, from.y, down)
+            if n + 1 < t.levels { let st = Society.towerStair(t, level: n); put(2, st.x, st.y, up) }
+        }
+    }
+
+    /// How tall each standing tower is now, from the tower itself (the regional layer owns that).
+    /// A storey chunk nobody changed is made again from the new height when it is next needed.
+    func refreshStanding(_ c: Civ) {
+        guard var list = realm.standing, !list.isEmpty else { return }
+        var changed = false
+        for i in list.indices {
+            guard let t = c.towerIndex.towers[list[i].tower] else { continue }
+            let n = max(1, t.floors.filter { $0.stage == .inUse }.count)
+            if n != list[i].levels {
+                let was = list[i].levels
+                list[i].levels = n; changed = true
+                // the storeys between the old top and the new one, where they are in memory and unchanged
+                for k in max(1, min(was, n) - 1)...max(was, n) { if let w = storeys[k] {
+                    for cy in (list[i].y >> 5)...((list[i].y + list[i].d - 1) >> 5) { for cx in (list[i].x >> 5)...((list[i].x + list[i].w - 1) >> 5) where w.loaded(cx, cy) && w.storedSize(MP.chunkKey(cx, cy)) == 0 { w.revertChunk(cx, cy) } }
+                } }
+            }
+        }
+        if changed { realm.standing = list; realm.storeyTop = max(realm.storeyTop ?? 0, (list.map { $0.levels }.max() ?? 1) - 1) }
+    }
 
     /// The layer with this depth: 0 surface, 1 underground, 100 + n storey n.
     public func layer(_ depth: Int) -> OpenWorld { depth == 0 ? world : (depth == 1 ? underworld() : storeyWorld(depth - OpenWorld.storeyBase)) }
