@@ -85,4 +85,37 @@ final class CivBridgeTests: XCTestCase {
         hours(s, 2)
         XCTAssertEqual(s.realm.era, 1, "no timer splits a realm that holds together")
     }
+
+    /// Walking up to a regional city shows it as a real town under its own flag, with people handed over
+    /// from it (not made); walking away folds them back. Nobody is gained or lost either way.
+    func testARegionalCityBecomesARealTownWhenNearAndFoldsBackWhenLeft() {
+        let s = makeSociety(5)
+        hours(s, 3)
+        let c = s.civ
+        guard let city = c.cities.values.filter({ $0.detail == nil && $0.pop >= 12 }).sorted(by: { $0.id < $1.id }).first else { return XCTFail("no regional city near") }
+        let size = c.cfg.regionTiles
+        let agents0 = s.agents.count, cityPop = city.pop
+        s.explorer = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
+        hours(s, 1)
+        guard let town = s.settlements.values.first(where: { $0.fromCiv == city.id && !$0.abandoned }) else { return XCTFail("the city did not come into view") }
+        XCTAssertEqual(town.nation, city.nation, "under its own flag")
+        XCTAssertEqual(s.realm.nation(city.nation)?.regional, true)
+        let shown = town.members.count
+        XCTAssertGreaterThan(shown, 0)
+        XCTAssertEqual(s.agents.count - agents0, shown, "real residents")
+        XCTAssertEqual(city.pop, cityPop - shown, "handed over, not copied")
+        XCTAssertEqual(c.totals.toDetail, shown, "the regional ledger counts out exactly who the town counts in")
+        XCTAssertEqual(c.audit(), [])
+        // walk far away: the town folds back into the regional city
+        let living = town.members.count
+        s.explorer = TilePos(city.rx * size - 6 * size, city.ry * size)
+        hours(s, 1)
+        XCTAssertTrue(town.abandoned)
+        XCTAssertNil(city.shownAs)
+        XCTAssertEqual(c.totals.fromDetail, living, "everyone living there went back into the regional count")
+        XCTAssertTrue(s.agents.values.allSatisfy { $0.sid != town.id }, "no resident left behind in an empty town")
+        XCTAssertEqual(c.audit(), [])
+        let held = c.foodHeld(), want = c.foodExpected()
+        for f in CivFood.all { XCTAssertEqual(held[f.key] ?? 0, want[f.key] ?? 0, accuracy: 0.01 + 1e-6 * abs(want[f.key] ?? 0), f.key) }
+    }
 }

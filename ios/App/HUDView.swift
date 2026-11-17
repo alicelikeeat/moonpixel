@@ -335,15 +335,10 @@ struct HUDView: View {
         HStack(spacing: 2) {
             tab(L("地图", "Map"), "map.fill") { model.toggleMap() }
             tab(L("建造", "Build"), "square.grid.3x3.fill") { model.showBuild = true }
-            tab(L("制造", "Craft"), "hammer.fill") { model.showCraft = true }
-            tab(L("城市", "Cities"), "building.columns.fill") { model.showCities = true }
-            tab(L("战争", "War"), "shield.lefthalf.filled") { model.showWar = true }
-            tab(L("纪事", "History"), "book.closed.fill") { model.showChronicle = true }
+            // six things at hand; the rest is grouped under More (zoom is two fingers)
             tab(L("国度", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
             tab(L("能力", "Powers"), "bolt.fill") { model.showArsenal = true }
             tab(weaponName, weaponIcon) { model.cycleWeapon() }
-            tab("", "plus.magnifyingglass") { model.scene?.zoomBy(0.5) }
-            tab("", "minus.magnifyingglass") { model.scene?.zoomBy(-0.5) }
             tab(L("更多", "More"), "ellipsis.circle.fill") { model.showMore = true }
                 .accessibilityIdentifier("more")
         }

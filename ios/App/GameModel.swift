@@ -646,6 +646,12 @@ final class GameModel: ObservableObject {
                 ext = max(ext, abs(k.x * R + i % R - pc.x) + 2, abs(k.y * R + i / R - pc.y) + 2)
             }
         }
+        // the nations of the known world are on the map too: make room for their cities
+        let civ = society.civ
+        let regionChunks = civ.cfg.regionTiles / 32
+        for city in civ.cities.values where city.detail == nil {
+            ext = max(ext, abs(city.rx * regionChunks + regionChunks / 2 - pc.x) + regionChunks, abs(city.ry * regionChunks + regionChunks / 2 - pc.y) + regionChunks)
+        }
         ext = min(ext, 160)
         let side = ext * 2 + 1
         mapOrigin = TilePos(pc.x - ext, pc.y - ext)
@@ -663,6 +669,23 @@ final class GameModel: ObservableObject {
             bmp.rect(x - 2, y - 2, 5, 5, RGBA(20, 20, 28))
             bmp.rect(x - 1, y - 1, 3, 3, s.abandoned ? RGBA(90, 90, 90) : col)
         }
+        // regional nations: a frame round each region a city holds, in its colour, and the city in the middle;
+        // forces as dots, towers as a white stroke beside their city
+        for city in civ.cities.values.sorted(by: { $0.id < $1.id }) where city.detail == nil {
+            guard let p = civ.polities[city.nation] else { continue }
+            let col = RGBA(hex: p.color)
+            let x0 = city.rx * regionChunks - pc.x + ext, y0 = city.ry * regionChunks - pc.y + ext
+            bmp.rect(x0, y0, regionChunks, 1, col); bmp.rect(x0, y0 + regionChunks - 1, regionChunks, 1, col)
+            bmp.rect(x0, y0, 1, regionChunks, col); bmp.rect(x0 + regionChunks - 1, y0, 1, regionChunks, col)
+            let cx = x0 + regionChunks / 2, cy = y0 + regionChunks / 2
+            bmp.rect(cx - 2, cy - 2, 5, 5, RGBA(20, 20, 28)); bmp.rect(cx - 1, cy - 1, 3, 3, col)
+            if !civ.towers(of: city.id).isEmpty { bmp.rect(cx + 3, cy - 3, 1, 4, .white) }
+        }
+        for f in civ.forces.values.sorted(by: { $0.id < $1.id }) {
+            guard let p = civ.polities[f.nation] else { continue }
+            let x = MP.keyCX(f.region) * regionChunks + regionChunks / 2 - pc.x + ext, y = MP.keyCY(f.region) * regionChunks + regionChunks / 2 + 3 - pc.y + ext
+            bmp.rect(x, y, 2, 2, RGBA(hex: p.color))
+        }
         for lg in society.realm.legions where lg.state != 0 {
             let x = Int((lg.pos.x / 512).rounded(.down)) - pc.x + ext, y = Int((lg.pos.y / 512).rounded(.down)) - pc.y + ext
             bmp.rect(x, y, 2, 2, .white)
@@ -677,7 +700,7 @@ final class GameModel: ObservableObject {
             bmp.rect(x - 3, y, 7, 1, .white); bmp.rect(x, y - 3, 1, 7, .white)
         }
         mapImage = bmp.uiImage
-        mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / %@ · 城镇按国家着色", "%d chunks mapped · %@ of %@ on disk · towns in their nation's colour"), w.surveyed, GameModel.sizeText(mapBytes()), limitText)
+        mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / %@ · 城镇按国家着色；远方国家以国界框标出，走近即可进入", "%d chunks mapped · %@ of %@ on disk · towns in their nation's colour; far nations framed in theirs: walk up to enter them"), w.surveyed, GameModel.sizeText(mapBytes()), limitText)
     }
 
     // MARK: photos and assets

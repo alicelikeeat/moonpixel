@@ -96,6 +96,7 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["join-1"].tap(); sleep(1)
         XCTAssertTrue(text(app, containing: "Azure · HP").exists, "the player joined a nation")
         // beyond the first three: every nation of the known world, in a list that grows with history
+        app.buttons["realm-tab-world"].tap(); sleep(1)
         let summary = app.descendants(matching: .any)["civ-summary"]
         for _ in 0..<4 where !summary.isHittable { app.swipeUp(); sleep(1) }
         XCTAssertTrue(summary.waitForExistence(timeout: 5), "the known world is listed")
@@ -124,12 +125,12 @@ final class MoonPixelUITests: XCTestCase {
         shot("11-built")
         app.buttons["build-done"].tap(); sleep(1)
         // crafting
-        app.buttons["Craft"].tap(); sleep(2)
+        more(app, "Craft"); sleep(2)
         shot("12-craft")
         XCTAssertTrue(text(app, containing: "Smelt iron").exists && text(app, containing: "Siege engine").exists, "recipes listed")
         app.buttons["close-panel"].tap(); sleep(1)
         // cities and capitals
-        app.buttons["Cities"].tap(); sleep(2)
+        more(app, "Cities"); sleep(2)
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'city-'")).firstMatch.tap(); sleep(2)
         shot("13-cities")
         XCTAssertTrue(text(app, containing: "people").exists && text(app, containing: "governance").exists, "a city's state is shown")
@@ -144,11 +145,11 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Following").waitForExistence(timeout: 4), "the camera follows the army")
         app.buttons["4×"].tap(); sleep(6)
         shot("15-war-march")
-        app.buttons["War"].tap(); sleep(2)
+        more(app, "War"); sleep(2)
         shot("16-war-panel")
         XCTAssertTrue(text(app, containing: "morale").exists, "armies with morale and rations")
         app.buttons["close-panel"].tap(); sleep(1)
-        app.buttons["History"].tap(); sleep(2)
+        more(app, "History"); sleep(2)
         shot("17-chronicle")
         let entry = app.buttons.containing(NSPredicate(format: "label CONTAINS 'declared war'")).firstMatch
         XCTAssertTrue(entry.exists || text(app, containing: "declared war").exists, "numbered history, with the war in it")

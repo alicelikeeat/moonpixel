@@ -233,6 +233,9 @@ public final class Settlement: Codable {
     public var siege: Int?
     /// Nation whose banners currently fly here (to notice any change of hands).
     public var flagOf: Int?
+    /// A city of the regional layer shown here as a real town while the traveller is near (CivBridge.swift).
+    public var fromCiv: Int?
+    public var goodsFromCiv: [String: Double]?
     // refreshed by surveyTown
     public var fixtures: [String: Int] = [:]
     public var freeBeds: [TilePos] = []
@@ -247,7 +250,7 @@ public final class Settlement: Codable {
     var unreachT = 0.0
     var resT = 0.0, planT = 0.0, aiAcc = 0.0, cityT = 0.0
 
-    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege, flagOf }
+    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege, flagOf, fromCiv, goodsFromCiv }
     public init() {}
     public func inArea(_ t: TilePos) -> Bool { t.x >= origin.x && t.y >= origin.y && t.x < origin.x + Settlement.span && t.y < origin.y + Settlement.span }
     public func building(_ id: Int) -> Building? { buildings.first { $0.id == id } }
@@ -843,16 +846,21 @@ public final class Society {
             for j in ["builder", "farmer", "woodcutter", "miner"] where quota[j]! > 0 { quota[j]! -= 1; a.job = j; break }
         }
         for a in living where a.stage(now) != "adult" { a.job = "" }
-        // crowded nations send settlers out sooner
+        // a town that has outgrown itself (people without a bed, or simply too many) sends settlers out to
+        // found a new home on good land; a crowded nation does so sooner
         let crowded = (realm.nation(s.nation ?? 0)?.pressure ?? 0) > realm.cfg.expansionPressure
-        if pop >= (crowded ? 24 : 34) && now - s.lastFound > 1.5 * MP.year && livingSettlements < world.budget.maxSettlements && agents.count < world.budget.maxAgents {
+        let roofless = living.filter { $0.home == -1 && $0.stage(now) != "child" && $0.legion == nil && !$0.travelling }.count
+        let full = (roofless >= 8 && pop >= 24) || pop >= (crowded ? 24 : 34)
+        // not from a town under siege, nor while its nation is at war: people stay to hold what they have
+        let threatened = s.siege != nil || realm.atWar(s.nation ?? 0)
+        if full && !threatened && now - s.lastFound > 1.5 * MP.year && livingSettlements < world.budget.maxSettlements && agents.count < world.budget.maxAgents {
             expedition(s, living)
         }
     }
 
     func expedition(_ s: Settlement, _ living: [Agent]) {
         s.lastFound = world.time
-        let site = world.findSite(from: s.center, minR: 80, maxR: 170, salt: 2000 + nextSID * 13, avoid: settlements.values.map { $0.center }, avoidDist: 70)
+        let site = homeSite(from: s.center)
         if site.isNone { return }
         var group: [Agent] = []
         let now = world.time
@@ -881,6 +889,29 @@ public final class Society {
         }
         stats.founded += 1
         emit("founded", ["\(group.count)", s.name(zh: zh), ns.name(zh: zh)], site.center)
+    }
+
+    /// Where settlers go: of a few places on open land, the most liveable one, with water near, good soil,
+    /// timber about, not too far from home.
+    func homeSite(from c: TilePos) -> TilePos {
+        let avoid = settlements.values.filter { !$0.abandoned }.map { $0.center }
+        var best: (TilePos, Double)?
+        for k in 0..<4 {
+            let p = world.findSite(from: c, minR: 70, maxR: 190, salt: 2000 + nextSID * 13 + k * 101, avoid: avoid, avoidDist: 70)
+            if p.isNone { continue }
+            var score = 0.0
+            var water = false
+            for (dx, dy) in [(0, 30), (30, 0), (0, -30), (-30, 0), (20, 20), (-20, -20), (20, -20), (-20, 20)] {
+                let e = world.gen.climate(p.x + dx, p.y + dy).0
+                if e < Biome.sea || world.gen.isRiver(p.x + dx, p.y + dy, e) { water = true }
+            }
+            if water { score += 1 }
+            let (_, temp, moist) = world.gen.climate(p.x, p.y)
+            score += max(0, 1 - abs(temp - 0.55) * 1.8) + moist * 0.6
+            score -= Double((p - c).lengthSquared).squareRoot() / 400
+            if best == nil || score > best!.1 { best = (p, score) }
+        }
+        return best?.0 ?? .none
     }
 
     func leaveHome(_ a: Agent, _ s: Settlement) {

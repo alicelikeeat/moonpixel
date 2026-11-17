@@ -63,9 +63,22 @@ struct Meter: View {
 /// player can do about them), then every nation of the known world (CivWorldSection: as many as there are).
 struct RealmPanel: View {
     @EnvironmentObject var model: GameModel
+    @State private var world = false
 
     var body: some View {
         GlassSheet(title: L("国度", "Nations"), subtitle: model.eraLine, close: { model.showRealm = false }) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Chip(title: L("附近", "Nearby"), icon: "house.and.flag.fill", tint: world ? Color.white.opacity(0.12) : Color.white.opacity(0.32), id: "realm-tab-near") { world = false }
+                    Chip(title: L("已知世界", "Known world"), icon: "globe.asia.australia.fill", tint: world ? Color.white.opacity(0.32) : Color.white.opacity(0.12), id: "realm-tab-world") { world = true }
+                }
+                if world { CivWorldSection() } else { nearby }
+            }
+        }
+    }
+
+    /// The nations around the player's own towns, and what the player can do among them.
+    private var nearby: some View {
             VStack(alignment: .leading, spacing: 10) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 8) {
@@ -77,12 +90,10 @@ struct RealmPanel: View {
                 }
                 Text(model.playerLine).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(Color(red: 0.75, green: 0.92, blue: 1))
                 actions
-                CivWorldSection()
                 Text(L("捐赠、战斗、修路拆桥、补给站和接纳难民都会真实改变粮食、补给、兵力和国家关系。斧砍树得木，镐采石得石，镐和斧可拆毁道路、桥梁和补给站。",
                        "Giving, fighting, building or breaking roads, bridges and depots, and sheltering refugees really change food, supply, armies and relations. The axe gives wood, the pick gives stone; both can break roads, bridges and depots."))
                     .font(.system(size: 10, design: .rounded)).opacity(0.6)
             }
-        }
     }
 
     private func card(_ c: NationCard) -> some View {

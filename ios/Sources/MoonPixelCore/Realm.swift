@@ -136,6 +136,9 @@ public struct Nation: Codable {
     public var studying: String?
     /// 2: passed into history (no land, no people who still hold to it); its name and records remain.
     public var status: Int?
+    /// A nation of the regional layer that has a town in view: the detailed world does not revive it or
+    /// change its standing; the regional layer does.
+    public var regional: Bool?
     // refreshed every game hour
     public var pressure = 0.0, pFood = 0.0, pHousing = 0.0, pJobs = 0.0, pLand = 0.0
     public var pop = 0, identity = 0, towns = 0, soldiers = 0, food = 0.0
@@ -279,7 +282,7 @@ extension Society {
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
-        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
+        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
         "resettled": ("New settlers begin again: %@", "新的移民重新开始：%@"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
         "capital_named": ("%@ made %@ its capital", "%@ 定都 %@"), "capital_lost": ("%@ lost its capital %@", "%@ 的首都 %@ 失守"),
         "capital_moved": ("%@ moved its capital to %@", "%@ 迁都至 %@"), "capital_restored": ("%@ raised a new capital at %@", "%@ 在 %@ 重建首都"),
@@ -786,7 +789,7 @@ extension Society {
     /// Give a landless nation land again without inventing people: a town where
     /// its identity is strong changes flag, otherwise existing residents secede and settle.
     @discardableResult func restoreNation(_ id: Int) -> Bool {
-        guard let n = realm.nation(id) else { return false }
+        guard let n = realm.nation(id), n.regional != true else { return false }
         let all = settlements.values.filter { !$0.abandoned }.sorted { $0.id < $1.id }
         let cand = all.filter { s in towns(of: s.nation ?? 0).count > 1 }.max { identityShare($0, id) < identityShare($1, id) }
         if let s = cand, identityShare(s, id) >= 0.34 {

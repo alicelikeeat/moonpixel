@@ -24,7 +24,7 @@ extension Society {
     /// Every nation of the realm is a nation of the civilisation layer with the same id and name.
     func mirrorNations() {
         guard let c = realm.civBox else { return }
-        for n in realm.nations {
+        for n in realm.nations where n.regional != true {
             if c.polities[n.id] == nil {
                 var p = CivPolity()
                 p.id = n.id; p.nameEn = n.nameEn; p.nameZh = n.nameZh; p.color = n.color
@@ -66,6 +66,7 @@ extension Society {
         for t in settlements.values.filter({ !$0.abandoned }).sorted(by: { $0.id < $1.id }) { c.discover(around: t.center, radius: 2, gen: world.gen, detailed: detailed) }
         if let t = explorer { c.discover(around: t, radius: 3, gen: world.gen, detailed: detailed) }
         syncDetailed(c)
+        if let t = explorer { showNearby(c, around: t); foldAway(c, from: t) }
         c.advance(to: world.time)
         c.born.removeAll()
     }
@@ -125,5 +126,97 @@ extension Society {
     public func nationName(_ id: Int) -> String {
         if let n = realm.nation(id) { return n.name(zh: zh) }
         return realm.civBox?.polities[id]?.name(zh: zh) ?? "—"
+    }
+
+    // MARK: - regional cities become real towns near the traveller
+
+    /// A regional city within a region of the traveller is shown as a real town: a place is found in its
+    /// region, part of its people (by age and hunger) are handed over as residents under its flag, with food
+    /// for them. Nobody is made: the regional city counts them out, the town counts them in.
+    func showNearby(_ c: Civ, around t: TilePos) {
+        let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
+        guard agents.count + 40 < world.budget.maxAgents, settlements.values.filter({ !$0.abandoned }).count < world.budget.maxSettlements else { return }
+        for city in c.cities.values.sorted(by: { $0.id < $1.id }) where city.detail == nil && city.shownAs == nil && abs(city.rx - rx) <= 1 && abs(city.ry - ry) <= 1 {
+            guard let p = c.polities[city.nation], p.status == .active, city.pop >= 12 else { continue }
+            let size = c.cfg.regionTiles
+            let mid = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
+            let site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 20), salt: 7000 + city.id, avoid: settlements.values.filter { !$0.abandoned }.map { $0.center }, avoidDist: 60)
+            if site.isNone { continue }
+            // the nation joins the detailed world's diplomacy, as itself
+            if realm.nation(city.nation) == nil {
+                var n = Nation(); n.id = p.id; n.nameEn = p.nameEn; n.nameZh = p.nameZh; n.color = p.color; n.techCount = legacyTech; n.regional = true
+                realm.nations.append(n)
+            }
+            let s = foundSettlement(site)
+            s.nation = city.nation; s.fromCiv = city.id
+            s.nameEn = city.nameEn; s.nameZh = city.nameZh
+            let k = min(max(8, city.pop / 4), 36, world.budget.maxAgents - agents.count - 10, city.people.total)
+            let group = city.people.take(k)
+            var made = 0
+            for b in 0..<3 { for st in 0..<6 { for _ in 0..<group.n[b * 6 + st] {
+                let age = b == 0 ? rng.range(2, 13) : (b == 1 ? rng.range(18, 55) : rng.range(63, 75))
+                let a = newAgent(s, age: age, female: made % 2 == 0)
+                a.nation = city.nation
+                a.hunger = [0.1, 0.45, 0.65, 0.85, 0.97, 1.0][st]
+                if st >= 4 { a.health = st == 4 ? 0.6 : 0.3 }
+                made += 1
+            } } }
+            city.sick = min(city.sick, city.people.total)
+            c.totals.toDetail = (c.totals.toDetail ?? 0) + made
+            city.ledger.migOut += made
+            // their food comes with them
+            var goods: [String: Double] = [:]
+            var food = 0.0
+            for f in CivFood.eatOrder.reversed() where food < Double(made) * 12 {
+                guard let def = CivFood.byKey[f] else { continue }
+                let u = min(city.free(f), (Double(made) * 12 - food) / def.nutrition)
+                guard u > 0 else { continue }
+                city.stock[f, default: 0] -= u; goods[f] = u; food += u * def.nutrition
+            }
+            for (k, v) in goods { c.totals.goodsToDetail = c.totals.goodsToDetail ?? [:]; c.totals.goodsToDetail![k, default: 0] += v }
+            s.food = food + 10; s.goodsFromCiv = goods
+            let wood = min(city.free("timber"), 40), stone = min(city.free("stone"), 20)
+            city.stock["timber", default: 0] -= wood; city.stock["stone", default: 0] -= stone
+            s.wood = wood; s.stone = stone
+            city.shownAs = s.id
+            reflag(s)
+            emit("civ_town_seen", [s.name(zh: zh), p.name(zh: zh)], site.center)
+            return                                                          // one a step: never a sudden crowd
+        }
+    }
+
+    /// Towns of regional cities the traveller has left far behind go back to being counted as groups: the
+    /// people (and any born meanwhile) return to the regional city with their hunger, and the food left.
+    func foldAway(_ c: Civ, from t: TilePos) {
+        let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
+        let now = world.time
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            guard let cid = s.fromCiv, let city = c.cities[cid] else { continue }
+            guard abs(city.rx - rx) > 3 || abs(city.ry - ry) > 3 else { continue }
+            // not while it is fought over
+            if s.siege != nil || realm.legions.contains(where: { $0.target == s.id && $0.state != 0 }) || realm.legions.contains(where: { $0.home == s.id && !$0.members.isEmpty && $0.state != 0 }) { continue }
+            var back = CivPeople()
+            for id in s.members {
+                guard let a = agents[id] else { continue }
+                let b = a.stage(now) == "child" ? 0 : (a.stage(now) == "elder" ? 2 : 1)
+                let st = a.hunger < 0.4 ? 0 : (a.hunger < 0.6 ? 1 : (a.hunger < 0.8 ? 2 : (a.hunger < 0.95 ? 3 : (a.health > 0.4 ? 4 : 5))))
+                back.n[b * 6 + st] += 1
+            }
+            for id in s.members { if let a = agents[id] { abort(a, s); leaveHome(a, s); agents[id] = nil } }
+            s.members = []
+            city.people.add(back)
+            city.ledger.migIn += back.total
+            c.totals.fromDetail = (c.totals.fromDetail ?? 0) + back.total
+            // the food left goes back as grain
+            if s.food > 0 {
+                city.stock["grain", default: 0] += s.food
+                c.totals.goodsFromDetail = c.totals.goodsFromDetail ?? [:]; c.totals.goodsFromDetail!["grain", default: 0] += s.food
+            }
+            city.stock["timber", default: 0] += s.wood; city.stock["stone", default: 0] += s.stone
+            s.food = 0; s.wood = 0; s.stone = 0
+            s.abandoned = true; detach(s)
+            city.shownAs = nil
+            invalidateGrid()
+        }
     }
 }

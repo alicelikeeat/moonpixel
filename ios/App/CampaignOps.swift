@@ -507,33 +507,47 @@ struct WarPanel: View {
 /// Everything that does not fit on the tab bar, as one glass sheet (a menu overflowed in landscape).
 struct MorePanel: View {
     @EnvironmentObject var model: GameModel
+    private let cols = [GridItem(.adaptive(minimum: 128), spacing: 6, alignment: .leading)]
 
     var body: some View {
         GlassSheet(title: L("更多", "More"), subtitle: "", close: { model.showMore = false }) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                group(L("世界与城市", "World and towns")) {
+                    Chip(title: L("制造", "Craft"), icon: "hammer.fill", id: "Craft") { model.showMore = false; model.showCraft = true }
+                    Chip(title: L("城市", "Cities"), icon: "building.columns.fill", id: "Cities") { model.showMore = false; model.showCities = true }
+                    Chip(title: L("战争", "War"), icon: "shield.lefthalf.filled", id: "War") { model.showMore = false; model.showWar = true }
+                    Chip(title: L("纪事", "History"), icon: "book.closed.fill", id: "History") { model.showMore = false; model.showChronicle = true }
                     Chip(title: L("法则", "Laws"), icon: "flame.fill", id: "Laws") { model.showMore = false; model.showLaws = true }
-                    Chip(title: L("作弊", "Cheats"), icon: "wand.and.rays", id: "Cheats") { model.showMore = false; model.showCheats = true }
-                    Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
-                    Chip(title: L("形象", "Photo"), icon: "person.crop.circle.badge.plus", id: "Photo") { model.showMore = false; model.pick = .player }
                 }
-                HStack(spacing: 6) {
-                    Chip(title: L("素材", "Import"), icon: "photo.badge.plus", id: "Import") { model.showMore = false; model.pick = .asset }
-                    Chip(title: L("清理", "Clean"), icon: "sparkles", id: "Clean") { model.showMore = false; model.cleanMemory(announce: true) }
-                    Chip(title: L("保存", "Save"), icon: "square.and.arrow.down.fill", id: "Save") { model.showMore = false; model.save(announce: true) }
-                    Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
-                }
-                HStack(spacing: 6) {
-                    Chip(title: model.showPerf ? L("关闭性能", "Hide perf") : L("性能", "Performance"), icon: "speedometer", id: "Perf") {
-                        model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
-                    }
+                group(L("玩法", "Ways to play")) {
                     Chip(title: L("都市模式", "Metro"), icon: "building.2.crop.circle.fill", id: "Metro") { model.showMore = false; model.startMetro() }
                     Chip(title: L("指挥模式", "Command"), icon: "flag.2.crossed.fill", id: "Command") { model.showMore = false; model.startCommand() }
                     Chip(title: model.render3D ? L("2D 视角", "2D view") : L("3D 视角", "3D view"), icon: model.render3D ? "square.grid.3x3.fill" : "cube.fill", id: "View3D") {
                         model.showMore = false; model.render3D.toggle()
                     }
+                    Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
+                }
+                group(L("形象与素材", "Looks and pictures")) {
+                    Chip(title: L("形象", "Photo"), icon: "person.crop.circle.badge.plus", id: "Photo") { model.showMore = false; model.pick = .player }
+                    Chip(title: L("素材", "Import"), icon: "photo.badge.plus", id: "Import") { model.showMore = false; model.pick = .asset }
+                }
+                group(L("系统", "System")) {
+                    Chip(title: L("保存", "Save"), icon: "square.and.arrow.down.fill", id: "Save") { model.showMore = false; model.save(announce: true) }
+                    Chip(title: L("清理", "Clean"), icon: "sparkles", id: "Clean") { model.showMore = false; model.cleanMemory(announce: true) }
+                    Chip(title: model.showPerf ? L("关闭性能", "Hide perf") : L("性能", "Performance"), icon: "speedometer", id: "Perf") {
+                        model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
+                    }
+                    Chip(title: L("作弊", "Cheats"), icon: "wand.and.rays", id: "Cheats") { model.showMore = false; model.showCheats = true }
+                    Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
                 }
             }
+        }
+    }
+
+    private func group<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.system(size: 11, weight: .semibold, design: .rounded)).opacity(0.65)
+            LazyVGrid(columns: cols, alignment: .leading, spacing: 6) { content() }
         }
     }
 }

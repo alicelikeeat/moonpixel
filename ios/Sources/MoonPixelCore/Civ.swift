@@ -54,6 +54,9 @@ public struct CivPeople: Codable, Equatable {
 /// Everything that changed a place's people and food, so any figure can be checked by adding up.
 public struct CivLedger: Codable, Equatable {
     public var births = 0, newly = 0, migIn = 0, migOut = 0, enlisted = 0, discharged = 0
+    /// People and goods handed to the detailed world (a town shown near the traveller) and handed back.
+    public var toDetail: Int?, fromDetail: Int?
+    public var goodsToDetail: [String: Double]?, goodsFromDetail: [String: Double]?
     public var deaths: [String: Int] = [:]                 // by cause: old, illness, hunger, battle, journey, accident
     public var made: [String: Double] = [:], cameIn: [String: Double] = [:], wentOut: [String: Double] = [:]
     /// Goods that enter the layer from outside it: a place's stores when first found, gifts from the detailed towns.
@@ -133,6 +136,8 @@ public final class CivCity: Codable {
     var upstairsBox: Int?, towerBedsBox: Int?
     /// When the city last decided to build upwards, and why its last idea did not go ahead.
     var lastPlanBox: Int?
+    /// The Society town it is shown as right now (people handed over while the traveller is near).
+    public var shownAs: Int?
     public var planNote: String?
     /// People living in the city's towers (counted there, floor by floor), and the beds the towers give.
     public var upstairs: Int { get { upstairsBox ?? 0 } set { upstairsBox = newValue == 0 ? nil : newValue } }
@@ -835,7 +840,7 @@ public final class Civ: Codable {
     /// What must hold every day. Empty when everything adds up.
     public func audit() -> [String] {
         var out: [String] = []
-        let expect = totals.newly + totals.births - totals.deathTotal
+        let expect = totals.newly + totals.births - totals.deathTotal - (totals.toDetail ?? 0) + (totals.fromDetail ?? 0)
         if people != expect { out.append("people \(people) != first counted \(totals.newly) + born \(totals.births) - died \(totals.deathTotal)") }
         for c in cities.values {
             if c.people.n.contains(where: { $0 < 0 }) { out.append("negative people in \(c.nameEn)") }
@@ -874,7 +879,9 @@ public final class Civ: Codable {
         var out: [String: Double] = [:]
         for f in CivFood.all {
             let k = f.key
-            let gained: Double = (totals.found[k] ?? 0) + (totals.made[k] ?? 0)
+            let back: Double = totals.goodsFromDetail?[k] ?? 0
+            let away: Double = totals.goodsToDetail?[k] ?? 0
+            let gained: Double = (totals.found[k] ?? 0) + (totals.made[k] ?? 0) + back - away
             let gone: Double = (totals.eaten[k] ?? 0) + (totals.spoiled[k] ?? 0) + (totals.lost[k] ?? 0) + (totals.used[k] ?? 0)
             out[k] = gained - gone
         }

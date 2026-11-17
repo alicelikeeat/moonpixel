@@ -85,8 +85,13 @@ extension GameModel {
         guard let s = society, let sc = scene else { return }
         let p = s.realm.player
         let side = s.realm.nation(p.nation)?.name(zh: GameModel.zh) ?? L("自由旅人", "Free traveller")
-        let pack = String(format: L("%@ · 生命 %d · 专注 %d · 粮 %d 木 %d 石 %d 花 %d", "%@ · HP %d · focus %d · food %d wood %d stone %d flowers %d"),
-                          side, Int(p.hp), Int(p.focus ?? 100), Int(p.food), Int(p.wood), Int(p.stone), Int(p.flowers ?? 0))
+        // only what there is: nothing listed at zero
+        var bits = [String(format: L("%@ · 生命 %d", "%@ · HP %d"), side, Int(p.hp))]
+        if (p.focus ?? 100) < 100 { bits.append(String(format: L("专注 %d", "focus %d"), Int(p.focus ?? 100))) }
+        for (v, zh, en) in [(p.food, "粮", "food"), (p.wood, "木", "wood"), (p.stone, "石", "stone"), (p.flowers ?? 0, "花", "flowers")] where v >= 1 {
+            bits.append(GameModel.zh ? "\(zh) \(Int(v))" : "\(en) \(Int(v))")
+        }
+        let pack = bits.joined(separator: " · ")
         playerLine = pack + " · " + s.weatherName + (p.cheated == true ? L(" · 已作弊", " · cheated") : "")
         guard showRealm else { return }
         _ = sc
