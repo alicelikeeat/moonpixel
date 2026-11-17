@@ -219,6 +219,8 @@ public struct PlayerState: Codable {
     /// Where the traveller's body is and how it moves (height, speed, in the air, in a car). Nil before v2.6:
     /// the body is then put on the floor at the saved position and depth.
     public var body: Body?
+    /// Equipment, hotbar, things dropped in the world, hunger (v2.6; nil before: nothing equipped, fed).
+    public var invBox: InventoryState?
 }
 
 /// A regional tower standing in a shown town. The tower itself (in the regional layer) is the one

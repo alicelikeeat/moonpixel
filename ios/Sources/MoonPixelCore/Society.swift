@@ -1368,6 +1368,7 @@ public final class Society {
     }
 
     func hourly() {
+        travellerHourly()
         let now = world.time
         let dty = Society.hour / MP.year
         let crowd = min(1, max(0, 1 - Double(agents.count) / Double(world.budget.maxAgents)))
