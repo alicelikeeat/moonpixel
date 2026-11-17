@@ -216,6 +216,9 @@ public struct PlayerState: Codable {
     public var craft: CraftJob?
     /// 0 on the surface, 1 underground, 100 + n on the n-th storey above the surface.
     public var depth: Int?
+    /// Where the traveller's body is and how it moves (height, speed, in the air, in a car). Nil before v2.6:
+    /// the body is then put on the floor at the saved position and depth.
+    public var body: Body?
 }
 
 /// A regional tower standing in a shown town. The tower itself (in the regional layer) is the one
