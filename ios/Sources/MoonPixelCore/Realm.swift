@@ -189,6 +189,7 @@ public final class Legion: Codable {
     public init() {}
 }
 
+public struct MetroLink: Codable, Equatable { public var nation: Int; public var population: Int; public var name: String }
 public struct Depot: Codable, Equatable { public var x: Int, y: Int, nation: Int }
 public struct RealmMod: Codable { public var kind: String, nation: Int, until: Double }
 public struct RealmCounts: Codable, Equatable { public var wars = 0, truces = 0, unifications = 0, splits = 0, captures = 0, defections = 0, events = 0 }
@@ -249,6 +250,8 @@ public struct Realm: Codable {
     public var civBox: Civ?
     /// The highest storey anyone has built up to (storeys are found again from it after loading).
     public var storeyTop: Int?
+    /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
+    public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
     public var fauna: Fauna { get { faunaBox ?? Fauna() } set { faunaBox = newValue } }
     public init() {}
@@ -284,7 +287,7 @@ extension Society {
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
-        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "tower_seen": ("%@ stands %@ storeys high", "%@ 高 %@ 层"), "storey_added": ("%@ built a house up to %@ storeys", "%@ 把一座房子加盖到 %@ 层"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
+        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "invaders": ("An army of %@ makes camp before %@", "%@ 的军队在 %@ 城外扎营"), "tower_seen": ("%@ stands %@ storeys high", "%@ 高 %@ 层"), "storey_added": ("%@ built a house up to %@ storeys", "%@ 把一座房子加盖到 %@ 层"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
         "resettled": ("New settlers begin again: %@", "新的移民重新开始：%@"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
         "capital_named": ("%@ made %@ its capital", "%@ 定都 %@"), "capital_lost": ("%@ lost its capital %@", "%@ 的首都 %@ 失守"),
         "capital_moved": ("%@ moved its capital to %@", "%@ 迁都至 %@"), "capital_restored": ("%@ raised a new capital at %@", "%@ 在 %@ 重建首都"),

@@ -70,7 +70,12 @@ extension GameModel {
         }
         let c = city ?? Metro(seed: w.seed &+ 4049, worldSeed: w.seed, name: worldName.isEmpty ? L("新月城", "Moonhaven") : worldName + L("市", " City"))
         let session = MetroSession(city: c, file: metroFile, store: store)
-        session.onExit = { [weak self] in self?.metro = nil }
+        session.onExit = { [weak self, weak session] in
+            // the city's people are counted in the nation it belongs to (once: here, not in the towns)
+            if let city = session?.city { self?.society?.linkMetro(population: city.population, name: city.name) }
+            self?.metro = nil
+        }
+        society?.linkMetro(population: c.population, name: c.name)
         session.refresh()
         metro = session
     }

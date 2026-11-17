@@ -169,4 +169,43 @@ final class CivBridgeTests: XCTestCase {
         XCTAssertTrue(c.settleCampaign(won: true)); XCTAssertFalse(c.settleCampaign(won: true), "settled once")
         XCTAssertEqual(c.polities[city.nation]!.treasury, 1200)
     }
+
+    /// An enemy force in the region of a town in view becomes a real army: a camp under its flag, a war in
+    /// the detailed world, and the town's fall (if it falls) is the regional city's fall too.
+    func testAnEnemyForceBeforeAShownTownBecomesARealArmy() {
+        let s = makeSociety(5)
+        hours(s, 3)
+        let c = s.civ
+        guard let city = c.cities.values.filter({ $0.detail == nil && $0.pop >= 30 }).sorted(by: { $0.id < $1.id }).first else { return XCTFail("no regional city") }
+        let size = c.cfg.regionTiles
+        s.explorer = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
+        hours(s, 1)
+        guard let town = s.settlements.values.first(where: { $0.fromCiv == city.id && !$0.abandoned }) else { return XCTFail("not shown") }
+        let foe = c.newPolity(origin: "first", near: nil)
+        c.polities[foe]!.ai = false; c.polities[city.nation]!.ai = false
+        c.declare(foe, on: city.nation)
+        let f = CivForce(); f.id = c.nextForce; c.nextForce += 1; f.nation = foe; f.region = city.regionKey
+        var u = CivUnit(); u.id = c.nextUnit; c.nextUnit += 1; u.kind = "levy"; u.nation = foe; u.force = f.id; u.hp = 100
+        c.units[u.id] = u; f.units = [u.id]; f.crew = CivPeople(adults: 30); c.totals.newly += 30; f.food = ["grain": 500]; c.totals.add(\.found, "grain", 500)
+        c.forces[f.id] = f
+        hours(s, 1)
+        guard let camp = s.settlements.values.first(where: { $0.campOf == f.id }) else { return XCTFail("no camp") }
+        XCTAssertEqual(camp.nation, foe)
+        XCTAssertEqual(f.lent, 12); XCTAssertEqual(f.crew.total, 18, "the soldiers came out of the force")
+        XCTAssertTrue(s.realm.atWar(foe, city.nation), "at war in the detailed world too")
+        XCTAssertEqual(c.audit(), [])
+        hours(s, 2)
+        XCTAssertTrue(s.realm.legions.contains { $0.nation == foe && $0.state != 0 && $0.target == town.id }, "an army marches on the town")
+        // the town falls: the regional city is theirs as well
+        town.nation = foe
+        hours(s, 1)
+        XCTAssertEqual(city.nation, foe, "one owner, in both layers")
+        // the metro city is counted in its nation, once
+        let before = s.knownPopulation
+        s.linkMetro(population: 500, name: "Moonhaven")
+        XCTAssertEqual(s.knownPopulation, before + 500)
+        s.linkMetro(population: 650, name: "Moonhaven")
+        XCTAssertEqual(s.knownPopulation, before + 650, "updated, not added again")
+        for k in CivUnitDef.all { XCTAssertFalse(Figure3D.machine(k.key, color: RGBA(200, 60, 60)).isEmpty, "a model of \(k.key)") }
+    }
 }

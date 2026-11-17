@@ -66,7 +66,8 @@ extension Society {
         for t in settlements.values.filter({ !$0.abandoned }).sorted(by: { $0.id < $1.id }) { c.discover(around: t.center, radius: 2, gen: world.gen, detailed: detailed) }
         if let t = explorer { c.discover(around: t, radius: 3, gen: world.gen, detailed: detailed) }
         syncDetailed(c)
-        if let t = explorer { showNearby(c, around: t); showForces(c); foldAway(c, from: t) }
+        if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t) }
+        syncShownOwners(c)
         c.advance(to: world.time)
         c.born.removeAll()
     }
@@ -114,13 +115,20 @@ extension Society {
         }
         // the detailed nations' figures, for the panels: their towns' people count too
         for k in c.polities.keys.sorted() where c.polities[k]!.detailed {
-            c.polities[k]!.detailPop = agents.values.filter { $0.nation == k }.count
+            c.polities[k]!.detailPop = agents.values.filter { $0.nation == k }.count + (realm.metroLink?.nation == k ? realm.metroLink!.population : 0)
         }
     }
 
     /// Total people the world knows of: the detailed towns' residents and everyone in the regions found so far.
     /// (Lands not yet found are not counted: their people are not known.)
-    public var knownPopulation: Int { agents.count + (realm.civBox?.people ?? 0) }
+    public var knownPopulation: Int { agents.count + (realm.civBox?.people ?? 0) + (realm.metroLink?.population ?? 0) }
+
+    /// The metro city belongs to a nation: its people are counted there (and nowhere else).
+    public func linkMetro(population: Int, name: String) {
+        let n = realm.player.nation != 0 ? realm.player.nation : (realm.nations.first { ($0.status ?? 0) != 2 }?.id ?? 0)
+        guard n != 0 else { return }
+        realm.metroLink = MetroLink(nation: realm.metroLink?.nation ?? n, population: population, name: name)
+    }
 
     /// A nation's name, whichever level it lives on.
     public func nationName(_ id: Int) -> String {

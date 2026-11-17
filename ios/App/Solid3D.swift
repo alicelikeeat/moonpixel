@@ -212,6 +212,7 @@ final class SolidRenderer {
         if !model.plainRender { updateSoldiers(world, society, model, reach: reach, dt: dt); updateRoofs(world, society, model, scene, reach: reach) }
         updateAnimals(world, society, model, reach: reach, dt: dt)
         updateStandards(world, society, model, reach: reach)
+        updateMachines(world, society, model, reach: reach)
         updateLabels(world, society, model, reach: reach)
         updatePreview(world, scene)
         updateWeather(w.fall, under: under, dt: dt)
@@ -608,6 +609,23 @@ final class SolidRenderer {
             }
         }
         for (id, r) in roofs where !seen.contains(id) { r.entity.removeFromParent(); roofs[id] = nil }
+    }
+
+    private var machines: [Int: ModelEntity] = [:]
+    /// Machines of the regional wars standing by a town in view, as models in their nation's colour;
+    /// aircraft and sky carriers hang in the air above.
+    private func updateMachines(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
+        var seen = Set<Int>()
+        if model.depth == 0, let scene = model.scene {
+            for m in society.machinesInView() where abs(m.pos.x - scene.viewPos.x) < reach * 1.5 && abs(m.pos.y - scene.viewPos.y) < reach * 1.5 {
+                seen.insert(m.id)
+                let e = machines[m.id] ?? take()
+                machines[m.id] = e
+                e.model = model3D(key: "machine:" + m.kind + m.color) { Figure3D.machine(m.kind, color: RGBA(hex: m.color)) }
+                e.position = place(m.pos, world, lift: m.layer == .nearSpace ? 14 : (m.layer == .highAir ? 9 : (m.layer == .lowAir ? 5 : 0)))
+            }
+        }
+        for (id, e) in machines where !seen.contains(id) { give(e); machines[id] = nil }
     }
 
     private func updateStandards(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {

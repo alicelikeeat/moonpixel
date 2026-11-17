@@ -109,6 +109,74 @@ extension Society {
         }
     }
 
+    /// An enemy force standing in the region of a shown town it is at war with makes camp near it: its
+    /// soldiers become real, under their own flag, the two nations are at war here too, and from then on
+    /// the army that forms, the march, the siege and the storming are the detailed world's own.
+    func showInvaders(_ c: Civ) {
+        for f in c.forces.values.sorted(by: { $0.id < $1.id }) where f.layer == .ground && f.lent == nil {
+            guard let city = c.cities.values.filter({ $0.regionKey == f.region && $0.shownAs != nil && c.atWar($0.nation, f.nation) }).min(by: { $0.id < $1.id }),
+                  let town = settlements[city.shownAs!], !town.abandoned, let p = c.polities[f.nation],
+                  agents.count + 14 < world.budget.maxAgents, settlements.values.filter({ !$0.abandoned }).count < world.budget.maxSettlements else { continue }
+            let k = min(12, f.crew.band(1) * 2 / 3)
+            guard k >= realm.cfg.minAttack + 2 else { continue }
+            let site = world.findSite(from: town.center, minR: 45, maxR: 90, salt: 9100 + f.id, avoid: settlements.values.filter { !$0.abandoned }.map { $0.center }, avoidDist: 40)
+            if site.isNone { continue }
+            if realm.nation(f.nation) == nil {
+                var n = Nation(); n.id = p.id; n.nameEn = p.nameEn; n.nameZh = p.nameZh; n.color = p.color; n.techCount = legacyTech; n.regional = true
+                realm.nations.append(n)
+            }
+            let camp = foundSettlement(site)
+            camp.nation = f.nation; camp.campOf = f.id
+            camp.nameEn = p.nameEn + " camp"; camp.nameZh = p.nameZh + "军营"
+            camp.food = 200; camp.wood = 20
+            guard let g = garrison(camp, create: true) else { continue }
+            let lent = f.crew.takeAdults(k)
+            for i in 0..<lent.total { let a = newAgent(camp, age: rng.range(19, 40), female: i % 3 == 0); a.nation = f.nation; enlist(a, g) }
+            camp.addGood("engines", 2); camp.addGood("weapons", Double(k))
+            f.lent = lent.total
+            c.totals.toDetail = (c.totals.toDetail ?? 0) + lent.total
+            // the war is fought here as well
+            let r = realm.meet(f.nation, town.nation ?? 0, at: world.time)
+            if realm.relations[r].state != 1 { realm.relations[r].since = -1e9; setState(r, 1) }
+            if let k2 = realm.ni(f.nation) { realm.nations[k2].exileSince = nil; realm.nations[k2].fatigue = 0 }
+            refreshNations()
+            emit("invaders", [p.name(zh: zh), town.name(zh: zh)], site.center, nations: [f.nation, town.nation ?? 0], city: town.id, cause: "regional war", result: "camp")
+            return
+        }
+    }
+
+    /// A camp left far behind (with no army of its own in the field) is struck: its survivors go back to their force.
+    func foldCamps(_ c: Civ, from t: TilePos) {
+        let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            guard let fid = s.campOf else { continue }
+            let (sx, sy) = Civ.regionOf(tile: s.center, size: c.cfg.regionTiles)
+            guard abs(sx - rx) > 3 || abs(sy - ry) > 3 else { continue }
+            if realm.legions.contains(where: { $0.nation == s.nation && $0.state != 0 }) { continue }
+            let alive = agents.values.filter { $0.sid == s.id }.sorted { $0.id < $1.id }
+            for a in alive { abort(a, s); leaveHome(a, s); agents[a.id] = nil }
+            s.members = []
+            let back = CivPeople(adults: alive.count)
+            c.totals.fromDetail = (c.totals.fromDetail ?? 0) + alive.count
+            if let f = c.forces[fid] { f.crew.add(back); f.lent = nil }
+            else if let home = c.cities.values.filter({ $0.nation == s.nation && $0.detail == nil }).min(by: { $0.id < $1.id }) { home.people.add(back) }
+            else { c.totals.deaths["battle", default: 0] += alive.count }
+            s.abandoned = true; detach(s)
+            invalidateGrid(); repairReferences()
+        }
+    }
+
+    /// A shown town that changed hands in the detailed world changes hands in the regional layer too
+    /// (taken by storm, gone over, handed back): one owner, in both.
+    func syncShownOwners(_ c: Civ) {
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            guard let cid = s.fromCiv, let city = c.cities[cid], let n = s.nation, n != city.nation, c.polities[n] != nil else { continue }
+            let old = city.nation
+            c.transfer(city, to: n)
+            c.say("captured", [c.polities[n]?.nameEn ?? "", c.polities[n]?.nameZh ?? "", city.nameEn, city.nameZh, c.polities[old]?.nameEn ?? "", c.polities[old]?.nameZh ?? ""], [n, old], region: city.regionKey)
+        }
+    }
+
     /// Machines of forces standing where a shown town is, for the views to draw: kind, nation colour, place.
     public func machinesInView() -> [(id: Int, kind: String, color: String, pos: Vec2, layer: CivLayer)] {
         guard let c = realm.civBox else { return [] }

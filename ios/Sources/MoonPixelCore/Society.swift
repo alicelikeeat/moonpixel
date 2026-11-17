@@ -240,6 +240,8 @@ public final class Settlement: Codable {
     /// A city of the regional layer shown here as a real town while the traveller is near (CivBridge.swift).
     public var fromCiv: Int?
     public var goodsFromCiv: [String: Double]?
+    /// A war camp of a regional force (its id): the force's soldiers, set down near the town they came to take.
+    public var campOf: Int?
     // refreshed by surveyTown
     public var fixtures: [String: Int] = [:]
     public var freeBeds: [TilePos] = []
@@ -254,7 +256,7 @@ public final class Settlement: Codable {
     var unreachT = 0.0
     var resT = 0.0, planT = 0.0, aiAcc = 0.0, cityT = 0.0
 
-    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege, flagOf, fromCiv, goodsFromCiv }
+    enum CodingKeys: String, CodingKey { case id, nameEn, nameZh, center, founded, lastFound, food, wood, stone, buildings, members, usedSlots, graves, abandoned, nation, unrest, goods, work, pause, cityName, byPlayer, formerCapital, siege, flagOf, fromCiv, goodsFromCiv, campOf }
     public init() {}
     public func inArea(_ t: TilePos) -> Bool { t.x >= origin.x && t.y >= origin.y && t.x < origin.x + Settlement.span && t.y < origin.y + Settlement.span }
     public func building(_ id: Int) -> Building? { buildings.first { $0.id == id } }

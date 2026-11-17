@@ -701,6 +701,41 @@ public enum Figure3D {
     }
 
     /// A flat tile-sized plate lying on y = 0, its corner at the origin (build previews, rings).
+    /// A machine of the regional wars as blocks, in its nation's colour, standing on y = 0 and centred on
+    /// x, z = 0: a frame is a figure four tiles tall, a carrier a long hull with a flat deck and an island,
+    /// a sky carrier a broad hull with wings and glowing lifters, the rest simpler shapes of their kind.
+    public static func machine(_ kind: String, color: RGBA) -> Mesh3D {
+        var m = Mesh3D()
+        let dark = color.darkened(0.35), light = color.lightened(0.3), steel = RGBA(120, 126, 140), ink = RGBA(40, 42, 54), glow = RGBA(120, 220, 255)
+        let def = CivUnitDef.byKey[kind]
+        if def?.hangarBay != nil && def?.layer == .sea {
+            m.box(-4, 0, -1.2, 4, 0.9, 1.2, steel, faces: .all); m.box(-4.4, 0.9, -1.4, 4.4, 1.05, 1.4, ink, faces: .all)
+            m.box(1.5, 1.05, 0.7, 2.6, 2.2, 1.3, dark, faces: .all); m.box(-3, 1.05, -0.4, -2.2, 1.3, 0.4, color, faces: .all); m.box(-1, 1.05, -0.9, -0.2, 1.3, -0.1, color, faces: .all)
+        } else if def?.hangarBay != nil {
+            m.box(-3.5, 0.6, -1.5, 3.5, 1.8, 1.5, steel, faces: .all); m.box(-5.5, 1.0, -0.6, -3.5, 1.3, 0.6, dark, faces: .all); m.box(3.5, 1.0, -0.6, 5.5, 1.3, 0.6, dark, faces: .all)
+            m.box(-2, 1.8, -0.8, 2, 2.4, 0.8, light, faces: .all); m.box(-1, 2.4, -0.4, 1, 2.7, 0.4, color, faces: .all)
+            for x in [Float(-2.6), 2.0] { m.box(x, 0.2, -0.4, x + 0.6, 0.6, 0.4, glow, faces: .all) }
+        } else if kind.hasSuffix("frame") || def?.size == .large {
+            m.box(-0.7, 0, -0.35, -0.15, 1.5, 0.35, steel, faces: .all); m.box(0.15, 0, -0.35, 0.7, 1.5, 0.35, steel, faces: .all)
+            m.box(-0.8, 1.5, -0.45, 0.8, 2.7, 0.45, dark, faces: .all); m.box(-1.25, 2.3, -0.5, 1.25, 3.0, 0.5, color, faces: .all)
+            m.box(-1.6, 1.3, -0.3, -1.1, 2.6, 0.3, steel, faces: .all); m.box(1.1, 1.3, -0.3, 1.6, 2.6, 0.3, steel, faces: .all)
+            m.box(-0.4, 3.0, -0.35, 0.4, 3.7, 0.35, light, faces: .all); m.box(-0.25, 3.3, 0.35, 0.25, 3.45, 0.4, RGBA(120, 255, 200), faces: .all)
+            m.box(1.7, 0.6, -0.08, 1.85, 4.2, 0.08, RGBA(255, 120, 90), faces: .all)
+        } else if def?.layer.air == true {
+            m.box(-0.2, 0, -1.4, 0.2, 0.35, 1.4, steel, faces: .all); m.box(-1.4, 0.1, -0.3, 1.4, 0.22, 0.5, color, faces: .all); m.box(-0.5, 0.1, 1.0, 0.5, 0.2, 1.4, dark, faces: .all)
+        } else if def?.layer == .sea || def?.layer == .underwater {
+            m.box(-2.2, 0, -0.6, 2.2, 0.7, 0.6, def?.layer == .underwater ? ink : steel, faces: .all); m.box(-0.5, 0.7, -0.35, 0.5, 1.3, 0.35, color, faces: .all)
+        } else if def?.size == .vehicle {
+            m.box(-0.9, 0.15, -1.2, 0.9, 0.75, 1.2, dark, faces: .all); m.box(-0.55, 0.75, -0.6, 0.55, 1.15, 0.5, color, faces: .all)
+            m.box(-0.08, 0.9, -1.9, 0.08, 1.05, -0.6, steel, faces: .all); m.box(-1.05, 0, -1.25, -0.9, 0.5, 1.25, ink, faces: .all); m.box(0.9, 0, -1.25, 1.05, 0.5, 1.25, ink, faces: .all)
+        } else {
+            for (x, z) in [(Float(-0.6), Float(-0.4)), (0, -0.6), (0.6, -0.4), (-0.35, 0.3), (0.35, 0.3), (0, 0.8)] {
+                m.box(x - 0.14, 0, z - 0.1, x + 0.14, 0.6, z + 0.1, color, faces: .all); m.box(x - 0.11, 0.6, z - 0.1, x + 0.11, 0.82, z + 0.1, RGBA(240, 210, 180), faces: .all)
+            }
+        }
+        return m
+    }
+
     public static func plate(color: RGBA, w: Float = 1, d: Float = 1, h: Float = 0.08) -> Mesh3D {
         var m = Mesh3D()
         m.box(0, 0, 0, w, h, d, color, faces: .all)
