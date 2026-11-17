@@ -205,8 +205,10 @@ final class GameModel: ObservableObject {
 
     static var defaultLook: Look { var l = Look(); l.hair = "#f0e8d0"; l.shirt = "#f4f0e0"; l.pants = "#5a5a78"; l.style = 3; return l }
 
-    /// Save format: 3 = v1.3 (cities, campaigns, building). Absent in older saves.
-    static let saveFormat = 3
+    /// Save format: 3 = v1.3 (cities, campaigns, building); 4 = v2.6 (the traveller's body and backpack,
+    /// outside elevators, standing towers, the exact list of storeys). Absent in older saves. A save of a
+    /// newer format is refused, never read halfway (an older game would drop what it does not know).
+    static let saveFormat = 4
     struct Index: Codable {
         var format: Int?
         var world: OpenWorld.Snapshot
@@ -510,7 +512,11 @@ final class GameModel: ObservableObject {
                 showToast(L("这个存档来自更新的版本，请更新游戏后再打开", "This save comes from a newer version; update the game to open it"))
                 worldID = ""; refreshWorlds(); return
             }
-            if let ix = index, (ix.format ?? 2) < GameModel.saveFormat { migrated = true }
+            if let ix = index, (ix.format ?? 2) < GameModel.saveFormat {
+                // the save as it was is kept whole (its generation and everything it points to) before it is changed
+                st.pinBackup("v\(ix.format ?? 2)")
+                migrated = true
+            }
             if index == nil {
                 // never lose a save we could not read: its generation stays on disk and a copy is put beside it
                 corrupt = true

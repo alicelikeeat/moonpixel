@@ -754,7 +754,7 @@ public final class Society {
             for f in spec.items where f.0 < w - 1 && f.1 < h - 1 {
                 // nothing is put right behind the door, so the entrance is never blocked
                 if TilePos(f.0, f.1) == inside { continue }
-                let key = f.2 == "banner" ? "banner_\(max(1, min(3, s.nation ?? 1)))" : f.2
+                let key = f.2 == "banner" ? "banner_\(Society.bannerTile(s.nation ?? 1))" : f.2
                 b.cells.append(BuildCell(dx: f.0, dy: f.1, layer: 2, key: key, wood: 2, stone: 2))
             }
             b.door = pos + dd + out

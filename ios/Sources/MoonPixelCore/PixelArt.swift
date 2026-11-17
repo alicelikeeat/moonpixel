@@ -106,7 +106,16 @@ public enum PixelArt {
         case 2: for i in 0..<9 { img.set(x + i, y + i, hi); img.set(x + 8 - i, y + i, hi) }           // Crimson: a saltire
         case 3: img.disc(Double(x) + 4.5, Double(y) + 4.5, 2.6, hi)                                   // Golden: a sun
                 for (dx, dy) in [(4, 0), (4, 8), (0, 4), (8, 4)] { img.set(x + dx, y + dy, hi) }
-        default: img.rect(x + 3, y + 3, 3, 3, hi)
+        default:
+            // every later nation has one of five more devices (and its own colour): a cross, a chevron,
+            // bars, a ring, a lozenge, in turn by its number
+            switch nation % 5 {
+            case 0: img.rect(x + 4, y, 1, 9, hi); img.rect(x, y + 4, 9, 1, hi)
+            case 1: for i in 0..<5 { img.set(x + i, y + 4 + i, hi); img.set(x + 8 - i, y + 4 + i, hi) }
+            case 2: img.rect(x, y + 2, 9, 1, hi); img.rect(x, y + 6, 9, 1, hi)
+            case 3: img.disc(Double(x) + 4.5, Double(y) + 4.5, 3.2, hi); img.disc(Double(x) + 4.5, Double(y) + 4.5, 1.8, c1)
+            default: for i in 0..<5 { img.rect(x + 4 - i, y + i, 1 + 2 * i, 1, hi); img.rect(x + 4 - i, y + 8 - i, 1 + 2 * i, 1, hi) }
+            }
         }
     }
 

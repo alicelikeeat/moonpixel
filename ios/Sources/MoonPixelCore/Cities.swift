@@ -129,10 +129,14 @@ extension Society {
     }
 
     /// Flags follow the owner: after a change of hands every banner in town is re-dyed.
+    /// The banner pole a nation flies (three cloths in the tile set; nations beyond the first three share
+    /// them, and are told apart by their own colour and device on gate crests, labels and panels).
+    static func bannerTile(_ n: Int) -> Int { ((max(1, n) - 1) % 3) + 1 }
+
     func reflag(_ s: Settlement) {
         s.flagOf = s.nation
-        guard let n = s.nation, n >= 1, n <= 3 else { return }
-        let want = content.tid("banner_\(n)")
+        guard let n = s.nation, n >= 1 else { return }
+        let want = content.tid("banner_\(Society.bannerTile(n))")
         let ids = Set((1...3).map { content.tid("banner_\($0)") })
         let r = realm.cfg.cityRadius
         for dy in -r...r { for dx in -r...r {
@@ -151,7 +155,7 @@ extension Society {
         } }
         for k in 5...12 { for x in [c.x - 1, c.x, c.x + 1] where world.isLand(x, c.y + k) && world.tile(1, x, c.y + k) == 0 && world.tile(2, x, c.y + k) == 0 { world.setTile(1, x, c.y + k, T["cobble_road"]!) } }
         let pole = c + TilePos(0, -3)
-        if world.tile(2, pole.x, pole.y) == 0, let n = s.nation, n >= 1, n <= 3 { world.setTile(2, pole.x, pole.y, content.tid("banner_\(n)")) }
+        if world.tile(2, pole.x, pole.y) == 0, let n = s.nation, n >= 1 { world.setTile(2, pole.x, pole.y, content.tid("banner_\(Society.bannerTile(n))")) }
     }
 
     // MARK: capitals

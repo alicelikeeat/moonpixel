@@ -61,6 +61,13 @@ extension Society {
     public func civHourly() {
         let c = civ
         mirrorNations()
+        // a traveller whose nation has passed into history is without a nation from then on (they keep
+        // their pack, their place and their name; the nation's own history stays readable)
+        let pn = realm.player.nation
+        if pn != 0 && (c.polities[pn]?.status == .history || realm.nation(pn)?.status == 2) {
+            realm.player.nation = 0
+            emit("player_stateless", [nationName(pn)], explorer?.center ?? .zero)
+        }
         let detailed = detailedRegions(c)
         // what is known: two regions around every town, three around the traveller
         for t in settlements.values.filter({ !$0.abandoned }).sorted(by: { $0.id < $1.id }) { c.discover(around: t.center, radius: 2, gen: world.gen, detailed: detailed) }

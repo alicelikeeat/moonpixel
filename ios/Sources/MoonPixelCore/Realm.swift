@@ -308,7 +308,7 @@ extension Society {
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
-        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "invaders": ("An army of %@ makes camp before %@", "%@ 的军队在 %@ 城外扎营"), "tower_seen": ("%@ stands %@ storeys high", "%@ 高 %@ 层"), "storey_added": ("%@ built a house up to %@ storeys", "%@ 把一座房子加盖到 %@ 层"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
+        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "invaders": ("An army of %@ makes camp before %@", "%@ 的军队在 %@ 城外扎营"), "player_stateless": ("%@ is no more: you travel without a nation", "%@ 已不复存在：你成为无国籍旅人"), "tower_seen": ("%@ stands %@ storeys high", "%@ 高 %@ 层"), "storey_added": ("%@ built a house up to %@ storeys", "%@ 把一座房子加盖到 %@ 层"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
         "resettled": ("New settlers begin again: %@", "新的移民重新开始：%@"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
         "capital_named": ("%@ made %@ its capital", "%@ 定都 %@"), "capital_lost": ("%@ lost its capital %@", "%@ 的首都 %@ 失守"),
         "capital_moved": ("%@ moved its capital to %@", "%@ 迁都至 %@"), "capital_restored": ("%@ raised a new capital at %@", "%@ 在 %@ 重建首都"),
@@ -324,11 +324,14 @@ extension Society {
     static let nationSeeds: [(String, String, String)] = [("Azure", "青曜", "#4a8af0"), ("Crimson", "赤焰", "#e8504a"), ("Golden", "金穗", "#e8b83a")]
 
     // MARK: founding
-    /// Create the three nations (once) and divide the living towns between them by geography.
+    /// Create the first nations (once) and divide the living towns between them by geography: one nation
+    /// for each town there is, up to the founding peoples the game names. One village makes one nation;
+    /// no town makes none. Nobody is invented to make up a number.
     func foundNations() {
-        if realm.nations.isEmpty {
+        let living = settlements.values.filter { !$0.abandoned }.count
+        if realm.nations.isEmpty && living > 0 {
             realm.rng = RNG(seed: Int(truncatingIfNeeded: rng.state) ^ 0x5eed)
-            for (i, n) in Society.nationSeeds.enumerated() {
+            for (i, n) in Society.nationSeeds.prefix(min(Society.nationSeeds.count, living)).enumerated() {
                 var nat = Nation()
                 nat.id = i + 1; nat.nameEn = n.0; nat.nameZh = n.1; nat.color = n.2; nat.techCount = legacyTech
                 realm.nations.append(nat)
@@ -359,7 +362,7 @@ extension Society {
                 let near = seeds.min { a, b in
                     let da = (a.center - t.center).lengthSquared, db = (b.center - t.center).lengthSquared
                     return da != db ? da < db : a.id < b.id }
-                t.nation = near?.nation ?? realm.nations[0].id
+                t.nation = near?.nation ?? realm.nations.first?.id
             }
         }
         for a in agents.values where a.nation == nil { a.nation = settlements[a.sid]?.nation }

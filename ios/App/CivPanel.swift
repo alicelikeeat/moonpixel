@@ -13,6 +13,7 @@ struct CivWorldSection: View {
     @State private var query = ""
     @State private var sort = CivSort.people
     @State private var showGone = false
+    @State private var nearOnly = false
     @State private var favourites: Set<Int> = Set((UserDefaults.standard.array(forKey: "civFavourites") as? [Int]) ?? [])
 
     var body: some View {
@@ -21,7 +22,12 @@ struct CivWorldSection: View {
             VStack(alignment: .leading, spacing: 8) {
                 summary(c)
                 controls
-                ForEach(rows(c), id: \.id) { p in row(p, c) }
+                if c.activePolities().isEmpty {
+                    Text(L("现在没有在位的国家：都已流亡或成为历史。你仍可以无国籍旅行，或在城镇里建国。", "No nation stands now: every one is in exile or history. You can travel without a nation, or found one in a town."))
+                        .font(.system(size: 12, design: .rounded)).opacity(0.8).accessibilityIdentifier("civ-none")
+                }
+                // every nation known, however many: a lazy list draws only the rows on screen
+                LazyVStack(alignment: .leading, spacing: 8) { ForEach(rows(c), id: \.id) { p in row(p, c) } }
             }
         }
     }
@@ -34,6 +40,9 @@ struct CivWorldSection: View {
             Text(L("已知地区人口 \(model.society.knownPopulation) · 国家 \(active) 个在位 / 共 \(total) 个 · 战争 \(wars) 处 · 已知地区 \(c.regions.count) 块",
                    "Known population \(model.society.knownPopulation) · nations \(active) standing / \(total) in all · wars \(wars) · regions known \(c.regions.count)"))
                 .font(.system(size: 11, design: .rounded)).opacity(0.85).accessibilityIdentifier("civ-summary")
+            Text(String(format: L("附近画出的人物 %d（画面上限，不是人口上限）· 附近城镇居民 %d", "Drawn nearby %d (a drawing limit, not a population limit) · residents of nearby towns %d"),
+                        model.scene?.agentNodes.count ?? 0, model.society.agents.count))
+                .font(.system(size: 10, design: .rounded)).opacity(0.7).accessibilityIdentifier("civ-counts")
             Text(L("未探索地区的人口不计入；走得越远，认识的国家越多。", "Lands not yet found are not counted: the further you walk, the more nations you know."))
                 .font(.system(size: 10, design: .rounded)).opacity(0.6)
         }
@@ -48,6 +57,7 @@ struct CivWorldSection: View {
                 Chip(title: label(s), icon: sort == s ? "checkmark" : "arrow.up.arrow.down", tint: sort == s ? Color.white.opacity(0.3) : Color.white.opacity(0.12), id: "civ-sort-\(s.rawValue)") { sort = s }
             }
             Chip(title: showGone ? L("隐藏已亡", "Hide fallen") : L("显示已亡", "Show fallen"), icon: "clock.arrow.circlepath", id: "civ-gone") { showGone.toggle() }
+            Chip(title: nearOnly ? L("全部已发现", "All found") : L("只看附近", "Nearby"), icon: "location.fill", id: "civ-near") { nearOnly.toggle() }
         }
     }
 
@@ -64,6 +74,12 @@ struct CivWorldSection: View {
     private func rows(_ c: Civ) -> [CivPolity] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         var list = c.polities.values.filter { showGone || $0.status != .history }
+        if nearOnly, let t = model.society.explorer {
+            // nations with a city within three regions of where you are (and the towns about you)
+            let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
+            let near = Set(c.cities.values.filter { abs($0.rx - rx) <= 3 && abs($0.ry - ry) <= 3 }.map { $0.nation })
+            list = list.filter { near.contains($0.id) }
+        }
         if !q.isEmpty { list = list.filter { $0.nameEn.lowercased().contains(q) || $0.nameZh.contains(q) || $0.short.lowercased().contains(q) } }
         func pop(_ p: CivPolity) -> Int { p.pop + p.detailPop }
         list.sort { a, b in
@@ -77,7 +93,7 @@ struct CivWorldSection: View {
             case .name: return a.name(zh: GameModel.zh) < b.name(zh: GameModel.zh)
             }
         }
-        return Array(list.prefix(60))
+        return list
     }
 
     private func row(_ p: CivPolity, _ c: Civ) -> some View {

@@ -182,4 +182,18 @@ final class StoreTests: XCTestCase {
         LawJournal.clear(u)
         XCTAssertEqual(LawJournal.recovery(u, store: WorldStore(directory: u)), .none)
     }
+
+    func testABackupPinnedBeforeAMigrationOutlivesCleanupsUntilAPermanentDeletion() throws {
+        let (u, s) = base("pin")
+        XCTAssertTrue(s.pinBackup("v3"))
+        XCTAssertTrue(s.pinBackup("v3"), "pinning again changes nothing")
+        let a1 = s.head!.chunks[k(1)]!.o
+        for i in 0..<4 { s.stage(k(1), d("a\(i + 10)")); try s.commit(index: d("i\(i)"), meta: d("m")); try s.collectGarbage() }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: s.blobURL(a1).path), "the old generation's data is still there after four saves")
+        let backup = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: u.appendingPathComponent("gen/backup-v3.json")))
+        XCTAssertEqual(backup.gen, 1)
+        try s.collectGarbage(purge: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: s.blobURL(a1).path), "a permanent deletion takes the backup too")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: u.appendingPathComponent("gen/backup-v3.json").path))
+    }
 }

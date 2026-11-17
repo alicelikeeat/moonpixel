@@ -219,11 +219,19 @@ public final class WorldStore {
         guard let h = current ?? head else { return 0 }
         var keep: [Manifest] = [h]
         if !purge, let p = h.prev, let pm = loadManifest(p) { keep.append(pm) }
+        // backups pinned before a migration stay, with everything they point to (a permanent deletion
+        // removes them too: what a law deleted must not live on in a backup)
+        var pinned: [String] = []
+        for f in (try? fm.contentsOfDirectory(atPath: gens.path)) ?? [] where f.hasPrefix("backup-") && f.hasSuffix(".json") {
+            if purge { try? fm.removeItem(at: gens.appendingPathComponent(f)); continue }
+            if let d = try? Data(contentsOf: gens.appendingPathComponent(f)), let m = try? JSONDecoder().decode(Manifest.self, from: d) { keep.append(m); pinned.append(f) }
+        }
         let keepGens = Set(keep.map { $0.gen })
         var live = Set<String>()
         for m in keep { for e in m.chunks.values { live.insert(e.o) }; if let i = m.index { live.insert(i.o) }; if let x = m.meta { live.insert(x.o) } }
         var removed = 0
         for f in (try? fm.contentsOfDirectory(atPath: gens.path)) ?? [] {
+            if pinned.contains(f) { continue }
             if f.hasPrefix("g"), f.hasSuffix(".json"), !f.hasSuffix(".pending.json"), let n = Int(f.dropFirst().dropLast(5)), keepGens.contains(n) { continue }
             try? fm.removeItem(at: gens.appendingPathComponent(f)); removed += 1
         }
@@ -235,6 +243,17 @@ public final class WorldStore {
         }
         try check(.cleanup, after: true)
         return removed
+    }
+
+    /// Keep the generation now in HEAD as a backup under `label` (before a migration rewrites the save).
+    /// Its blobs are kept by every cleanup until a permanent deletion. Pinning the same label again does
+    /// nothing. Returns false when there is nothing committed to keep.
+    @discardableResult public func pinBackup(_ label: String) -> Bool {
+        guard let h = head else { return false }
+        let u = gens.appendingPathComponent("backup-\(label).json")
+        if FileManager.default.fileExists(atPath: u.path) { return true }
+        guard let d = try? JSONEncoder().encode(h) else { return false }
+        return (try? d.write(to: u, options: .atomic)) != nil
     }
 
     /// Bytes on disk under objects/ (what the world really occupies).
