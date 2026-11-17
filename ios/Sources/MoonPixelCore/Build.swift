@@ -332,6 +332,18 @@ extension Society {
         return w
     }
 
+    /// Let go of storey layers nobody built on that are far from storey `here` (they are made again, the
+    /// same, from the towers when next needed). Storeys someone built on are kept: they hold changes.
+    /// Returns how many were let go.
+    @discardableResult public func trimStoreys(around here: Int, span: Int = 8) -> Int {
+        let built = storeySet
+        var gone = 0
+        for n in storeys.keys.sorted() where abs(n - here) > span && Society.insertion(built, n) != nil {
+            storeys[n] = nil; gone += 1
+        }
+        return gone
+    }
+
     /// Something was built or changed on storey n: it is one of the storeys that exist.
     func noteStorey(_ n: Int) {
         var set = storeySet

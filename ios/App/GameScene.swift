@@ -277,6 +277,8 @@ final class GameScene: SKScene {
             world.maintain()
             if under { model.world.maintain() } else { society.under?.maintain() }
             for w in society.storeys.values where w !== model.activeWorld { w.maintain() }
+            // storey layers a fall or a look passed through, with nothing built on them, are let go
+            society.trimStoreys(around: model.depth >= OpenWorld.storeyBase ? model.depth - OpenWorld.storeyBase : 0)
             model.tickHousekeeping(2)
             if model.showMap { model.rebuildMap() }
         }

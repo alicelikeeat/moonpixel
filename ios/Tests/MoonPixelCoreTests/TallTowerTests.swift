@@ -86,4 +86,18 @@ final class TallTowerTests: XCTestCase {
         XCTAssertEqual(s.storeyWorld(250).tile(0, o.x + 5, o.y + 5), 0, "nothing is left hanging in the air on storey 250")
         XCTAssertEqual(s.storeyWorld(1).tile(0, o.x + 5, o.y + 5), 0)
     }
+
+    func testStoreysPassedThroughAreLetGoButBuiltOnesAreKept() {
+        let s = makeSociety(4)
+        let o = s.world.findFree(near: TilePos(300, 300), maxR: 20)
+        stand(s, levels: 200, at: o)
+        for n in stride(from: 1, to: 200, by: 1) { _ = s.storeyWorld(n).tile(0, o.x + 5, o.y + 5) }
+        s.storeyWorld(150).setTile(2, o.x + 4, o.y + 4, s.content.tid("chest"))
+        XCTAssertEqual(s.storeys.count, 199)
+        s.trimStoreys(around: 0, span: 8)
+        XCTAssertLessThanOrEqual(s.storeys.count, 8 + 1 + 2, "near ones, and storey 150 which holds a change")
+        XCTAssertNotNil(s.storeys[150])
+        XCTAssertEqual(s.storeyWorld(120).tile(0, o.x + 5, o.y + 5), s.content.tid("wood_floor"), "a let-go storey is made again the same")
+        XCTAssertEqual(s.storeyWorld(150).tile(2, o.x + 4, o.y + 4), s.content.tid("chest"))
+    }
 }
