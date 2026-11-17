@@ -349,6 +349,11 @@ public final class Society {
     public var techCount: Int { realm.nations.map { $0.techCount }.max() ?? legacyTech }
     public var research: Double { realm.nations.max(by: { $0.techCount < $1.techCount })?.research ?? 0 }
     var legacyTech = 0
+    // transport (transient: worked out again every step)
+    var trackHold: [Int64: Int] = [:]
+    var congestion: [Int64: Int] = [:]
+    public var vehicleEvents: [VehicleEvent] = []
+    var trafficT = 0.0, workT = 0.0
     var techCtx = 0
     /// Start a world in a later era: the first `n` technologies are already known.
     public func grantTech(_ n: Int) {
@@ -570,6 +575,7 @@ public final class Society {
     // MARK: tick
     public func tick(_ dt: Double) {
         if realm.liftBox != nil { liftsStep(dt) }
+        if realm.transportBox != nil { transportTick(dt) }
         world.advance(dt)
         tickCount += 1
         // planning and resource scans are the heavy part of a town's work. When many fall due together
@@ -1127,7 +1133,7 @@ public final class Society {
                 for _ in 0..<6 {
                     let ang = rng.unit() * 2 * Double.pi, rad = rng.range(12, 30)
                     let p = TilePos(s.center.x + Int(cos(ang) * rad), s.center.y + Int(sin(ang) * rad))
-                    if !s.inArea(p) || s.claims[p] != nil || !world.isLand(p.x, p.y) || world.tile(2, p.x, p.y) != 0 || world.tile(1, p.x, p.y) != 0 { continue }
+                    if !s.inArea(p) || s.claims[p] != nil || !canPlant(p) { continue }
                     let g = world.tile(0, p.x, p.y)
                     if content.tile(g)?.built == true || g == T["farmland"] { continue }
                     if s.buildings.contains(where: { p.x >= $0.x - 1 && p.x <= $0.x + $0.w && p.y >= $0.y - 1 && p.y <= $0.y + $0.h }) { continue }
@@ -1248,7 +1254,7 @@ public final class Society {
                 if rng.unit() < 0.15 { a.think(now, "t_work_farmer") }
             }
         case "plant":
-            if world.tile(2, t.x, t.y) == 0 && world.isLand(t.x, t.y) {
+            if canPlant(t) {
                 world.setTile(2, t.x, t.y, content.tid("sapling"))
                 world.setTile(3, t.x, t.y, 0)
             }

@@ -180,6 +180,22 @@ public enum PixelArt {
             case "bridge":
                 for x in [0, 5, 10, 15] { img.rect(ox + x, oy, 1, 16, c2) }
                 img.rect(ox, oy, 16, 1, c2.darkened(0.2)); img.rect(ox, oy + 15, 16, 1, c2.darkened(0.2))
+            case "asphalt", "highway":
+                img.speck(ox, oy, 16, 16, c2, salt: salt, density: 0.10)
+                img.rect(ox + 7, oy + 2, 2, 4, c3); img.rect(ox + 7, oy + 10, 2, 4, c3)       // centre dashes
+                if kind == "highway" { img.rect(ox, oy, 16, 1, c3); img.rect(ox, oy + 15, 16, 1, c3) }
+            case "rail":
+                for x in [1, 6, 11] { img.rect(ox + x, oy, 3, 16, c3) }                     // sleepers
+                img.rect(ox, oy + 4, 16, 2, c2); img.rect(ox, oy + 10, 16, 2, c2)             // the two rails
+            case "runway":
+                img.rect(ox, oy + 7, 4, 2, c3); img.rect(ox + 8, oy + 7, 4, 2, c3)
+                img.rect(ox, oy, 16, 1, c3); img.rect(ox, oy + 15, 16, 1, c3)
+            case "parking":
+                img.speck(ox, oy, 16, 16, c2, salt: salt, density: 0.08)
+                img.rect(ox, oy, 1, 7, c3); img.rect(ox + 8, oy, 1, 7, c3)
+            case "quay":
+                for y in [0, 8] { img.rect(ox, oy + y, 16, 1, c2) }
+                img.rect(ox, oy + 14, 16, 2, c3)                                              // edge stripe
             case "ice":
                 img.speck(ox, oy, 16, 16, c2, salt: salt, density: 0.08)
                 img.rect(ox + 3, oy + 5, 6, 1, .white)

@@ -21,6 +21,8 @@ public struct LiftStop: Codable, Equatable {
 public enum LiftPlace: Codable, Equatable {
     case town(Int)                        // a town's store (Settlement id)
     case towerFloor(Int, Int)             // a standing tower's floor: tower id, level (its pantry, by nutrition)
+    case district(Int)                    // a district's warehouse (District.swift)
+    case cityFloor(Int, Int, Int)         // a district building's floor: district, building, level (its pantry, by nutrition)
 }
 
 public struct LiftJob: Codable, Equatable {
@@ -38,12 +40,16 @@ public struct LiftRide: Codable, Equatable {
     public var who = 0                    // agent id (the player rides by standing in the car: see Motion)
     public var from = 0, to = 0
     public var aboard = false
+    /// The rider is a commuter of a district (Commuter id in `who`), not a villager.
+    public var commuter: Bool?
 }
 
 public final class Elevator: Codable {
     public var id = 0, nation = 0
     public var town = 0                   // the town it stands in
     public var tower: Int?                // the standing tower it serves, if any
+    public var district: Int?             // the district building it serves, if any (powered by the district's grid)
+    public var building: Int?
     /// The shaft: x, y of its north-west tile, w x d tiles (outside the wall).
     public var x = 0, y = 0, w = 2, d = 2
     public var stops: [LiftStop] = []
@@ -148,6 +154,11 @@ extension Society {
         if (realm.player.plans ?? []).contains(planID) { return nil }
         if Goods.take(plan.cost, from: pack) != nil { return nil }
         realm.player.plans = (realm.player.plans ?? []) + [planID]
+        return makeLift(plan, x: x, y: y, w: w, d: d, town: town, tower: tower)
+    }
+
+    /// Put up a paid-for elevator: the car, the landings, a door in the wall beside each.
+    func makeLift(_ plan: LiftPlan, x: Int, y: Int, w: Int, d: Int, town: Int, tower: Int?) -> Int {
         let e = Elevator()
         e.id = (realm.lifts.map { $0.id }.max() ?? 0) + 1
         e.x = x; e.y = y; e.w = w; e.d = d; e.town = town; e.tower = tower
@@ -210,6 +221,9 @@ extension Society {
     /// Power for a car: the regional city its town stands for has spare power, or a generator (a machine)
     /// stands within six tiles of its ground landing.
     public func liftPowered(_ e: Elevator) -> Bool {
+        if let did = e.district, let dd = net.district(did) {
+            if dd.spareGrid >= liftCfg.draw { return true }
+        }
         if let s = settlements[e.town], let cid = s.fromCiv, let c = realm.civBox?.cities[cid], c.energyMade - c.energyUsed >= liftCfg.draw { return true }
         guard let g = e.stops.first else { return false }
         let m = content.tid("machine")
@@ -226,7 +240,7 @@ extension Society {
 
     func liftStep(_ e: Elevator, _ dt: Double, powered: Bool) {
         let cfg = liftCfg
-        e.rides.removeAll { agents[$0.who] == nil }           // someone who is gone rides no more
+        e.rides.removeAll { $0.commuter != true && agents[$0.who] == nil }           // someone who is gone rides no more
         if powered { e.battery = min(cfg.batteryFull, e.battery + dt * 2) }
         // jobs make their own calls
         for j in e.jobs where j.stage == .waiting { e.call(j.from, at: world.time) }
@@ -323,7 +337,8 @@ extension Society {
         let cfg = liftCfg
         for i in e.rides.indices where e.rides[i].aboard && e.rides[i].to == k {
             e.rides[i].aboard = false
-            if let a = agents[e.rides[i].who] { a.pos = e.stops[k].door.center }
+            if e.rides[i].commuter == true { commuterLiftDone(e.rides[i].who, level: e.stops[k].level) }
+            else if let a = agents[e.rides[i].who] { a.pos = e.stops[k].door.center }
             e.rides[i].who = -e.rides[i].who - 1                       // marked done
         }
         e.rides.removeAll { $0.who < 0 }
@@ -350,7 +365,8 @@ extension Society {
     func available(_ key: String, _ p: LiftPlace) -> Double {
         switch p {
         case .town(let id): return settlements[id]?.good(key) ?? 0
-        case .towerFloor: return 0
+        case .district(let id): return net.district(id)?.store[key] ?? 0
+        case .towerFloor, .cityFloor: return 0
         }
     }
 
@@ -362,7 +378,12 @@ extension Society {
             let got = min(n, s.good(key))
             if got > 0 { s.addGood(key, -got) }
             return got
-        case .towerFloor: return 0
+        case .district(let id):
+            guard let dd = net.district(id) else { return 0 }
+            let got = min(n, dd.store[key] ?? 0)
+            if got > 0 { dd.add(key, -got) }
+            return got
+        case .towerFloor, .cityFloor: return 0
         }
     }
 
@@ -376,6 +397,12 @@ extension Society {
             guard let c = realm.civBox, let t = c.towerIndex.towers[tid], level < t.floors.count else { return }
             let nut = key == "food" ? 1.0 : (key == "meal" ? 1.5 : 0)
             t.floors[level].food += n * nut
+        case .district(let id): net.district(id)?.add(key, n)
+        case .cityFloor(let did, let bid, let level):
+            guard let dd = net.district(did), let bi = dd.buildings.firstIndex(where: { $0.id == bid }), level < dd.buildings[bi].floors.count else { return }
+            let nut = key == "food" ? 1.0 : (key == "meal" ? 1.5 : 0)
+            dd.buildings[bi].floors[level].food += n * nut
+            if nut == 0 { dd.add(key, n) }
         }
     }
 

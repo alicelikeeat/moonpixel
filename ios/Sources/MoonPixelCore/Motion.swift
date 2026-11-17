@@ -30,6 +30,12 @@ public struct Body: Codable, Equatable {
     public var landings = 0
     /// Time not yet stepped (less than one substep): only whole steps are ever taken.
     public var acc = 0.0
+    /// The vehicle the body is in (v2.7): then `lx`, `ly` are where it stands inside (tiles forward and to
+    /// the right of the vehicle's middle), `z` is above the vehicle's floor, and the world position follows it.
+    public var vehicle: Int?
+    public var lx: Double?, ly: Double?, lz: Double?
+    /// The seat taken (0: the driver's); nil while standing.
+    public var seat: Int?
     public init() {}
     public init(at p: Vec2, z: Double, depth: Int) { x = p.x; y = p.y; self.z = z; self.depth = depth }
     public var pos: Vec2 { get { Vec2(x, y) } set { x = newValue.x; y = newValue.y } }

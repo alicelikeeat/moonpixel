@@ -271,6 +271,8 @@ public struct Realm: Codable {
     public var standing: [StandingTower]?
     /// Outside elevators (Elevator.swift); nil before v2.6.
     public var liftBox: [Elevator]?
+    /// Streets, railways, airports, ports, bridges, vehicles, lines, freight and districts (Transport.swift); nil before v2.7.
+    public var transportBox: TransportState?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
     public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
