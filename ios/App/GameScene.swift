@@ -132,7 +132,7 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard let model = model, model.world != nil, let society = model.society else { return }
         let world = model.activeWorld
-        let under = model.depth > 0
+        let under = model.depth == 1
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
         frameAvg = frameAvg * 0.95 + dt * 0.05
@@ -290,9 +290,12 @@ final class GameScene: SKScene {
         for key in bakes.next() {
             // the snapshot is taken here, on the main thread; the bitmap is made from it elsewhere
             let snap = ChunkSnapshot(world.chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)))
+            // on a storey, the level below shows (darkened) through the open air
+            let below: ChunkSnapshot? = world.storey > 0
+                ? ChunkSnapshot(model.society.layer(world.storey == 1 ? 0 : OpenWorld.storeyBase + world.storey - 1).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk))) : nil
             bakeWork.async { [weak self] in
                 let t0 = CACurrentMediaTime()
-                let cg = PixelArt.bakeChunk(layers: snap.layers).cgImage
+                let cg = (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0.layers) } ?? PixelArt.bakeChunk(layers: snap.layers)).cgImage
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.baked(key, cg, took) }
             }
@@ -479,11 +482,11 @@ final class GameScene: SKScene {
         guard attackT <= 0, let model = model, !model.worldLocked else { return }
         var dir = (target - player).normalized
         if dir == .zero { dir = facing }
-        if GameModel.weapons[model.weaponIndex] == "pick" || model.depth > 0 {
+        if GameModel.weapons[model.weaponIndex] == "pick" || model.depth == 1 {
             facing = dir; attackT = 0.3
             let t = (player + dir * 16).tile
             if model.dig(at: t) { model.solid?.burst(at: t.center, lift: 0.4, color: RGBA(hex: "#b0b0b0")); dust(at: CGPoint(x: t.center.x, y: -(t.center.y - 8)), color: UIColor(white: 0.7, alpha: 1)); return }
-            if model.depth > 0 { return }
+            if model.depth == 1 { return }
         }
         if !model.activePower.isEmpty {
             facing = dir

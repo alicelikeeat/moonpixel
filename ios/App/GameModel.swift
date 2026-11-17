@@ -537,6 +537,8 @@ final class GameModel: ObservableObject {
         if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
         let h = w.hour
         status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
+        if depth >= OpenWorld.storeyBase { status += String(format: L(" · 第 %d 层", " · storey %d"), depth - OpenWorld.storeyBase) }
+        else if depth == 1 { status += L(" · 地下", " · underground") }
         pollEvents()
         expireNotices()
         if showDetails {

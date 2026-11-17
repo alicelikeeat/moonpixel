@@ -20,7 +20,7 @@ extension GameModel {
     // MARK: layers
     var depth: Int { society?.realm.player.depth ?? 0 }
     /// The layer the player is on: the surface, or the underground.
-    var activeWorld: OpenWorld { depth > 0 ? society.underworld() : world }
+    var activeWorld: OpenWorld { depth == 0 ? world : society.layer(depth) }
 
     /// Anything that changes the world waits while a world law is running or its result is not yet saved.
     var worldLocked: Bool { lawBusy || lawSavePending || lawCommitting || exitBlocked != nil }
@@ -93,7 +93,7 @@ extension GameModel {
             showToast(says[done] ?? done)
             return true
         }
-        if depth > 0, let loot = s.playerOpenRuin(at: t) {
+        if depth == 1, let loot = s.playerOpenRuin(at: t) {
             let list = loot.sorted { $0.key < $1.key }.map { Recipe.goodName($0.key, zh: GameModel.zh) + " +\(Int($0.value))" }.joined(separator: L("、", ", "))
             showToast(L("遗迹宝箱：", "Ruin chest: ") + list)
             sc.firework(at: CGPoint(x: t.center.x, y: -(t.center.y - 30)))
@@ -109,13 +109,18 @@ extension GameModel {
         sc.resetLayer()
         following = false
         watch = .none
+        if depth >= OpenWorld.storeyBase {
+            let n = depth - OpenWorld.storeyBase
+            showToast(String(format: L("第 %d 层：只能站在楼板上；墙下三格内可以铺楼板，放“向上楼梯”可以继续往上盖", "Storey %d: stand only on floors; lay floor within three tiles of a wall below; place Stairs up to build higher"), n))
+            return
+        }
         showToast(depth > 0 ? L("进入地下：用镐挖掘岩壁和矿脉，阶梯可以返回地面", "Underground: dig rock and ore with the pick; take the stairs back up")
                             : L("回到地面", "Back on the surface"))
     }
 
     /// Always possible underground: cut a way up where you stand.
     func climbOut() {
-        guard let sc = scene, let s = society, depth > 0 else { return }
+        guard let sc = scene, let s = society, depth == 1 else { return }
         switchLayer(to: s.climbOut(from: sc.player))
     }
 
@@ -310,7 +315,7 @@ struct BuildPanel: View {
                 HStack(spacing: 6) {
                     Chip(title: L("拆除", "Demolish"), icon: "hammer.fill", id: "build-demolish") { model.chooseBuild("demolish") }
                     Chip(title: L("补给站", "Supply depot"), icon: "shippingbox.fill", id: "build-depot") { model.chooseBuild("depot") }
-                    if model.depth > 0 { Chip(title: L("就地挖出地面", "Climb out here"), icon: "arrow.up.circle.fill", id: "climb-out") { model.showBuild = false; model.climbOut() } }
+                    if model.depth == 1 { Chip(title: L("就地挖出地面", "Climb out here"), icon: "arrow.up.circle.fill", id: "climb-out") { model.showBuild = false; model.climbOut() } }
                 }
             }
         }

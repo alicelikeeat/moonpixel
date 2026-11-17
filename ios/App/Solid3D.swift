@@ -187,7 +187,7 @@ final class SolidRenderer {
             reset()
         }
         // light and sky
-        let under = model.depth > 0
+        let under = model.depth == 1
         let w = society.weather(at: scene.player)
         var l = under ? 0.62 : Float(0.25 + 0.75 * world.daylight)
         if !under { l *= 1 - Float(w.dim) * 0.6 }
@@ -206,6 +206,7 @@ final class SolidRenderer {
         camera.look(at: target + SIMD3<Float>(0, 0.6, 0), from: eye, relativeTo: nil)
 
         updateChunks(world, model)
+        updateLayers(model)
         let reach = Double(distance) * 1.5 * 16 + 64
         updateActors(world, society, model, scene, reach: reach, dt: dt)
         if !model.plainRender { updateSoldiers(world, society, model, reach: reach, dt: dt); updateRoofs(world, society, model, scene, reach: reach) }
@@ -224,6 +225,7 @@ final class SolidRenderer {
     private func reset() {
         for e in chunks.values { e.entity.removeFromParent() }
         chunks = [:]; billboards = []; queue.dropAll()
+        resetLayers()
         for d in [agents, soldiers, animals, standards] { for e in d.values { e.removeFromParent() } }
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
         for r in roofs.values { r.entity.removeFromParent() }
@@ -352,6 +354,80 @@ final class SolidRenderer {
         }
         chunks[key.chunk] = entry
         model.perf.phase("upload", CACurrentMediaTime() - t0)
+    }
+
+    // MARK: the other layers of the stack (storeys above, or the ground under the storey you are on)
+
+    private struct LayerChunk: Hashable { let depth: Int, chunk: Int64 }
+    private var layerChunks: [LayerChunk: (entity: ModelEntity, revision: Int)] = [:]
+    private var layerWaiting: Set<LayerChunk> = []
+
+    /// Every built storey is drawn at its height, together with the ground, wherever you stand (not underground):
+    /// a building looks as tall as it is. Only chunks something was built in are meshed; a chunk is meshed again
+    /// when its revision changes, two at most a frame.
+    private func updateLayers(_ model: GameModel) {
+        guard let society = model.society else { return }
+        let here = model.depth
+        var show: [Int] = []
+        if here != 1 {
+            show = society.builtStoreys().map { OpenWorld.storeyBase + $0 } + [0]
+            show.removeAll { $0 == here }
+        }
+        let r = min(3, Int(distance * 1.3 / 32) + 1)
+        let ccx = Int((target.x / 32).rounded(.down)), ccy = Int((target.z / 32).rounded(.down))
+        var wanted = Set<LayerChunk>()
+        var started = 0
+        for d in show {
+            let w = society.layer(d)
+            for cy in (ccy - r)...(ccy + r) { for cx in (ccx - r)...(ccx + r) {
+                // the ground is drawn wherever you look; a storey only where something was built on it
+                if d != 0 && !w.touched(cx, cy) { continue }
+                let lk = LayerChunk(depth: d, chunk: MP.chunkKey(cx, cy))
+                wanted.insert(lk)
+                let rev = w.revision(cx, cy)
+                if let e = layerChunks[lk], e.revision == rev { continue }
+                guard started < 2, !layerWaiting.contains(lk) else { continue }
+                started += 1
+                layerWaiting.insert(lk)
+                let input = ChunkInput3D(world: w, cx: cx, cy: cy)
+                let gen = w.gen
+                work.async { [weak self] in
+                    let mesh = Mesher3D.build(input, gen: gen)
+                    let cg = PixelArt.bakeGround(layers: input.layers).cgImage
+                    DispatchQueue.main.async { self?.layerBuilt(lk, mesh, cg, rev) }
+                }
+            } }
+        }
+        for (k, e) in layerChunks where !wanted.contains(k) { e.entity.removeFromParent(); layerChunks[k] = nil }
+    }
+
+    private func layerBuilt(_ lk: LayerChunk, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ rev: Int) {
+        layerWaiting.remove(lk)
+        guard let model = model, model.render3D, model.depth != 1 else { return }
+        let tex = cg.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)) }
+        var parts: [MeshDescriptor] = []
+        if !mesh.ground.isEmpty && tex != nil { parts.append(descriptor(mesh.ground, material: 0)) }
+        if !mesh.solid.isEmpty { parts.append(descriptor(mesh.solid, material: parts.isEmpty ? 0 : 1)) }
+        let entity = layerChunks[lk]?.entity ?? {
+            let e = ModelEntity()
+            e.name = "layer"
+            e.position = SIMD3(Float(MP.keyCX(lk.chunk) * 32), 0, Float(MP.keyCY(lk.chunk) * 32))
+            root.addChild(e)
+            return e
+        }()
+        if parts.isEmpty { entity.model = nil }
+        else if let res = try? MeshResource.generate(from: parts) {
+            var mats: [any RealityKit.Material] = []
+            if !mesh.ground.isEmpty, let t = tex { mats.append(material(t)) }
+            if !mesh.solid.isEmpty { mats.append(solidMaterial) }
+            entity.model = ModelComponent(mesh: res, materials: mats)
+        }
+        layerChunks[lk] = (entity, rev)
+    }
+
+    private func resetLayers() {
+        for e in layerChunks.values { e.entity.removeFromParent() }
+        layerChunks = [:]; layerWaiting = []
     }
 
     /// An upright picture, 16 pixels to the tile, standing on its bottom edge.
