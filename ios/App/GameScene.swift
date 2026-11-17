@@ -41,6 +41,8 @@ final class GameScene: SKScene {
     var lastTime: TimeInterval = 0
     /// The saved body is checked once, when the world is first shown (a bad place is put right, with a reason).
     var bodyChecked = false
+    /// Touches the 2D scene counts as held (for the hidden test state).
+    var heldTouches = 0
     private var lastTile = TilePos(Int.max, 0)
     private var hudAcc = 0.0, maintAcc = 0.0, saveAcc = 0.0, walkT = 0.0, attackT = 0.0
     /// Where the camera looks: the player, or a battle / city / army being watched.
@@ -713,6 +715,12 @@ final class GameScene: SKScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let v = view else { return }
+        // a touch whose end never reached us (taken over by an overlay) must not count as held
+        otherTouches.removeAll { $0.phase == .ended || $0.phase == .cancelled }
+        if otherTouches.isEmpty { pinching = false }
+        if let j = joyTouch, j.phase == .ended || j.phase == .cancelled { joyTouch = nil; joyVec = .zero }
+        if let d = dragTouch, d.phase == .ended || d.phase == .cancelled { dragTouch = nil }
+        heldTouches = otherTouches.count
         for t in touches {
             let p = t.location(in: v)
             if joyTouch == nil && otherTouches.isEmpty && inJoyZone(p) { joyTouch = t; joyOrigin = p; joyVec = .zero }

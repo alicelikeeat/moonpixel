@@ -527,6 +527,9 @@ struct MorePanel: View {
                 group(L("玩法", "Ways to play")) {
                     Chip(title: L("都市模式", "Metro"), icon: "building.2.crop.circle.fill", id: "Metro") { model.showMore = false; model.startMetro() }
                     Chip(title: L("指挥模式", "Command"), icon: "flag.2.crossed.fill", id: "Command") { model.showMore = false; model.startCommand() }
+                    Chip(title: model.render3D ? L("2D 视角", "2D view") : L("3D 视角", "3D view"), icon: model.render3D ? "square.grid.3x3.fill" : "cube.fill", id: "View3D") {
+                        model.showMore = false; model.render3D.toggle()
+                    }
                     Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
                 }
                 group(L("形象与素材", "Looks and pictures")) {
@@ -546,9 +549,6 @@ struct MorePanel: View {
                 group(L("视角与操作", "View and controls")) {
                     Chip(title: model.viewMode == .first ? L("第三人称", "Third person") : L("第一人称", "First person"), icon: model.viewMode == .first ? "person.fill.viewfinder" : "eye.fill", id: "ViewFirst") {
                         model.showMore = false; model.viewMode = model.viewMode == .first ? .third : .first; if !model.render3D { model.render3D = true }
-                    }
-                    Chip(title: model.render3D ? L("2D 视角", "2D view") : L("3D 视角", "3D view"), icon: model.render3D ? "square.grid.3x3.fill" : "cube.fill", id: "View3D") {
-                        model.showMore = false; model.render3D.toggle()
                     }
                 }
                 VStack(alignment: .leading, spacing: 4) {

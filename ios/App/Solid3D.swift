@@ -1078,6 +1078,11 @@ final class SolidInputView: UIView {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let model = model, let scene = model.scene else { return }
+        // a touch whose end never reached us must not count as held
+        others.removeAll { $0.phase == .ended || $0.phase == .cancelled }
+        if others.isEmpty { pinching = false }
+        if let j = joyTouch, j.phase == .ended || j.phase == .cancelled { joyTouch = nil; joyVec = .zero; steer() }
+        if let d = dragTouch, d.phase == .ended || d.phase == .cancelled { dragTouch = nil; scene.dragStart = nil }
         for t in touches {
             let p = t.location(in: self)
             if joyTouch == nil && others.isEmpty && inJoyZone(p) { joyTouch = t; joyOrigin = p; joyVec = .zero; steer() }

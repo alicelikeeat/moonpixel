@@ -118,6 +118,7 @@ final class MoonPixelUITests: XCTestCase {
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.56, dy: 0.30)), to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.30))
         from.press(forDuration: 0.1, thenDragTo: to); sleep(1)
         shot("10-build-preview")
+        print("UITEST build: " + app.staticTexts["save-state"].label + " toast: " + app.staticTexts["last-toast"].label)
         XCTAssertTrue(app.buttons["build-confirm"].waitForExistence(timeout: 3), "a preview waits for confirmation")
         XCTAssertTrue(text(app, containing: "tiles").exists, "the preview tells how many tiles and what it costs")
         app.buttons["build-confirm"].tap(); sleep(1)
@@ -240,6 +241,7 @@ final class MoonPixelUITests: XCTestCase {
         sleep(2)
         shot("3d-02-turned")
         win.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)).tap(); sleep(1)
+        print("UITEST frames: window \(win.frame) 64x \(app.buttons["64×"].frame) status \(status.frame) jump \(app.buttons["jump"].frame) hotbar \(app.buttons["hotbar-0"].frame) more \(app.buttons["more"].frame)")
         app.buttons["64×"].tap(); sleep(6)
         shot("3d-03-fast")
         XCTAssertTrue(status.exists)
@@ -416,13 +418,15 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(app.buttons["lift-stop-0"].exists && app.buttons["lift-stop-5"].exists, "its landings, ground to storey 5")
         XCTAssertFalse(app.buttons["lift-stop-6"].exists, "and none it does not stop at")
         shot("35-lift-panel")
-        // send it to the ground and watch the height shown fall
+        // where it is now (the demo sent it up), then down to the ground: the height shown falls
+        let first = line.label
         app.buttons["lift-stop-0"].tap(); sleep(1)
         app.buttons["close-panel"].tap()
-        let first = line.label
-        sleep(5)
+        sleep(6)
         let later = line.label
+        print("UITEST lift: \(first) -> \(later)")
         XCTAssertNotEqual(first, later, "the car moved: \(first) -> \(later)")
+        XCTAssertTrue(later.contains("Ground") || later.contains("地面"), "and stopped at the ground: \(later)")
         shot("34-car-down")
     }
 }
