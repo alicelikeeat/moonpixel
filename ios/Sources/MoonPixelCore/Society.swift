@@ -420,6 +420,8 @@ public final class Society {
     var sprung: [TilePos] = []
     /// The underground layer, once someone has gone down.
     public internal(set) var under: OpenWorld?
+    /// Storeys above the surface, by number (1, 2, ...), created as someone builds up to them.
+    public internal(set) var storeys: [Int: OpenWorld] = [:]
     var wardActive = false
     /// Where the player is, so companions can follow. Set by the scene; never saved.
     public var viewer: Vec2?

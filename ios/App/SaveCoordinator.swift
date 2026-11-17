@@ -44,6 +44,7 @@ extension GameModel {
         let t0 = CACurrentMediaTime()
         w.saveAll()
         s.under?.saveAll()
+        for w in s.storeys.values { w.saveAll() }
         let ix = Index(format: GameModel.saveFormat, world: w.snapshot(), society: s.snapshot(), px: sc.player.x, py: sc.player.y, look: playerLook, recipe: recipe)
         let tech = s.techCount > 0 ? s.techName(s.techCount - 1) : ""
         let meta = WorldMeta(id: worldID, name: worldName, seed: w.seed, savedAt: Date(), year: w.year + 1, population: s.agents.count, diskBytes: storeDiskBytes, tech: tech)

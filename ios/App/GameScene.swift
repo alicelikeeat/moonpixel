@@ -235,6 +235,7 @@ final class GameScene: SKScene {
             if !under { world.survey(center: TilePos(Int((viewPos.x / 512).rounded(.down)), Int((viewPos.y / 512).rounded(.down))), count: 16) }
             world.maintain()
             if under { model.world.maintain() } else { society.under?.maintain() }
+            for w in society.storeys.values where w !== model.activeWorld { w.maintain() }
             model.tickHousekeeping(2)
             if model.showMap { model.rebuildMap() }
         }

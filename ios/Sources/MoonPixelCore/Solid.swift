@@ -109,6 +109,8 @@ public enum Palette3D {
 /// below its banks, bridges are level with them, and the underground is one flat floor.
 public enum Terrain3D {
     public static let step: Float = 0.25
+    /// Height of one storey in levels (2 tiles): room for a wall and a slab.
+    public static let storeyLevels = 8
     public static let waterDrop: Float = 0.3
     public static let maxLevel = 28
 
@@ -120,14 +122,14 @@ public enum Terrain3D {
     public static func groundY(level: Int, ground: UInt8, structure: UInt8, depth: Int) -> Float {
         let c = Content.shared
         let wet = c.water[Int(ground)] && !c.bridge[Int(structure)]
-        let base = depth > 0 ? 0 : Float(level) * step
+        let base = depth == 1 ? 0 : Float(level) * step
         return wet ? base - waterDrop : base
     }
 
     /// Top of the ground under a point of the world (points are in the simulation's units, 16 per tile).
     public static func groundY(world: OpenWorld, at p: Vec2) -> Float {
         let t = p.tile
-        let lv = world.depth > 0 ? 0 : level(elevation: world.gen.elevation(t.x, t.y))
+        let lv = world.depth == 1 ? 0 : level(elevation: world.gen.elevation(t.x, t.y)) + world.storey * storeyLevels
         return groundY(level: lv, ground: world.tile(MP.lGround, t.x, t.y), structure: world.tile(MP.lStruct, t.x, t.y), depth: world.depth)
     }
 
@@ -250,9 +252,13 @@ public enum Mesher3D {
         return h
     }
 
+    /// Height marking air on a storey (no floor there).
+    public static let air: Float = -1000
+
     public static func build(_ input: ChunkInput3D, gen: Generator) -> ChunkMesh3D {
         var out = ChunkMesh3D()
         let g = input.layers[0], st = input.layers[1], ob = input.layers[2], de = input.layers[3]
+        let storey = input.depth >= OpenWorld.storeyBase ? input.depth - OpenWorld.storeyBase : 0
         let bx = input.cx * 32, by = input.cy * 32
         // ground tops on a 34 x 34 grid: the chunk and one tile around it
         var h = [Float](repeating: 0, count: 34 * 34)
@@ -267,8 +273,9 @@ public enum Mesher3D {
         for ty in -1...32 { for tx in -1...32 {
             let inside = tx >= 0 && tx < 32 && ty >= 0 && ty < 32
             let ids = inside ? (g[ty * 32 + tx], st[ty * 32 + tx]) : edge(tx, ty)
-            let lv = input.depth > 0 ? 0 : Terrain3D.level(elevation: gen.elevation(bx + tx, by + ty))
-            h[(ty + 1) * 34 + tx + 1] = Terrain3D.groundY(level: lv, ground: ids.0, structure: ids.1, depth: input.depth)
+            let lv = input.depth == 1 ? 0 : Terrain3D.level(elevation: gen.elevation(bx + tx, by + ty)) + storey * Terrain3D.storeyLevels
+            // air on a storey: nothing to stand on, nothing drawn
+            h[(ty + 1) * 34 + tx + 1] = storey > 0 && ids.0 == 0 ? Mesher3D.air : Terrain3D.groundY(level: lv, ground: ids.0, structure: ids.1, depth: input.depth)
         } }
         func H(_ tx: Int, _ ty: Int) -> Float { h[(ty + 1) * 34 + tx + 1] }
         for ty in 0..<32 { for tx in 0..<32 { out.heights[ty * 32 + tx] = H(tx, ty) } }
@@ -279,6 +286,7 @@ public enum Mesher3D {
             var tx = 0
             while tx < 32 {
                 let y = H(tx, ty)
+                if y == Mesher3D.air { tx += 1; continue }
                 var end = tx + 1
                 while end < 32 && H(end, ty) == y { end += 1 }
                 let x0 = Float(tx), x1 = Float(end), z0 = Float(ty), z1 = Float(ty + 1)
@@ -288,8 +296,22 @@ public enum Mesher3D {
             }
         }
 
+        // a storey's floors are slabs a quarter of a level thick, seen from below and at their open edges
+        if storey > 0 {
+            for ty in 0..<32 { for tx in 0..<32 {
+                let y = H(tx, ty)
+                guard y != Mesher3D.air else { continue }
+                let c = colors[Int(g[ty * 32 + tx])].0.darkened(0.3)
+                var f: Mesh3D.Faces = [.bottom]
+                if H(tx, ty + 1) == Mesher3D.air { f.insert(.south) }
+                if H(tx, ty - 1) == Mesher3D.air { f.insert(.north) }
+                if H(tx + 1, ty) == Mesher3D.air { f.insert(.east) }
+                if H(tx - 1, ty) == Mesher3D.air { f.insert(.west) }
+                out.solid.box(Float(tx), y - 0.25, Float(ty), Float(tx + 1), y, Float(ty + 1), c, faces: f)
+            } }
+        }
         // the sides of every step down to a lower neighbour
-        for ty in 0..<32 { for tx in 0..<32 {
+        for ty in 0..<32 { for tx in 0..<32 where storey == 0 {
             let y = H(tx, ty)
             let c = colors[Int(g[ty * 32 + tx])].0.darkened(0.22)
             let x0 = Float(tx), x1 = Float(tx + 1), z0 = Float(ty), z1 = Float(ty + 1)

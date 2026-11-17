@@ -27,6 +27,7 @@ public struct Piece {
         p("road", "cobble_road", "Road", "道路", 1, [("stone", 1)], 1),
         p("bridge", "bridge_wood", "Bridge", "桥梁", 1, [("wood", 3)], 1, water: true),
         p("stairs", "stairs_down", "Mine stairs", "矿井阶梯", 2, [("wood", 4), ("stone", 4)], 1),
+        p("stairs_up", "stairs_up", "Stairs up", "向上楼梯", 2, [("wood", 4), ("stone", 2)], 1),
         p("workbench", "workbench", "Workbench", "工作台", 2, [("wood", 6)], 2),
         p("furnace", "furnace", "Furnace", "熔炉", 2, [("stone", 8)], 2),
         p("anvil", "anvil", "Anvil", "铁砧", 2, [("iron", 3)], 2),
@@ -104,6 +105,13 @@ extension Society {
         else if layer == 2 { if w.tile(2, t.x, t.y) != 0 { return "occupied" } }
         else if layer == 3 { if w.tile(3, t.x, t.y) == content.tid(tileKey) { return "occupied" } }
         else if w.tile(0, t.x, t.y) == content.tid(tileKey) { return "occupied" }
+        // storeys: a floor needs something under it to stand on; anything else needs a floor
+        if w.storey > 0 {
+            if layer == 0 { if !supported(t, onStorey: w.storey) { return "unsupported" } }
+            else if w.tile(0, t.x, t.y) == 0 { return "no_floor" }
+            if tileKey == "stairs_down" { return "stairs_from_below" }
+        }
+        if tileKey == "stairs_up" && w.isUnder { return "stairs_from_below" }
         if w.depth == 0, nation != 0 {
             // nobody builds inside a city that belongs to someone else
             for s in settlements.values where !s.abandoned && s.inArea(t) && (t - s.center).lengthSquared < 30 * 30 {
@@ -156,6 +164,7 @@ extension Society {
                 if let pp = player, pp.tile == c.pos { out.moved = w.findFree(near: c.pos, maxR: 6).center }
             }
             if p.key == "stairs" && w.depth == 0 { linkStairs(at: c.pos) }
+            if p.key == "stairs_up" { linkUp(at: c.pos, from: w) }
             if p.group == 3 { updateNetwork(around: c.pos, in: w) }
         }
         out.cost = pre.cost
@@ -303,18 +312,78 @@ extension Society {
         if u.tile(2, t.x, t.y) == content.tid("stairs_up") { u.setTile(2, t.x, t.y, 0) }
     }
 
+    // MARK: storeys above the surface
+
+    /// The n-th storey above the surface (created on first use, in the same store as the rest of the world).
+    public func storeyWorld(_ n: Int) -> OpenWorld {
+        if let w = storeys[n] { return w }
+        let w = OpenWorld(seed: world.seed, budget: world.budget, depth: OpenWorld.storeyBase + n)
+        w.diskLimitBytes = world.diskLimitBytes
+        if let st = world.store { w.open(store: st) }
+        storeys[n] = w
+        return w
+    }
+
+    /// Every storey that has been built (1 up to the highest), for saving, drawing and world laws.
+    public func builtStoreys() -> [Int] { (realm.storeyTop ?? 0) > 0 ? Array(1...(realm.storeyTop ?? 0)) : [] }
+
+    /// The layer with this depth: 0 surface, 1 underground, 100 + n storey n.
+    public func layer(_ depth: Int) -> OpenWorld { depth == 0 ? world : (depth == 1 ? underworld() : storeyWorld(depth - OpenWorld.storeyBase)) }
+
+    /// What holds a floor up: a wall, a column or a stair on the level below, within three tiles of it
+    /// (a floor may reach out that far from what carries it, no further).
+    public func supported(_ t: TilePos, onStorey n: Int) -> Bool {
+        let below = n == 1 ? world : storeyWorld(n - 1)
+        let up = content.tid("stairs_up")
+        for dy in -3...3 { for dx in -3...3 {
+            let x = t.x + dx, y = t.y + dy
+            // only what people built carries a floor: walls and stairs, not trees or boulders
+            let o = Int(below.tile(2, x, y)), s = Int(below.tile(1, x, y))
+            let tiles = content.tiles
+            let built = { (id: Int) -> Bool in tiles[id]?.built == true }
+            if (o != 0 && ((content.solid[o] && built(o)) || o == Int(up))) || (s != 0 && content.solid[s] && built(s)) { return true }
+        } }
+        return false
+    }
+
+    /// A stair going up has its landing on the storey above: a floor round it and a stair down.
+    func linkUp(at t: TilePos, from w: OpenWorld) {
+        let n = w.storey + 1
+        let up = storeyWorld(n)
+        let floor = content.tid("wood_floor")
+        for dy in -1...1 { for dx in -1...1 where up.tile(0, t.x + dx, t.y + dy) == 0 { up.setTile(0, t.x + dx, t.y + dy, floor) } }
+        up.setTile(2, t.x, t.y, content.tid("stairs_down"))
+        realm.storeyTop = max(realm.storeyTop ?? 0, n)
+    }
+
     /// Use the stairs under the player's feet (or beside them). Returns the new depth and position.
+    /// Down from the surface goes underground; up from the underground comes back; up from the surface or
+    /// any storey goes one storey higher, down from a storey one lower.
     public func useStairs(at pos: Vec2) -> (depth: Int, pos: Vec2)? {
         let depth = realm.player.depth ?? 0
-        let w = depth == 0 ? world : underworld()
-        let want = content.tid(depth == 0 ? "stairs_down" : "stairs_up")
+        let w = layer(depth)
+        let down = content.tid("stairs_down"), up = content.tid("stairs_up")
         for d in [TilePos(0, 0), TilePos(1, 0), TilePos(-1, 0), TilePos(0, 1), TilePos(0, -1)] {
             let t = pos.tile + d
-            guard w.tile(2, t.x, t.y) == want else { continue }
-            if depth == 0 { linkStairs(at: t); realm.player.depth = 1; return (1, underworld().findFree(near: t + TilePos(0, 1), maxR: 3).center) }
-            // coming up: the surface stair may have been removed or built over; come out beside where it was
-            realm.player.depth = 0
-            return (0, world.findFree(near: t + TilePos(0, 1), maxR: 12).center)
+            let id = w.tile(2, t.x, t.y)
+            if depth == 0 && id == down { linkStairs(at: t); realm.player.depth = 1; return (1, underworld().findFree(near: t + TilePos(0, 1), maxR: 3).center) }
+            if depth == 1 && id == up {
+                // coming up: the surface stair may have been removed or built over; come out beside where it was
+                realm.player.depth = 0
+                return (0, world.findFree(near: t + TilePos(0, 1), maxR: 12).center)
+            }
+            if depth != 1 && id == up {
+                linkUp(at: t, from: w)
+                let n = w.storey + 1
+                realm.player.depth = OpenWorld.storeyBase + n
+                return (OpenWorld.storeyBase + n, storeyWorld(n).findFree(near: t + TilePos(0, 1), maxR: 3).center)
+            }
+            if w.storey > 0 && id == down {
+                let n = w.storey - 1
+                let target = n == 0 ? world : storeyWorld(n)
+                realm.player.depth = n == 0 ? 0 : OpenWorld.storeyBase + n
+                return (realm.player.depth!, target.findFree(near: t + TilePos(0, 1), maxR: 12).center)
+            }
         }
         return nil
     }

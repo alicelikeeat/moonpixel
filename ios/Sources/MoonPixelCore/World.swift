@@ -145,7 +145,9 @@ public final class Generator {
     }
 
     public func generate(_ cx: Int, _ cy: Int) -> Chunk {
-        if depth > 0 { return generateCave(cx, cy) }
+        if depth == 1 { return generateCave(cx, cy) }
+        // a storey above the ground is air until someone lays a floor on it
+        if depth >= OpenWorld.storeyBase { return Chunk(cx: cx, cy: cy) }
         let c = Chunk(cx: cx, cy: cy)
         var g = [UInt8](repeating: 0, count: MP.chunkArea), st = g, ob = g, de = g
         let bx = cx * 32, by = cy * 32
@@ -371,8 +373,13 @@ public final class OpenWorld {
     }
     private var revClock = 0
 
-    /// 0 is the surface; 1 is the underground layer with its own chunks and files.
+    /// 0 is the surface; 1 is the underground layer; 100 + n is the n-th storey above the surface (n = 1, 2, ...
+    /// with no top). Each has its own chunks and files in the same store.
     public let depth: Int
+    public static let storeyBase = 100
+    public var isUnder: Bool { depth == 1 }
+    /// Which storey this layer is (0 for the surface and the underground).
+    public var storey: Int { depth >= OpenWorld.storeyBase ? depth - OpenWorld.storeyBase : 0 }
 
     public init(seed: Int, budget: MemoryBudget, depth: Int = 0) {
         self.seed = seed
@@ -579,11 +586,14 @@ public final class OpenWorld {
             if content.solid[s] { return true }
             if content.bridge[s] { return false }
         }
+        // on a storey, air holds nobody: only a floor can be walked on
+        if depth >= OpenWorld.storeyBase && c.layers[0][i] == 0 { return true }
         return content.solid[Int(c.layers[0][i])]
     }
 
     public func isLand(_ wx: Int, _ wy: Int) -> Bool {
-        !content.water[Int(tile(0, wx, wy))] && !content.solid[Int(tile(1, wx, wy))]
+        if depth >= OpenWorld.storeyBase && tile(0, wx, wy) == 0 { return false }
+        return !content.water[Int(tile(0, wx, wy))] && !content.solid[Int(tile(1, wx, wy))]
     }
 
     public func setTile(_ layer: Int, _ wx: Int, _ wy: Int, _ id: UInt8) {

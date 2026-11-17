@@ -269,6 +269,7 @@ extension Society {
         for s in old.settlements.values where !s.abandoned { old.detach(s) }
         old.world.wipe()
         old.underworld().wipe()                  // the underground of the old world goes with it
+        for n in old.builtStoreys() { old.storeyWorld(n).wipe() }      // and every storey built above it
         let w = OpenWorld(seed: plan.newSeed, budget: old.world.budget)
         w.diskLimitBytes = old.world.diskLimitBytes
         w.gen.tempBias = old.world.gen.tempBias; w.gen.moistBias = old.world.gen.moistBias; w.gen.elevBias = old.world.gen.elevBias
@@ -342,6 +343,8 @@ public final class LawRun {
                 if had { result.chunks += 1 }
                 // the land returns to nature all the way down: mines, ruins dug out and stairs under it go too
                 if plan.mode == .guixu { let u = s.underworld(); if u.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || u.loaded(c.cx, c.cy) { u.revertChunk(c.cx, c.cy); result.chunks += 1 } }
+                // and nothing is left hanging in the air: every storey above the land goes with it
+                for n in s.builtStoreys() { let up = s.storeyWorld(n); if up.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || up.loaded(c.cx, c.cy) { up.revertChunk(c.cx, c.cy); result.chunks += 1 } }
                 s.pressed = s.pressed.filter { $0.x >> 5 != c.cx || $0.y >> 5 != c.cy }
                 i += 1; left -= 2; doneItems += 1
             case 5:     // history

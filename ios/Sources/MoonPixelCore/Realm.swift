@@ -213,7 +213,7 @@ public struct PlayerState: Codable {
     /// Build plans already carried out (so a plan sent twice is paid for once).
     public var plans: [Int]?
     public var craft: CraftJob?
-    /// 0 on the surface, 1 underground.
+    /// 0 on the surface, 1 underground, 100 + n on the n-th storey above the surface.
     public var depth: Int?
 }
 
@@ -247,6 +247,8 @@ public struct Realm: Codable {
     var contribBox: ContributionLog?
     /// Nations, people, food, industry and arms beyond the detailed towns (Civ.swift); nil in older saves.
     public var civBox: Civ?
+    /// The highest storey anyone has built up to (storeys are found again from it after loading).
+    public var storeyTop: Int?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
     public var fauna: Fauna { get { faunaBox ?? Fauna() } set { faunaBox = newValue } }
     public init() {}
