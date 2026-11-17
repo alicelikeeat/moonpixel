@@ -347,9 +347,27 @@ final class TransportDemoTests: XCTestCase {
         XCTAssertNil(s.board(car.id, drive: true))
         var c = Controls(); c.throttle = 1
         s.steer(c)
+        let p0 = car.pos
         for _ in 0..<60 { s.transportTick(1.0 / 30); s.world.time += 1.0 / 30 }
         XCTAssertNotNil(d.plane, "\(d.notes)"); XCTAssertNotNil(d.train, "\(d.notes)")
         XCTAssertGreaterThan(car.speed, 3, "halted \(car.halted ?? "-") at \(car.tile) way \(String(describing: s.wayKind(at: car.tile))) next \(String(describing: s.wayKind(at: TilePos(car.tile.x + 1, car.tile.y)))) blocked \(s.world.blocked(car.tile.x + 1, car.tile.y)) notes \(d.notes) input \(car.input) ctl \(car.control)")
+        // the demo street gives a straight run to drive: the UI test reads the speed after a second or two
+        for _ in 0..<60 { s.transportTick(1.0 / 30); s.world.time += 1.0 / 30 }
+        XCTAssertGreaterThan(car.pos.distance(to: p0) / 16, 8, "it drove along the street instead of into something")
+        XCTAssertNil(car.halted)
+        // and the same in the world the UI tests use (seed 7), through the society's whole tick
+        let s7 = makeSociety(7)
+        let home = s7.settlements.values.sorted { $0.id < $1.id }[0].center
+        s7.realm.player.body = Body(at: home.center, z: 0, depth: 0)
+        let d7 = s7.transportDemo(near: home)
+        let car7 = s7.net.vehicle(d7.car!)!
+        s7.realm.player.body = Body(at: car7.world(0, 1.2), z: 0, depth: 0)
+        XCTAssertNil(s7.board(car7.id, drive: true))
+        let q0 = car7.pos
+        var c7 = Controls(); c7.throttle = 0.9
+        for _ in 0..<30 { s7.steer(c7); s7.tick(1.0 / 15) }
+        XCTAssertGreaterThan(car7.speed * 7.2, 10, "km/h after two seconds")
+        XCTAssertGreaterThan(car7.pos.distance(to: q0) / 16, 3)
         // the 3D models have the vehicles' own size
         for k in VehicleKind.allCases { XCTAssertFalse(Figure3D.vehicle(k).isEmpty, "\(k)") }
     }

@@ -450,7 +450,7 @@ final class MoonPixelUITests: XCTestCase {
         let slider = app.sliders["drive-throttle"]
         XCTAssertTrue(slider.exists, "the throttle")
         slider.adjust(toNormalizedSliderPosition: 0.9)
-        sleep(3)
+        sleep(2)
         let moving = speed.label
         print("UITEST drive: \(moving) | \(app.staticTexts["drive-state"].label) | toast \(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "-")")
         XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving)")
@@ -461,7 +461,8 @@ final class MoonPixelUITests: XCTestCase {
         shot("42-autopilot")
         app.buttons["drive-auto"].tap(); sleep(2)
         print("UITEST drive manual again: \(app.staticTexts["drive-state"].label)")
-        slider.adjust(toNormalizedSliderPosition: 0)
+        XCTAssertTrue(slider.waitForExistence(timeout: 5), "the controls are back once the driver has them again")
+        if slider.exists { slider.adjust(toNormalizedSliderPosition: 0) }
         app.descendants(matching: .any)["drive-brake"].firstMatch.press(forDuration: 4)
         sleep(1)
         print("UITEST drive stopped: \(speed.label)")

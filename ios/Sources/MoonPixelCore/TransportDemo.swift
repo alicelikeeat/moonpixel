@@ -34,8 +34,17 @@ extension Society {
         // a street with a car and a bus
         let s0 = TilePos(o.x, o.y + 2), s1 = TilePos(o.x + 40, o.y + 2)
         if lay(.street, s0, s1) {
-            // the car past the bus stop, facing along the street
-            let c = laid[min(12, laid.count - 2)], n = laid[min(13, laid.count - 1)]
+            // the car at the start of the street's longest straight run (past the bus stop), facing along it
+            var best = (start: min(12, laid.count - 2), run: 0)
+            var i = min(8, laid.count - 2)
+            while i < laid.count - 1 {
+                let dx = laid[i + 1].x - laid[i].x, dy = laid[i + 1].y - laid[i].y
+                var j = i + 1
+                while j < laid.count - 1 && laid[j + 1].x - laid[j].x == dx && laid[j + 1].y - laid[j].y == dy { j += 1 }
+                if j - i > best.run { best = (i, j - i) }
+                i = j
+            }
+            let c = laid[best.start], n = laid[best.start + 1]
             out.car = buildVehicle(.car, at: c, heading: atan2(Double(n.y - c.y), Double(n.x - c.x)), payer: .district(d.id), nation: nation)?.id
             if let a = addStop(.busStop, at: TilePos(o.x + 6, o.y + 2), name: "Demo Sq", nation: nation, district: d.id),
                let b = addStop(.busStop, at: TilePos(o.x + 38, o.y + 2), name: "Demo End", nation: nation, district: d.id),
