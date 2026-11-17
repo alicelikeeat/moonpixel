@@ -512,11 +512,10 @@ struct WarPanel: View {
 /// Everything that does not fit on the tab bar, as one glass sheet (a menu overflowed in landscape).
 struct MorePanel: View {
     @EnvironmentObject var model: GameModel
-    private let cols = [GridItem(.adaptive(minimum: 128), spacing: 6, alignment: .leading)]
 
     var body: some View {
         GlassSheet(title: L("更多", "More"), subtitle: "", close: { model.showMore = false }) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 group(L("世界与城市", "World and towns")) {
                     Chip(title: L("制造", "Craft"), icon: "hammer.fill", id: "Craft") { model.showMore = false; model.showCraft = true }
                     Chip(title: L("城市", "Cities"), icon: "building.columns.fill", id: "Cities") { model.showMore = false; model.showCities = true }
@@ -552,7 +551,8 @@ struct MorePanel: View {
     private func group<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title).font(.system(size: 11, weight: .semibold, design: .rounded)).opacity(0.65)
-            LazyVGrid(columns: cols, alignment: .leading, spacing: 6) { content() }
+            // one plain row per group (not a lazy grid: every button exists at once and the panel fits on screen)
+            HStack(spacing: 6) { content() }
         }
     }
 }
