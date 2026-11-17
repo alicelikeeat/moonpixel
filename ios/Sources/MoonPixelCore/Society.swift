@@ -201,6 +201,10 @@ public final class Building: Codable {
     public var door = TilePos(0, 0)
     /// The nation whose builders raised it: its roof keeps that style after the town changes hands.
     public var style: Int?
+    /// Storeys the house has (nil: one). Each storey above the ground houses one more household.
+    public var levels: Int?
+    /// The households living on its upper storeys (the ground floor's is `owner`).
+    public var upstairs: [Int]?
     public init() {}
 }
 
@@ -796,17 +800,23 @@ public final class Society {
         var households: [Int: [Agent]] = [:]
         for a in living { households[household(a, now), default: []].append(a) }
         let houses = s.buildings.filter { $0.type == "house" }
-        for b in houses where b.owner != nil && households[b.owner!] == nil { b.owner = nil; b.residents = [] }
+        for b in houses where b.owner != nil && households[b.owner!] == nil { b.owner = nil }
+        for b in houses {
+            b.residents = []
+            if let up = b.upstairs { let keep = up.filter { households[$0] != nil }; b.upstairs = keep.isEmpty ? nil : keep }
+        }
         for hid in households.keys.sorted() {
             let members = households[hid]!
-            var hb = houses.first { $0.owner == hid }
+            var hb = houses.first { $0.owner == hid || ($0.upstairs ?? []).contains(hid) }
             if hb == nil, let free = houses.first(where: { $0.done && $0.owner == nil }) { free.owner = hid; hb = free }
+            // no house of their own: a storey of someone else's, where one stands empty
+            if hb == nil, let up = houses.first(where: { $0.done && ($0.upstairs ?? []).count < ($0.levels ?? 1) - 1 }) { up.upstairs = (up.upstairs ?? []) + [hid]; hb = up }
             for m in members {
                 let newHome = (hb?.done ?? false) ? hb!.id : -1
                 if newHome >= 0 && m.home != newHome { m.think(now, "t_home") }
                 m.home = newHome
             }
-            hb?.residents = members.map { $0.id }
+            hb?.residents += members.map { $0.id }
         }
         // beds anyone built on a proper floor take in those still without a house
         var spare = s.freeBeds.count
@@ -819,7 +829,11 @@ public final class Society {
             if s.count("farm") < farmsWanted && s.count("farm") * 3 <= s.count("house") { queue(s, "farm") }
             // a capital with a roof for most of its people raises its palace before more houses
             else if isCapital(s) && s.count("palace") == 0 && has("masonry") && pop >= 12 && houses.count * 2 >= households.count && s.wood >= 20 { queue(s, "palace") }
-            else if houses.count < households.count && homeless > 0 { queue(s, "house") }
+            // not enough homes: once the town has a few houses it builds upwards (a storey on the lowest
+            // finished house, paid in wood and stone) rather than spreading; else another house on the ground
+            else if houses.reduce(0, { $0 + ($1.levels ?? 1) }) < households.count && homeless > 0 {
+                if !(houses.count >= 4 && addStorey(s, houses)) { queue(s, "house") }
+            }
             else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
             else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }
             else if let tb = Society.techBuildings.first(where: { has($0.0) && pop >= $0.2 && s.count($0.1) == 0 }) { queue(s, tb.1) }

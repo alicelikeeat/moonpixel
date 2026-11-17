@@ -132,4 +132,48 @@ final class StoreyTests: XCTestCase {
             if n < 3 { at = stairs[n] }
         }
     }
+
+    func testTakingAwayWhatCarriesAFloorBringsItDown() {
+        let s = makeSociety(5)
+        let o = site(s)
+        for dx in -1...9 { s.world.setTile(2, o.x + dx, o.y, 0); s.world.setTile(3, o.x + dx, o.y, 0) }   // clear ground
+        XCTAssertEqual(build(s, "wall_stone", [TilePos(o.x, o.y)], on: s.world).placed, 1)
+        XCTAssertEqual(build(s, "stairs_up", [TilePos(o.x + 8, o.y)], on: s.world).placed, 1)          // a way up, well away from the wall
+        let s1 = s.storeyWorld(1)
+        XCTAssertEqual(build(s, "floor_wood", [TilePos(o.x, o.y), TilePos(o.x + 1, o.y)], on: s1).placed, 2)
+        _ = build(s, "bed", [TilePos(o.x + 1, o.y)], on: s1)
+        XCTAssertNotNil(s.demolishBuild(at: TilePos(o.x, o.y), in: s.world), "the wall under it is taken down")
+        XCTAssertEqual(s1.tile(0, o.x, o.y), 0, "the floor it carried fell")
+        XCTAssertEqual(s1.tile(2, o.x + 1, o.y), 0, "with the bed on it")
+        XCTAssertNotEqual(s1.tile(0, o.x + 8, o.y), 0, "the landing by the stair still stands")
+        // the stair itself taken down: its landing and the stair down go too
+        XCTAssertNotNil(s.demolishBuild(at: TilePos(o.x + 8, o.y), in: s.world))
+        XCTAssertEqual(s1.tile(2, o.x + 8, o.y), 0)
+        XCTAssertEqual(s1.tile(0, o.x + 8, o.y), 0)
+    }
+
+    func testATownShortOfHomesBuildsUpwardsAndFamiliesMoveUpstairs() {
+        let s = makeSociety(7)
+        runYears(s, 1.5)
+        guard let town = s.settlements.values.filter({ !$0.abandoned }).max(by: { $0.buildings.filter { $0.type == "house" && $0.done }.count < $1.buildings.filter { $0.type == "house" && $0.done }.count }) else { return XCTFail("no town") }
+        let houses = town.buildings.filter { $0.type == "house" && $0.done }
+        guard houses.count >= 1 else { return XCTFail("no finished house") }
+        town.wood = 100; town.stone = 100
+        XCTAssertTrue(s.addStorey(town, houses), "a storey goes on")
+        let b = houses.min { ($0.id) < ($1.id) }!
+        let raised = houses.first { ($0.levels ?? 1) == 2 }!
+        _ = b
+        XCTAssertEqual(town.wood, 88); XCTAssertEqual(town.stone, 94)
+        let s1 = s.storeyWorld(1)
+        for dy in 0..<raised.h { for dx in 0..<raised.w {
+            XCTAssertNotEqual(s1.tile(0, raised.x + dx, raised.y + dy), 0, "a real floor over the whole house")
+            XCTAssertTrue(s.supported(TilePos(raised.x + dx, raised.y + dy), onStorey: 1))
+        } }
+        XCTAssertEqual(raised.cap, 8, "room for another family")
+        // a family without a house takes the upper storey
+        for other in houses where other !== raised { other.owner = other.owner ?? -999 }
+        runYears(s, 0.3)
+        XCTAssertEqual(s.audit(), [])
+        if let up = raised.upstairs?.first { XCTAssertTrue(raised.residents.contains { s.agents[$0].map { s.household($0, s.world.time) } == up }, "they are residents of the house") }
+    }
 }

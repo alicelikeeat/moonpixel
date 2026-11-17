@@ -147,7 +147,10 @@ extension Society {
                 var n = Nation(); n.id = p.id; n.nameEn = p.nameEn; n.nameZh = p.nameZh; n.color = p.color; n.techCount = legacyTech; n.regional = true
                 realm.nations.append(n)
             }
-            let s = foundSettlement(site)
+            // the same place as last time, if it was shown before (its houses still stand)
+            let s: Settlement
+            if let old = settlements.values.filter({ $0.abandoned && $0.fromCiv == city.id }).min(by: { $0.id < $1.id }) { old.abandoned = false; attach(old); s = old }
+            else { s = foundSettlement(site) }
             s.nation = city.nation; s.fromCiv = city.id
             s.nameEn = city.nameEn; s.nameZh = city.nameZh
             let k = min(max(8, city.pop / 4), 36, world.budget.maxAgents - agents.count - 10, city.people.total)
@@ -217,6 +220,7 @@ extension Society {
             s.abandoned = true; detach(s)
             city.shownAs = nil
             invalidateGrid()
+            repairReferences()
         }
     }
 }

@@ -196,6 +196,9 @@ extension Society {
             if layer == 0 { w.restoreGround(t.x, t.y) } else { w.setTile(layer, t.x, t.y, 0) }
             for (g, n) in p.cost { carry(g, (n * 0.5 * 4).rounded(.down) / 4) }
             if p.key == "stairs" { unlinkStairs(at: t) }
+            // the stair down that answered a stair up goes with it; floors left with nothing under them fall
+            if p.key == "stairs_up" { let up = storeyWorld(w.storey + 1); if up.tile(2, t.x, t.y) == content.tid("stairs_down") { up.setTile(2, t.x, t.y, 0) } }
+            if layer != 3 && !w.isUnder && (realm.storeyTop ?? 0) > w.storey { settleStoreys(above: w, around: t) }
             if p.group == 3 { updateNetwork(around: t, in: w) }
             realm.depots.removeAll { $0.x == t.x && $0.y == t.y }
             for lg in realm.legions { lg.supplyT = 0 }            // routes notice the change themselves (chunk stamps)
@@ -372,6 +375,53 @@ extension Society {
             }
         }
         return stairs
+    }
+
+    /// A town adds a storey to its lowest finished house: floor over the whole footprint, walls like the
+    /// ground floor's, two beds, and a stair inside from the level below. Costs the town 12 wood and 6 stone.
+    /// The floor stands on the walls below by the same rule as anything the player builds.
+    func addStorey(_ s: Settlement, _ houses: [Building]) -> Bool {
+        guard s.wood >= 12, s.stone >= 6,
+              let b = houses.filter({ $0.done && $0.w >= 5 && $0.h >= 5 }).min(by: { ($0.levels ?? 1, $0.id) < ($1.levels ?? 1, $1.id) }) else { return false }
+        let n = b.levels ?? 1                                   // the new storey's number
+        let below = n == 1 ? world : storeyWorld(n - 1), up = storeyWorld(n)
+        let o = TilePos(b.x, b.y)
+        var wall = world.tile(2, o.x, o.y)
+        if wall == 0 || !content.solid[Int(wall)] { wall = content.tid("wall_wood") }
+        let floor = content.tid("wood_floor"), bed = content.tid("bed")
+        // the stair: an inside corner, alternating so flights do not stack on each other
+        let st = TilePos(o.x + (n % 2 == 1 ? 1 : b.w - 2), o.y + b.h / 2)
+        if below.tile(2, st.x, st.y) != 0 && below.tile(2, st.x, st.y) != bed { return false }
+        s.wood -= 12; s.stone -= 6
+        for dy in 0..<b.h { for dx in 0..<b.w {
+            let t = TilePos(o.x + dx, o.y + dy)
+            up.setTile(0, t.x, t.y, floor)
+            if dx == 0 || dy == 0 || dx == b.w - 1 || dy == b.h - 1 { up.setTile(2, t.x, t.y, wall) }
+        } }
+        below.setTile(2, st.x, st.y, content.tid("stairs_up"))
+        linkUp(at: st, from: below)
+        up.setTile(2, o.x + b.w - 2, o.y + 1, bed); up.setTile(2, o.x + 1, o.y + b.h - 2, bed)
+        b.levels = n + 1; b.cap += 4
+        emit("storey_added", [s.name(zh: zh), "\(n + 1)"], o.center)
+        return true
+    }
+
+    /// After something was taken down on a level: floors above that nothing carries any more come down
+    /// (with what stood on them), level after level. Returns how many floor tiles fell.
+    @discardableResult func settleStoreys(above w: OpenWorld, around t: TilePos) -> Int {
+        var fell = 0
+        var n = w.storey + 1
+        var x0 = t.x - 3, x1 = t.x + 3, y0 = t.y - 3, y1 = t.y + 3
+        while n <= (realm.storeyTop ?? 0) {
+            let up = storeyWorld(n)
+            var gone: [TilePos] = []
+            for y in y0...y1 { for x in x0...x1 where up.tile(0, x, y) != 0 && !supported(TilePos(x, y), onStorey: n) { gone.append(TilePos(x, y)) } }
+            if gone.isEmpty { break }
+            for g in gone { for l in 0..<4 { up.setTile(l, g.x, g.y, 0) } }
+            fell += gone.count
+            x0 -= 3; x1 += 3; y0 -= 3; y1 += 3; n += 1
+        }
+        return fell
     }
 
     /// A stair going up has its landing on the storey above: a floor round it and a stair down.
