@@ -736,6 +736,29 @@ public enum Figure3D {
         return m
     }
 
+    /// An outside elevator's car: a floor, four corner posts, a roof and glass sides, its corner at the
+    /// origin, w x d tiles, 1.7 tall. The glass is a pale blue frame: you see the car going up and down.
+    public static func liftCar(w: Float, d: Float) -> Mesh3D {
+        var m = Mesh3D()
+        let steel = RGBA(150, 156, 170), glass = RGBA(170, 215, 240), deck = RGBA(110, 96, 80)
+        m.box(0, -0.12, 0, w, 0, d, deck, faces: .all)
+        m.box(0, 1.6, 0, w, 1.72, d, steel, faces: .all)
+        for (x, z) in [(Float(0), Float(0)), (w - 0.1, 0), (0, d - 0.1), (w - 0.1, d - 0.1)] { m.box(x, 0, z, x + 0.1, 1.6, z + 0.1, steel, faces: .all) }
+        // glass rails at waist and head height on every side
+        for y in [Float(0.9), Float(1.5)] {
+            m.box(0, y, 0, w, y + 0.05, 0.05, glass, faces: .all); m.box(0, y, d - 0.05, w, y + 0.05, d, glass, faces: .all)
+            m.box(0, y, 0, 0.05, y + 0.05, d, glass, faces: .all); m.box(w - 0.05, y, 0, w, y + 0.05, d, glass, faces: .all)
+        }
+        return m
+    }
+
+    /// One guide rail of an elevator shaft, one tile tall from y = 0 (scaled to the shaft's height).
+    public static func liftRail() -> Mesh3D {
+        var m = Mesh3D()
+        m.box(0, 0, 0, 0.14, 1, 0.14, RGBA(90, 96, 110), faces: .all)
+        return m
+    }
+
     public static func plate(color: RGBA, w: Float = 1, d: Float = 1, h: Float = 0.08) -> Mesh3D {
         var m = Mesh3D()
         m.box(0, 0, 0, w, h, d, color, faces: .all)

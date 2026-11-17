@@ -315,6 +315,7 @@ struct BuildPanel: View {
                 HStack(spacing: 6) {
                     Chip(title: L("拆除", "Demolish"), icon: "hammer.fill", id: "build-demolish") { model.chooseBuild("demolish") }
                     Chip(title: L("补给站", "Supply depot"), icon: "shippingbox.fill", id: "build-depot") { model.chooseBuild("depot") }
+                    Chip(title: L("外置电梯", "Outside elevator"), icon: "arrow.up.arrow.down.square.fill", id: "build-lift") { model.showBuild = false; model.buildLiftHere() }
                     if model.depth == 1 { Chip(title: L("就地挖出地面", "Climb out here"), icon: "arrow.up.circle.fill", id: "climb-out") { model.showBuild = false; model.climbOut() } }
                 }
             }
@@ -526,10 +527,27 @@ struct MorePanel: View {
                 group(L("玩法", "Ways to play")) {
                     Chip(title: L("都市模式", "Metro"), icon: "building.2.crop.circle.fill", id: "Metro") { model.showMore = false; model.startMetro() }
                     Chip(title: L("指挥模式", "Command"), icon: "flag.2.crossed.fill", id: "Command") { model.showMore = false; model.startCommand() }
+                    Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
+                }
+                group(L("视角与操作", "View and controls")) {
+                    Chip(title: model.viewMode == .first ? L("第三人称", "Third person") : L("第一人称", "First person"), icon: model.viewMode == .first ? "person.fill.viewfinder" : "eye.fill", id: "ViewFirst") {
+                        model.showMore = false; model.viewMode = model.viewMode == .first ? .third : .first; if !model.render3D { model.render3D = true }
+                    }
                     Chip(title: model.render3D ? L("2D 视角", "2D view") : L("3D 视角", "3D view"), icon: model.render3D ? "square.grid.3x3.fill" : "cube.fill", id: "View3D") {
                         model.showMore = false; model.render3D.toggle()
                     }
-                    Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L("转头灵敏度", "Look speed")).font(.system(size: 11, design: .rounded)).frame(width: 84, alignment: .leading)
+                        Slider(value: $model.lookSensitivity, in: 0.4...2.5).accessibilityIdentifier("look-speed")
+                    }
+                    Toggle(L("上下反转", "Invert up and down"), isOn: $model.invertLook).font(.system(size: 11, design: .rounded)).accessibilityIdentifier("invert-look")
+                    HStack {
+                        Text(L("楼板透明度", "Floor see-through")).font(.system(size: 11, design: .rounded)).frame(width: 84, alignment: .leading)
+                        Slider(value: $model.floorOpacity, in: 0.15...1).accessibilityIdentifier("floor-opacity")
+                    }
+                    Text(L("只改变画面：楼板照样承重、照样挡人。", "Only the picture changes: floors hold and stop you the same.")).font(.system(size: 9, design: .rounded)).opacity(0.6)
                 }
                 group(L("形象与素材", "Looks and pictures")) {
                     Chip(title: L("形象", "Photo"), icon: "person.crop.circle.badge.plus", id: "Photo") { model.showMore = false; model.pick = .player }

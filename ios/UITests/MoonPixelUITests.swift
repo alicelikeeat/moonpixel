@@ -349,4 +349,79 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["metro-retry-exit"].tap()
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 15), "after a good save it leaves")
     }
+
+    /// The pitch of the 3D view, read from the hidden "camera-state" text ("first yaw 0.40 pitch 0.80").
+    private func pitch(_ app: XCUIApplication) -> Double? {
+        let e = app.staticTexts["camera-state"]
+        guard e.exists else { return nil }
+        let parts = e.label.split(separator: " ")
+        guard let i = parts.firstIndex(of: "pitch"), i + 1 < parts.count else { return nil }
+        return Double(parts[i + 1])
+    }
+
+    /// v2.5: dragging up and down in 3D did not look up or down (an orbit camera clamped to look down at the
+    /// traveller). In first person a drag on the right side changes the pitch, it stays changed over many
+    /// frames, and it still works after a panel was opened and closed; moving, jumping and turning at once.
+    func testFirstPersonLooksUpAndDownAndItStays() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--first-person"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "in the world")
+        sleep(4)
+        guard let p0 = pitch(app) else { return XCTFail("no camera state") }
+        let view = app.otherElements["Solid3D"].exists ? app.otherElements["Solid3D"] : app.windows.firstMatch
+        let from = view.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.7)), to = view.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.35))
+        from.press(forDuration: 0.05, thenDragTo: to)
+        sleep(2)
+        guard let p1 = pitch(app) else { return XCTFail("no camera state") }
+        XCTAssertGreaterThan(p1, p0 + 0.2, "dragging up looks up (pitch \(p0) -> \(p1))")
+        sleep(3)
+        XCTAssertEqual(pitch(app) ?? 0, p1, accuracy: 0.001, "and it stays there: nothing pulls it back")
+        shot("30-look-up")
+        to.press(forDuration: 0.05, thenDragTo: view.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.75)))
+        sleep(2)
+        XCTAssertLessThan(pitch(app) ?? 1, p1 - 0.3, "and down again")
+        // the backpack opens and closes; the drag still works afterwards
+        XCTAssertTrue(app.buttons["backpack"].waitForExistence(timeout: 5))
+        app.buttons["backpack"].tap(); sleep(1)
+        shot("31-backpack")
+        XCTAssertTrue(text(app, containing: "Backpack").exists || text(app, containing: "背包").exists)
+        app.buttons["close-panel"].tap(); sleep(1)
+        let p2 = pitch(app) ?? 0
+        view.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.7)).press(forDuration: 0.05, thenDragTo: view.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.4)))
+        sleep(2)
+        XCTAssertGreaterThan(pitch(app) ?? 0, p2 + 0.2, "no leftover layer swallows the drag after a panel closed")
+        // jump: the height line shows the body in the air for a moment
+        XCTAssertTrue(app.buttons["jump"].exists)
+        app.buttons["jump"].tap()
+        shot("32-jump")
+    }
+
+    /// The traveller rides an outside elevator up a six-storey house: the height shown climbs, and the
+    /// elevator panel lists only the landings it stops at.
+    func testRidingTheOutsideElevator() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--3d", "--lift-demo"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20))
+        let line = app.staticTexts["height-line"]
+        XCTAssertTrue(line.waitForExistence(timeout: 15), "the height is shown")
+        sleep(2)
+        shot("33-in-the-car")
+        let first = line.label
+        sleep(8)
+        let later = line.label
+        XCTAssertNotEqual(first, later, "the car moved: \(first) -> \(later)")
+        shot("34-car-up")
+        if app.buttons["lift-open"].waitForExistence(timeout: 5) {
+            app.buttons["lift-open"].tap(); sleep(1)
+            XCTAssertTrue(app.buttons["lift-stop-0"].exists && app.buttons["lift-stop-5"].exists, "its landings, ground to storey 5")
+            XCTAssertFalse(app.buttons["lift-stop-6"].exists, "and none it does not stop at")
+            shot("35-lift-panel")
+            app.buttons["lift-stop-0"].tap(); sleep(1)
+            app.buttons["close-panel"].tap()
+        } else { XCTFail("no elevator button beside the car") }
+    }
 }

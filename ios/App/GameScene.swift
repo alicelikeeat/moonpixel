@@ -39,6 +39,8 @@ final class GameScene: SKScene {
     private var joyVec = CGVector.zero
     private var tapStart: [ObjectIdentifier: CGPoint] = [:]
     var lastTime: TimeInterval = 0
+    /// The saved body is checked once, when the world is first shown (a bad place is put right, with a reason).
+    var bodyChecked = false
     private var lastTile = TilePos(Int.max, 0)
     private var hudAcc = 0.0, maintAcc = 0.0, saveAcc = 0.0, walkT = 0.0, attackT = 0.0
     /// Where the camera looks: the player, or a battle / city / army being watched.
@@ -61,6 +63,7 @@ final class GameScene: SKScene {
     var battleMasses: [Int: Int] = [:]
     var roofNodes: [Int: SKSpriteNode] = [:]
     var crestNodes: [TilePos: SKSpriteNode] = [:]
+    var liftNodes: [Int: SKShapeNode] = [:]
     var simDebt = 0.0
     private var badgeNodes: [TilePos: SKNode] = [:]
     private var otherTouches: [UITouch] = []
@@ -90,6 +93,48 @@ final class GameScene: SKScene {
     var striking: Bool { attackT > 0.12 }
     /// The 3D view's stick: the same state the 2D stick sets.
     func steer(_ v: CGVector) { joyVec = v }
+
+    /// The traveller's body: walking, jumping, falling and riding are worked out by `Motion` in fixed steps,
+    /// the same for 2D and 3D. Anything else that moved the traveller (stairs, the map, waking up after a
+    /// fall, following someone) is taken as the new place, standing on the floor there.
+    func moveBody(_ society: Society, _ world: OpenWorld, _ model: GameModel, wish: Vec2, dt: Double) {
+        let g = WorldGround(society)
+        var b = society.realm.player.body ?? Body(at: player, z: g.floor(model.depth, player.tile) ?? g.nominal(model.depth, player.tile), depth: model.depth)
+        if bodyChecked == false {
+            bodyChecked = true
+            let fix = Motion.recover(b, ground: g, free: { d, t in
+                let w = society.layer(d)
+                let f = w.findFree(near: t, maxR: 8)
+                return (d >= OpenWorld.storeyBase && w.tile(0, f.x, f.y) == 0) ? nil : f
+            })
+            if let fixed = fix {
+                b = fixed.0
+                society.realm.player.depth = b.depth
+                player = b.pos
+                model.showToast(L("位置已恢复：", "Position restored: ") + fixed.1)
+            }
+        }
+        if b.platform == nil && (b.depth != model.depth || b.pos.distance(to: player) > 24) {
+            b = Body(at: player, z: g.floor(model.depth, player.tile) ?? g.nominal(model.depth, player.tile), depth: model.depth)
+        }
+        let lifts = society.realm.lifts
+        let r = Motion.advance(&b, dt: dt, wish: wish, jump: model.jumpQueued, ground: g, platforms: lifts.map { $0.platform })
+        model.jumpQueued = false
+        for e in lifts { e.playerAboard = b.platform == e.id }
+        // the floor met: its damage, once
+        if r.damage > 0 {
+            var t = Society.Threat(); t.damage = r.damage
+            if society.harmPlayer(t).died { society.realm.player.body = nil; model.playerDied(); return }
+            model.showToast(String(format: L("摔伤 −%.0f", "Hurt by the fall −%.0f"), r.damage))
+        }
+        player = b.pos
+        society.realm.player.body = b
+        if b.depth != model.depth {
+            // fell through to the storey below, or stepped out of a car onto another level
+            society.realm.player.depth = b.depth
+            resetLayer()
+        }
+    }
 
     override func didMove(to view: SKView) {
         backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.10, alpha: 1)
@@ -190,17 +235,11 @@ final class GameScene: SKScene {
         moving = mv.length > 0.15
         if moving {
             model.following = false
-            let speed = 90.0 * (mv.length > 0.92 ? 1.8 : 1.0)
-            let d = (mv.length > 1 ? mv.normalized : mv) * (speed * dt)
-            for axis in [Vec2(d.x, 0), Vec2(0, d.y)] {
-                let np = player + axis
-                let t = np.tile
-                if !world.blocked(t.x, t.y) { player = np }
-            }
             if attackT <= 0 { facing = mv.normalized }
             walkT += dt * 8
         }
         if model.following, let a = society.agents[model.selectedID] { player = a.pos }
+        else if !model.lawBusy { moveBody(society, world, model, wish: moving ? (mv.length > 1 ? mv.normalized : mv) * (90.0 * (mv.length > 0.92 ? 1.8 : 1.0)) : .zero, dt: dt) }
         // pressure plates notice who stands on them
         let here = player.tile
         if here != lastTile { society.press(lastTile, down: false, in: world); society.press(here, down: true, in: world); lastTile = here }
@@ -224,6 +263,7 @@ final class GameScene: SKScene {
             if !model.plainRender {
                 model.perf.time("soldiers") { updateSoldiers(society, model) }
                 model.perf.time("roofs") { updateRoofs(society, model) }
+                updateLifts2D(society, model)
             }
         }
 

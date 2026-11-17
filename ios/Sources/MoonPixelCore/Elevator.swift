@@ -105,7 +105,11 @@ extension Society {
 
     // MARK: building one
 
-    public struct LiftPlan { public var ok = false; public var reason = ""; public var stops: [LiftStop] = []; public var cost: [String: Double] = [:] }
+    public struct LiftPlan {
+        public var ok = false; public var reason = ""; public var stops: [LiftStop] = []; public var cost: [String: Double] = [:]
+        /// Landing floors to lay on storeys where there is none yet (the platform between the wall and the car).
+        public var platforms: [(level: Int, at: TilePos)] = []
+    }
 
     /// An elevator up the outside of a building: the shaft's tiles (w x d at x, y) must be free on the ground
     /// and on every storey it serves, and each served level must have floor at the landing tile beside it.
@@ -120,12 +124,19 @@ extension Society {
             for yy in y..<(y + d) { for xx in x..<(x + w) where lv == 0 ? lw.blocked(xx, yy) : (lw.tile(2, xx, yy) != 0 || lw.tile(0, xx, yy) != 0) { free = false } }
             if !free { p.reason = "shaft blocked on level \(lv)"; return p }
             let door = TilePos(x + (landingSide.x > 0 ? w : (landingSide.x < 0 ? -1 : 0)), y + (landingSide.y > 0 ? d : (landingSide.y < 0 ? -1 : 0)))
-            guard let f = g.floor(depth, door), !(lv == 0 && lw.blocked(door.x, door.y)) else { continue }
+            if lv > 0 && lw.tile(0, door.x, door.y) == 0 && lw.tile(2, door.x, door.y) == 0 && supported(door, onStorey: lv) {
+                // no landing yet: a platform is laid there (it stands on the wall below, like any floor)
+                p.platforms.append((lv, door))
+                p.stops.append(LiftStop(level: lv, z: g.nominal(depth, door), door: door))
+                continue
+            }
+            guard let f = g.floor(depth, door), !(lv == 0 && lw.blocked(door.x, door.y)), !(lv > 0 && lw.blocked(door.x, door.y)) else { continue }
             p.stops.append(LiftStop(level: lv, z: f, door: door))
         }
         if p.stops.count < 2 { p.reason = "fewer than two landings"; return p }
         var cost = liftCfg.costBase
         for (k, v) in liftCfg.costPerStop { cost[k, default: 0] += v * Double(p.stops.count) }
+        cost["planks", default: 0] += 2 * Double(p.platforms.count)
         p.cost = cost
         p.ok = true
         return p
@@ -143,6 +154,7 @@ extension Society {
         e.nation = settlements[town]?.nation ?? 0
         e.stops = plan.stops
         e.z = plan.stops[0].z; e.at = 0; e.state = .idle; e.battery = liftCfg.batteryFull
+        for pl in plan.platforms { storeyWorld(pl.level).setTile(0, pl.at.x, pl.at.y, content.tid("wood_floor")) }
         // a door in the wall beside each landing
         for s in plan.stops {
             let lw = layer(s.depth)
@@ -157,6 +169,43 @@ extension Society {
     }
 
     public func lift(_ id: Int) -> Elevator? { realm.lifts.first { $0.id == id } }
+
+    /// An elevator against the nearest building of two or more levels within 40 tiles of `near`, on the
+    /// side facing it: the shaft one tile out from the wall, the landing between. Nil when there is none.
+    public func liftSite(near p: Vec2) -> (plan: LiftPlan, x: Int, y: Int, town: Int, tower: Int?)? {
+        var best: (Double, Int, Int, Int, Int, Int, Int?)?          // distance, bx, by, bw, bd, levels, tower
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            for b in s.buildings where b.done && (b.levels ?? 1) >= 2 {
+                let c = Vec2(Double(b.x * 16 + b.w * 8), Double(b.y * 16 + b.h * 8))
+                let d = c.distance(to: p)
+                if d < 40 * 16 && d < (best?.0 ?? .infinity) { best = (d, b.x, b.y, b.w, b.h, b.levels ?? 1, nil) }
+            }
+        }
+        for t in realm.standing ?? [] {
+            let c = Vec2(Double(t.x * 16 + t.w * 8), Double(t.y * 16 + t.d * 8))
+            let d = c.distance(to: p)
+            if d < 40 * 16 && d < (best?.0 ?? .infinity) { best = (d, t.x, t.y, t.w, t.d, t.levels, t.tower) }
+        }
+        guard let b = best else { return nil }
+        let town = settlements.values.filter { !$0.abandoned && $0.inArea(TilePos(b.1, b.2)) }.min { $0.id < $1.id }?.id
+            ?? settlements.values.filter { !$0.abandoned }.min { $0.center.center.distance(to: p) < $1.center.center.distance(to: p) }?.id ?? 0
+        // the side facing the traveller, then the others
+        let cx = Double(b.1 * 16 + b.3 * 8), cy = Double(b.2 * 16 + b.4 * 8)
+        var sides: [(TilePos, Int, Int)] = [(TilePos(-1, 0), b.1 + b.3 + 1, b.2 + b.4 / 2 - 1), (TilePos(1, 0), b.1 - 3, b.2 + b.4 / 2 - 1),
+                                            (TilePos(0, -1), b.1 + b.3 / 2 - 1, b.2 + b.4 + 1), (TilePos(0, 1), b.1 + b.3 / 2 - 1, b.2 - 3)]
+        sides.sort { a, c in
+            let pa = Vec2(Double(a.1 * 16 + 16), Double(a.2 * 16 + 16)).distance(to: p), pc = Vec2(Double(c.1 * 16 + 16), Double(c.2 * 16 + 16)).distance(to: p)
+            return pa < pc
+        }
+        _ = cx; _ = cy
+        var last: LiftPlan?
+        for (side, x, y) in sides {
+            let plan = planLift(x: x, y: y, levels: Array(0..<b.5), landingSide: side)
+            if plan.ok { return (plan, x, y, town, b.6) }
+            last = plan
+        }
+        return last.map { ($0, sides[0].1, sides[0].2, town, b.6) }
+    }
 
     /// Power for a car: the regional city its town stands for has spare power, or a generator (a machine)
     /// stands within six tiles of its ground landing.

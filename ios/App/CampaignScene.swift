@@ -46,6 +46,8 @@ extension GameScene {
         roofNodes = [:]
         for n in crestNodes.values { n.removeFromParent() }
         crestNodes = [:]
+        for n in liftNodes.values { n.removeFromParent() }
+        liftNodes = [:]
         clearPreview()
     }
 

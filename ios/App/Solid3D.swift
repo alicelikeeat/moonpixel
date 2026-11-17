@@ -41,7 +41,14 @@ final class SolidRenderer {
 
     /// Where the camera stands around what it looks at (radians); the distance follows the scene's zoom.
     var yaw: Float = 0
+    /// Third person: how high the camera stands over the traveller (radians above the horizon).
     var pitch: Float = 0.92
+    /// First person: where the eyes look, up (+) or down (-), never past straight up or down.
+    var lookPitch: Float = 0
+    static let lookLimit: Float = 85 * .pi / 180
+    static let orbitRange: ClosedRange<Float> = 0.05...1.45
+    private var seenReset = 0
+    private var shownOpacity: Double = -1
     private var target = SIMD3<Float>(0, 0, 0)
     private var distance: Float = 12
 
@@ -77,6 +84,8 @@ final class SolidRenderer {
     private var animals: [Int: ModelEntity] = [:]
     private var roofs: [Int: (entity: ModelEntity, nation: Int)] = [:]
     private var standards: [Int: ModelEntity] = [:]
+    /// Outside elevators: the car (moved to its real height every frame) and the shaft's rails.
+    private var liftEntities: [Int: (car: ModelEntity, rails: [ModelEntity], top: Float)] = [:]
     private var pool: [ModelEntity] = []
     private let player = ModelEntity()
     private let playerRing = ModelEntity()
@@ -178,7 +187,18 @@ final class SolidRenderer {
     }
 
     private func materials(for e: ChunkEntry) -> [any RealityKit.Material] {
-        (e.entity.model?.materials.count ?? 2) > 1 ? [material(e.ground), solidMaterial] : [material(e.ground)]
+        // the floor you stand on, when it is a storey, is see-through too: what is below shows
+        let ground = (model?.depth ?? 0) >= OpenWorld.storeyBase ? floorMaterial(e.ground) : material(e.ground)
+        return (e.entity.model?.materials.count ?? 2) > 1 ? [ground, solidMaterial] : [ground]
+    }
+
+    /// A storey's floor: see-through by the setting (its sides and its edges stay solid, so it reads as a slab).
+    /// Only the picture changes: the floor holds and is walked on the same at any setting.
+    private func floorMaterial(_ t: TextureResource?) -> UnlitMaterial {
+        var m = material(t)
+        let a = Float(max(0.15, min(1, model?.floorOpacity ?? 0.45)))
+        if a < 0.99 { m.blending = .transparent(opacity: .init(scale: a)) }
+        return m
     }
 
     // MARK: frame
@@ -201,14 +221,32 @@ final class SolidRenderer {
             : (w.fall == 3 ? UIColor(white: 0.78 * day + 0.08, alpha: 1) : UIColor(red: 0.05 + 0.51 * day, green: 0.07 + 0.67 * day, blue: 0.18 + 0.72 * day, alpha: 1))
         setLight(l, sky: sky)
 
-        // camera: around what the scene looks at, as far as its zoom says
+        if model.inputReset != seenReset { seenReset = model.inputReset; host?.releaseTouches() }
+        if model.floorOpacity != shownOpacity { shownOpacity = model.floorOpacity; resetLayers(); for e in chunks.values { e.entity.model?.materials = materials(for: e) } }
+        // camera. First person: from the traveller's eyes, where the drag points them (the yaw and pitch are
+        // only ever changed by the drag: nothing here pulls them back). Third person: around the traveller.
         let vp = scene.viewPos
-        let want = SIMD3<Float>(Float(vp.x / 16), groundY(world, vp), Float(vp.y / 16))
+        let body = society.realm.player.body
+        let feet = model.watch == .none ? Float(body?.z ?? Double(groundY(world, vp))) : groundY(world, vp)
+        let want = SIMD3<Float>(Float(vp.x / 16), feet, Float(vp.y / 16))
         let jump = abs(want.x - target.x) + abs(want.z - target.z) > 40
-        target = jump ? want : SIMD3(want.x, target.y + (want.y - target.y) * min(1, dt * 6), want.z)
+        target = jump ? want : SIMD3(want.x, target.y + (want.y - target.y) * min(1, dt * 10), want.z)
         distance = 24 / Float(max(0.2, scene.zoom))
-        let eye = target + distance * SIMD3<Float>(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
-        camera.look(at: target + SIMD3<Float>(0, 0.6, 0), from: eye, relativeTo: nil)
+        let first = model.viewMode == .first && model.watch == .none
+        if first {
+            let eye = SIMD3<Float>(want.x, feet + 1.35, want.z)
+            let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
+            camera.look(at: eye + dir, from: eye, relativeTo: nil)
+        } else {
+            var eye = target + distance * SIMD3<Float>(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
+            // never under the ground behind the traveller
+            let under = groundY(world, Vec2(Double(eye.x * 16), Double(eye.z * 16))) + 0.4
+            if eye.y < under { eye.y = under }
+            camera.look(at: target + SIMD3<Float>(0, 0.6, 0), from: eye, relativeTo: nil)
+        }
+        player.isEnabled = !first                     // through your own eyes your head is not in the way
+        playerRing.isEnabled = !first
+        cameraState = String(format: "%@ yaw %.2f pitch %.2f", first ? "first" : "third", yaw, first ? lookPitch : pitch)
 
         updateChunks(world, model)
         updateLayers(model)
@@ -217,6 +255,7 @@ final class SolidRenderer {
         if !model.plainRender { updateSoldiers(world, society, model, reach: reach, dt: dt); updateRoofs(world, society, model, scene, reach: reach) }
         updateAnimals(world, society, model, reach: reach, dt: dt)
         updateStandards(world, society, model, reach: reach)
+        updateLifts(society, model, reach: reach)
         updateMachines(world, society, model, reach: reach)
         updateLabels(world, society, model, reach: reach)
         updatePreview(world, scene)
@@ -233,6 +272,8 @@ final class SolidRenderer {
         chunks = [:]; billboards = []; queue.dropAll()
         resetLayers()
         for d in [agents, soldiers, animals, standards] { for e in d.values { e.removeFromParent() } }
+        for v in liftEntities.values { v.car.removeFromParent(); for r in v.rails { r.removeFromParent() } }
+        liftEntities = [:]
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
         for r in roofs.values { r.entity.removeFromParent() }
         roofs = [:]
@@ -426,7 +467,7 @@ final class SolidRenderer {
         if parts.isEmpty { entity.model = nil }
         else if let res = try? MeshResource.generate(from: parts) {
             var mats: [any RealityKit.Material] = []
-            if !mesh.ground.isEmpty, let t = tex { mats.append(material(t)) }
+            if !mesh.ground.isEmpty, let t = tex { mats.append(lk.depth >= OpenWorld.storeyBase ? floorMaterial(t) : material(t)) }
             if !mesh.solid.isEmpty { mats.append(solidMaterial) }
             entity.model = ModelComponent(mesh: res, materials: mats)
         }
@@ -529,7 +570,9 @@ final class SolidRenderer {
         let held = GameModel.weapons[model.weaponIndex]
         player.model = human(model.playerLook, moving: scene.moving, acting: scene.striking, held: held, child: false, female: false, phase: phase)
         turn(player, facing: scene.facing)
-        settle(player, at: place(scene.player, world), dt: dt, fresh: abs(player.position.x - Float(scene.player.x / 16)) > 6)
+        let feetAt = place(scene.player, world)
+        let bodyZ = society.realm.player.body.map { Float($0.z) } ?? feetAt.y
+        settle(player, at: SIMD3(feetAt.x, bodyZ, feetAt.z), dt: dt, fresh: abs(player.position.x - Float(scene.player.x / 16)) > 6 || abs(player.position.y - bodyZ) > 1.5)
         playerRing.position = player.position + SIMD3<Float>(-0.45, 0.02, -0.45)
         if let a = society.agents[model.selectedID] {
             selectRing.isEnabled = true
@@ -635,6 +678,39 @@ final class SolidRenderer {
         for (id, e) in machines where !seen.contains(id) { give(e); machines[id] = nil }
     }
 
+    /// Every elevator in reach: rails up the outside from the lowest landing to above the highest, and
+    /// the car at the height the elevator really has now.
+    private func updateLifts(_ society: Society, _ model: GameModel, reach: Double) {
+        var seen = Set<Int>()
+        if model.depth != 1 {
+            for e in society.realm.lifts where !e.stops.isEmpty {
+                let c = Vec2(Double(e.x * 16 + e.w * 8), Double(e.y * 16 + e.d * 8))
+                guard c.distance(to: model.scene?.viewPos ?? c) <= reach + 64 else { continue }
+                seen.insert(e.id)
+                let bottom = Float(e.stops.first!.z), top = Float(e.stops.last!.z) + 2
+                var entry = liftEntities[e.id]
+                if entry == nil || entry!.top != top {
+                    if let old = entry { old.car.removeFromParent(); for r in old.rails { r.removeFromParent() } }
+                    let car = ModelEntity()
+                    car.model = model3D(key: "lift-car-\(e.w)x\(e.d)") { Figure3D.liftCar(w: Float(e.w), d: Float(e.d)) }
+                    root.addChild(car)
+                    var rails: [ModelEntity] = []
+                    for (dx, dz) in [(Float(-0.14), Float(-0.14)), (Float(e.w), Float(-0.14)), (Float(-0.14), Float(e.d)), (Float(e.w), Float(e.d))] {
+                        let r = ModelEntity()
+                        r.model = model3D(key: "lift-rail") { Figure3D.liftRail() }
+                        r.position = SIMD3(Float(e.x) + dx, bottom, Float(e.y) + dz)
+                        r.scale = SIMD3(1, max(0.1, top - bottom), 1)
+                        root.addChild(r); rails.append(r)
+                    }
+                    entry = (car, rails, top)
+                    liftEntities[e.id] = entry
+                }
+                entry!.car.position = SIMD3(Float(e.x), Float(e.z), Float(e.y))
+            }
+        }
+        for (id, v) in liftEntities where !seen.contains(id) { v.car.removeFromParent(); for r in v.rails { r.removeFromParent() }; liftEntities[id] = nil }
+    }
+
     private func updateStandards(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
         var seen = Set<Int>()
         var infos: [Society.LegionInfo] = []
@@ -734,6 +810,16 @@ final class SolidRenderer {
     }
     /// What the last tap in 3D landed on (for the info shown and for tests).
     private(set) var lastHit: Terrain3D.Hit?
+    /// "first yaw 0.40 pitch 0.80": the camera, as read by the HUD for assistive technology and UI tests.
+    private(set) var cameraState = ""
+
+    /// First person: what the cross in the middle of the screen points at, within reach and not through
+    /// anything solid (a wall or glass stops it: what is seen through it is not reached).
+    func pickCentre(reach: Double = 4.5) -> Vec2? {
+        let c = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        guard let p = pickGround(c), let me = model?.scene?.player else { return nil }
+        return p.distance(to: me) <= reach * 16 ? p : nil
+    }
 
     // MARK: effects
 
@@ -1016,8 +1102,15 @@ final class SolidInputView: UIView {
             let p = t.location(in: self)
             if turned || hypot(p.x - start.x, p.y - start.y) > 14 {
                 turned = true
-                renderer.yaw -= Float(p.x - last.x) * 0.008
-                renderer.pitch = min(1.45, max(0.45, renderer.pitch + Float(p.y - last.y) * 0.006))
+                let k = Float(model.lookSensitivity)
+                renderer.yaw -= Float(p.x - last.x) * 0.008 * k
+                let dy = Float(p.y - last.y) * 0.006 * k * (model.invertLook ? -1 : 1)
+                if model.viewMode == .first {
+                    // drag up to look up, down to look down; it stays where it is put
+                    renderer.lookPitch = min(SolidRenderer.lookLimit, max(-SolidRenderer.lookLimit, renderer.lookPitch - dy))
+                } else {
+                    renderer.pitch = min(SolidRenderer.orbitRange.upperBound, max(SolidRenderer.orbitRange.lowerBound, renderer.pitch + dy))
+                }
                 if joyTouch != nil { steer() }
             }
             lastPoint[ObjectIdentifier(t)] = p
@@ -1049,6 +1142,13 @@ final class SolidInputView: UIView {
             if let id = renderer.pickAgent(p), let a = model.society?.agents[id] { scene.tapWorld(a.pos, agent: id) }
             else if let wp = renderer.pickGround(p) { scene.tapWorld(wp, agent: nil) }
         }
+    }
+
+    /// Let go of everything held: the stick, a drag, a turn (a panel opened, the view changed).
+    func releaseTouches() {
+        if joyTouch != nil { joyTouch = nil; joyVec = .zero; steer() }
+        if dragTouch != nil { dragTouch = nil; model?.scene?.dragStart = nil }
+        others = []; starts = [:]; lastPoint = [:]; pinching = false; turned = false
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {

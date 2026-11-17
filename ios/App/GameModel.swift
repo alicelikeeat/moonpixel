@@ -14,6 +14,8 @@ struct WorldMeta: Codable, Identifiable, Equatable {
     var tech: String
 }
 
+enum ViewMode: String { case third, first }
+
 enum PhotoPick: Equatable { case none, player, villager(Int), asset }
 
 /// Owns the worlds, the running society and everything the SwiftUI HUD shows.
@@ -86,6 +88,34 @@ final class GameModel: ObservableObject {
     @Published var render3D = UserDefaults.standard.bool(forKey: "render3D") {
         didSet { UserDefaults.standard.set(render3D, forKey: "render3D") }
     }
+    /// In 3D: from behind the traveller (third person) or through their eyes (first person).
+    @Published var viewMode: ViewMode = ViewMode(rawValue: UserDefaults.standard.string(forKey: "viewMode") ?? "") ?? .third {
+        didSet { UserDefaults.standard.set(viewMode.rawValue, forKey: "viewMode"); inputReset += 1 }
+    }
+    /// How fast a drag turns the view (0.4 ... 2.5), and whether up and down are swapped.
+    @Published var lookSensitivity: Double = (UserDefaults.standard.object(forKey: "lookSensitivity") as? Double) ?? 1 {
+        didSet { UserDefaults.standard.set(lookSensitivity, forKey: "lookSensitivity") }
+    }
+    @Published var invertLook = UserDefaults.standard.bool(forKey: "invertLook") {
+        didSet { UserDefaults.standard.set(invertLook, forKey: "invertLook") }
+    }
+    /// How see-through the floors of storeys are drawn (0.15 ... 1; 1 is solid). Drawing only: they hold the same either way.
+    @Published var floorOpacity: Double = (UserDefaults.standard.object(forKey: "floorOpacity") as? Double) ?? 0.45 {
+        didSet { UserDefaults.standard.set(floorOpacity, forKey: "floorOpacity") }
+    }
+    @Published var showBackpack = false { didSet { if showBackpack { inputReset += 1 } } }
+    /// The elevator whose panel is open (inside it, or at one of its landings).
+    @Published var liftPanel: Int?
+    /// The elevator the traveller is in or beside, if any (the button to open its panel shows then).
+    @Published var nearLift: Int?
+    /// "Storey 3 · 6.0 m" and, in a car, where it is going.
+    @Published var heightLine = ""
+    /// Yaw and pitch of the 3D view, for assistive technology and UI tests.
+    @Published var cameraLine = ""
+    /// Bumped whenever held touches must be let go (a panel opens, the view changes): nothing keeps walking or striking.
+    var inputReset = 0
+    /// The jump button was pressed and the next movement step has not used it yet.
+    var jumpQueued = false
     /// The 3D view while it is on screen (effects are sent to it).
     weak var solid: SolidRenderer?
     /// The nanite swarm's view, and how many points a swarm has on this device (by its memory; --swarm-count overrides).
@@ -371,6 +401,28 @@ final class GameModel: ObservableObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + t + 10) { _ = self.reach(TilePos(o.x + 7, o.y + 2)) }
             }
         }
+        if args.contains("--first-person") { viewMode = .first; render3D = true }
+        if args.contains("--lift-demo") {
+            // a six-storey house, an outside elevator against it (paid from a filled pack), the traveller in the car
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                guard let self = self, let s = self.society, let sc = self.scene else { return }
+                let o0 = self.world.findSite(from: sc.player.tile, minR: 6, maxR: 30, salt: 91, avoid: [], avoidDist: 0)
+                let o = o0.isNone ? sc.player.tile + TilePos(6, 0) : o0
+                s.raiseHouse(at: o, storeys: 6, w: 7, d: 7)
+                let sx = o.x + 8, sy = o.y + 2
+                for yy in sy..<(sy + 2) { for xx in sx..<(sx + 2) { for l in 1...3 { self.world.setTile(l, xx, yy, 0) } } }
+                let plan = s.planLift(x: sx, y: sy, levels: Array(0..<6), landingSide: TilePos(-1, 0))
+                for (k, v) in plan.cost { s.carry(k, v) }
+                guard let id = s.buildLift(plan, x: sx, y: sy, town: s.settlements.values.filter { !$0.abandoned }.min { $0.id < $1.id }?.id ?? 0, tower: nil, planID: 900_001),
+                      let e = s.lift(id) else { self.showToast("lift demo: " + plan.reason); return }
+                self.world.setTile(2, sx + 3, sy, Content.shared.tid("machine"))      // its power: a machine beside the shaft
+                var b = Body(at: Vec2(e.minX + 16, e.minY + 16), z: e.z, depth: 0); b.platform = id; b.state = .riding
+                s.realm.player.body = b; s.realm.player.depth = 0
+                sc.player = b.pos
+                e.call(4, at: self.world.time)
+                self.refreshHUD()
+            }
+        }
         if args.contains("--storey-demo") {
             // a four-storey house beside the player, and the player on its second storey (for pictures)
             DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in
@@ -545,6 +597,8 @@ final class GameModel: ObservableObject {
     /// Called a few times per second from the scene.
     func refreshHUD() {
         guard let w = world, let s = society else { return }
+        refreshHeight()
+        cameraLine = render3D ? (solid?.cameraState ?? "") : "2d"
         if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
         let h = w.hour
         status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
