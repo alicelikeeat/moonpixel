@@ -334,6 +334,46 @@ extension Society {
         return nil
     }
 
+    /// Build a district building now at `at` (its north-west corner): the land is cleared (wood to the
+    /// district), the materials and money are paid from the district (nothing is built if they are short),
+    /// the walls, floors, door and stairs are raised, and a building of three floors or more with homes gets
+    /// an outside elevator. `storeys` overrides the kind's usual height. Returns the building id, or nil with
+    /// nothing changed. Refused where anything someone built, water or a way stands.
+    @discardableResult public func placeCityBuilding(_ d: District, kind: String, at o: TilePos, storeys: Int? = nil, door: TilePos? = nil, byPlayer: Bool = false) -> Int? {
+        guard let def = CityKind.byKey[kind] else { return nil }
+        let n = max(1, storeys ?? def.storeys)
+        for y in o.y..<(o.y + def.d) { for x in o.x..<(o.x + def.w) {
+            let t = TilePos(x, y)
+            if waterDepth(t) > 0 || world.tile(1, x, y) != 0 { return nil }
+            if let k = content.tile(world.tile(2, x, y)), !k.natural { return nil }
+            if content.tile(world.tile(0, x, y))?.built == true { return nil }
+        } }
+        if d.buildings.contains(where: { $0.x < o.x + def.w && o.x < $0.x + $0.w && $0.y < o.y + def.d && o.y < $0.y + $0.d }) { return nil }
+        let cost = def.goods.mapValues { $0 * Double(n) }.filter { $0.value > 0 }
+        guard d.money >= def.money, Goods.take(cost, from: d.holding) == nil else { return nil }
+        d.money -= def.money
+        record(cost.map { ($0.key, $0.value) }, from: d.holding.name, to: "building", note: "construction")
+        for y in (o.y - 1)...(o.y + def.d) { for x in (o.x - 1)...(o.x + def.w) {
+            if let t = content.tile(world.tile(2, x, y)), t.natural {
+                world.setTile(2, x, y, 0)
+                let wood = t.big ? 4.0 : (t.artKind == "rock" ? 0 : 1)
+                if wood > 0 { d.add("wood", wood); record([("wood", wood)], from: "felled", to: d.holding.name, note: "site clearing") }
+            }
+        } }
+        var b = CityBuilding()
+        b.id = d.nextB; d.nextB += 1; b.kind = kind
+        b.x = o.x; b.y = o.y; b.w = def.w; b.d = def.d
+        b.floors = (0..<n).map { k in var f = CityFloor(); f.jobs = def.use == .mixed ? (k == 0 ? def.jobsPerFloor : 0) : def.jobsPerFloor; return f }
+        b.entrance = door ?? TilePos(o.x + def.w / 2, o.y + def.d - 1)
+        b.state = .open; b.since = world.time; b.byPlayer = byPlayer
+        d.buildings.append(b)
+        raiseCity(b, d)
+        if n >= 3 && def.homesPerFloor > 0 { liftFor(d.buildings.count - 1, d) }
+        refreshServices(d)
+        d.note("built: \(def.en) \(b.id) (\(n) floors)")
+        return b.id
+    }
+
     // MARK: a day in a district
 
     func districtsDay() {
@@ -508,7 +548,8 @@ extension Society {
             for (fi, f) in b.floors.enumerated() where f.residents > 0 {
                 let want = Double(f.residents) * 3 - f.food
                 guard want > 0.5 else { continue }
-                if fi == 0 || (fi <= 3 && b.lift == nil) {
+                let liftUp = b.lift.flatMap { lift($0) }.map { liftPowered($0) } ?? false
+                if fi == 0 || (fi <= 3 && !liftUp) {
                     let got = min(want, d.store["food"] ?? 0)
                     if got > 0 { d.add("food", -got); d.buildings[bi].floors[fi].food += got; record([("food", got)], from: d.holding.name, to: "building \(b.id) floor \(fi)", note: fi == 0 ? "carried in" : "carried upstairs") }
                 } else if let lid = b.lift, let e = lift(lid), let k = e.stops.firstIndex(where: { $0.level == fi }) {

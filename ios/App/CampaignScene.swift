@@ -48,6 +48,8 @@ extension GameScene {
         crestNodes = [:]
         for n in liftNodes.values { n.removeFromParent() }
         liftNodes = [:]
+        for n in vehicleNodes.values { n.removeFromParent() }
+        vehicleNodes = [:]
         clearPreview()
     }
 

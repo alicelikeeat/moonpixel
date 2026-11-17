@@ -110,6 +110,26 @@ final class GameModel: ObservableObject {
     @Published var liftPanel: Int?
     /// The elevator the traveller is in or beside, if any (the button to open its panel shows then).
     @Published var nearLift: Int?
+    // transport (v2.7): the vehicle the traveller is in, its controls, the travel and network panels
+    /// What the driving or passenger display shows (nil when not in a vehicle).
+    @Published var drive: DriveState?
+    /// The controls the traveller holds (sent to the vehicle every frame while driving).
+    var driveInput = Controls()
+    /// From the driver's seat (first person) or from behind (third person).
+    @Published var cockpit = true
+    @Published var showTravel = false { didSet { if showTravel { inputReset += 1; refreshTravel() } } }
+    @Published var showTransport = false { didSet { if showTransport { inputReset += 1; refreshTransport() } } }
+    /// Vehicles close enough to get into, and stops to travel to (for the travel panel).
+    @Published var vehiclesHere: [VehicleRow] = []
+    @Published var destinations: [StopRow] = []
+    @Published var trip: TripPlan?
+    @Published var tripTo: Int?
+    @Published var transportLines: [String] = []
+    @Published var wayKindPick = WayKind.street
+    @Published var wayStart: TilePos?
+    @Published var wayPreview: WayPlan?
+    /// A vehicle or stop the traveller is near (shows the travel button).
+    @Published var nearTransport = false
     /// "Storey 3 · 6.0 m" and, in a car, where it is going.
     @Published var heightLine = ""
     /// Yaw and pitch of the 3D view, for assistive technology and UI tests.
@@ -210,7 +230,7 @@ final class GameModel: ObservableObject {
     /// Save format: 3 = v1.3 (cities, campaigns, building); 4 = v2.6 (the traveller's body and backpack,
     /// outside elevators, standing towers, the exact list of storeys). Absent in older saves. A save of a
     /// newer format is refused, never read halfway (an older game would drop what it does not know).
-    static let saveFormat = 4
+    static let saveFormat = 5
     struct Index: Codable {
         var format: Int?
         var world: OpenWorld.Snapshot
@@ -430,6 +450,24 @@ final class GameModel: ObservableObject {
                 self.refreshHUD()
             }
         }
+        if args.contains("--transport-demo") {
+            // a street, a car, a bus line, a high-speed line, a runway and (by water) a ferry, near the traveller
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                guard let self = self, let s = self.society, let sc = self.scene else { return }
+                let d = s.transportDemo(near: sc.player.tile)
+                if let id = d.car, let v = s.net.vehicle(id) {
+                    var b = Body(at: v.world(0, 1.2), z: 0, depth: 0); b.state = .standing
+                    s.realm.player.body = b; s.realm.player.depth = 0
+                    sc.player = b.pos
+                }
+                if !d.notes.isEmpty { self.showToast(d.notes.joined(separator: "; ")) }
+                if args.contains("--drive-plane"), let id = d.plane, let v = s.net.vehicle(id) {
+                    s.realm.player.body = Body(at: v.pos, z: 0, depth: 0); sc.player = v.pos
+                    _ = s.board(id, drive: true)
+                }
+                self.refreshDrive()
+            }
+        }
         if args.contains("--storey-demo") {
             // a four-storey house beside the player, and the player on its second storey (for pictures)
             DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in
@@ -609,6 +647,7 @@ final class GameModel: ObservableObject {
     func refreshHUD() {
         guard let w = world, let s = society else { return }
         refreshHeight()
+        if s.playerVehicle == nil { refreshDrive() }
         cameraLine = render3D ? (solid?.cameraState ?? "") : "2d"
         if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
         let h = w.hour

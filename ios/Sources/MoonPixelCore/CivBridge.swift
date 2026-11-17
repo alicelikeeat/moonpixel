@@ -127,13 +127,13 @@ extension Society {
         }
         // the detailed nations' figures, for the panels: their towns' people count too
         for k in c.polities.keys.sorted() where c.polities[k]!.detailed {
-            c.polities[k]!.detailPop = agents.values.filter { $0.nation == k }.count + (realm.metroLink?.nation == k ? realm.metroLink!.population : 0)
+            c.polities[k]!.detailPop = agents.values.filter { $0.nation == k }.count + (realm.metroLink?.nation == k ? realm.metroLink!.population : 0) + (realm.transportBox?.districts.filter { $0.nation == k }.reduce(0) { $0 + $1.population } ?? 0)
         }
     }
 
     /// Total people the world knows of: the detailed towns' residents and everyone in the regions found so far.
     /// (Lands not yet found are not counted: their people are not known.)
-    public var knownPopulation: Int { agents.count + (realm.civBox?.people ?? 0) + (realm.metroLink?.population ?? 0) }
+    public var knownPopulation: Int { agents.count + (realm.civBox?.people ?? 0) + (realm.metroLink?.population ?? 0) + (realm.transportBox?.districts.reduce(0) { $0 + $1.population } ?? 0) }
 
     /// The metro city belongs to a nation: its people are counted there (and nowhere else).
     public func linkMetro(population: Int, name: String) {

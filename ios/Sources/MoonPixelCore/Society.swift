@@ -352,6 +352,7 @@ public final class Society {
     // transport (transient: worked out again every step)
     var trackHold: [Int64: Int] = [:]
     var congestion: [Int64: Int] = [:]
+    var vehicleBuckets: [Int64: [Vehicle]] = [:]
     public var vehicleEvents: [VehicleEvent] = []
     var trafficT = 0.0, workT = 0.0
     var techCtx = 0

@@ -89,6 +89,11 @@ extension TransportScene {
         var pb = CityBuilding(); pb.id = 999; pb.kind = "power"; pb.x = sc.t(20, 80).x; pb.y = sc.t(20, 80).y; pb.w = p.w; pb.d = p.d; pb.state = .open
         pb.floors = [{ var f = CityFloor(); f.jobs = p.jobsPerFloor; return f }()]
         sc.a.buildings.append(pb); sc.a.staffing[999] = 1
+        // people in the west city to staff it from day to day
+        let flats = s.placeCityBuilding(sc.a, kind: "flats", at: sc.t(20, 90))!
+        let fi = sc.a.buildings.firstIndex { $0.id == flats }!
+        for k in sc.a.buildings[fi].floors.indices { sc.a.buildings[fi].floors[k].residents = 12; sc.a.buildings[fi].floors[k].food = 200 }
+        sc.a.ledger.imported = sc.a.population
         s.refreshServices(sc.a)
         XCTAssertGreaterThan(sc.a.spareGrid, 0)
         return (sc, a, b)
@@ -118,5 +123,47 @@ extension TransportScene {
         let a = s.addStop(.port, at: sc.t(74, 13), name: "North Quay", nation: 1, district: sc.a.id)!
         let b = s.addStop(.port, at: sc.t(74, 113), name: "South Quay", nation: 1, district: sc.b.id)!
         return (sc, a, b)
+    }
+}
+
+extension TransportScene {
+    /// East city: a twelve-storey tower with residents, a power station and waterworks.
+    static func eastTower(_ sc: TransportScene, residentsPerFloor: Int = 10) -> Int {
+        let s = sc.s, b = sc.b!
+        b.store["food"] = 0
+        XCTAssertNotNil(s.placeCityBuilding(b, kind: "power", at: sc.t(120, 40)))
+        XCTAssertNotNil(s.placeCityBuilding(b, kind: "waterworks", at: sc.t(130, 40)))
+        XCTAssertNotNil(s.placeCityBuilding(b, kind: "sewage", at: sc.t(140, 40)))
+        XCTAssertNotNil(s.placeCityBuilding(b, kind: "depot", at: sc.t(150, 40)))
+        let id = s.placeCityBuilding(b, kind: "tower", at: sc.t(104, 49))!
+        let bi = b.buildings.firstIndex { $0.id == id }!
+        XCTAssertNotNil(b.buildings[bi].lift, "a tall block of flats gets its outside elevator")
+        for k in b.buildings[bi].floors.indices { b.buildings[bi].floors[k].residents = residentsPerFloor }
+        b.ledger.imported = b.population
+        // a first day to staff the services
+        b.staffing = Dictionary(uniqueKeysWithValues: b.buildings.map { ($0.id, 1.0) })
+        s.refreshServices(b)
+        return id
+    }
+
+    /// Farm yard -> lorry -> rail yard -> freight train -> rail yard -> lorry -> city yard.
+    static func freightNetwork(_ sc: inout TransportScene) -> (farm: Stop, city: Stop, train: Vehicle) {
+        sc.cities(withLinks: true)
+        let s = sc.s
+        sc.lay(.rail, sc.t(4, 66), sc.t(160, 66), payer: .district(sc.a.id))
+        let farmYard = s.addStop(.yard, at: sc.t(30, 60), name: "West farm yard", nation: 1, district: sc.a.id)!
+        let railW = s.addStop(.yard, at: sc.t(12, 60), name: "West rail yard", nation: 1)!
+        let stW = s.addStop(.station, at: sc.t(10, 66), name: "West goods", nation: 1)!
+        let stE = s.addStop(.station, at: sc.t(150, 66), name: "East goods", nation: 1)!
+        let railE = s.addStop(.yard, at: sc.t(148, 60), name: "East rail yard", nation: 1)!
+        let cityYard = s.addStop(.yard, at: sc.t(100, 60), name: "East city yard", nation: 1, district: sc.b.id)!
+        let l1 = s.addLine(.truck, stops: [farmYard.id, railW.id], name: "West haul", headway: 60, nation: 1, payer: .district(sc.a.id), freight: true)!
+        let l2 = s.addLine(.train, stops: [stW.id, stE.id], name: "Goods train", headway: 120, nation: 1, payer: .district(sc.a.id), freight: true)!
+        let l3 = s.addLine(.truck, stops: [railE.id, cityYard.id], name: "East haul", headway: 60, nation: 1, payer: .district(sc.b.id), freight: true)!
+        s.assign(s.buildVehicle(.truck, at: sc.t(30, 60), heading: Double.pi, payer: .district(sc.a.id), nation: 1)!, to: l1)
+        let train = s.buildVehicle(.train, at: sc.t(10, 66), heading: 0, payer: .district(sc.a.id), nation: 1)!
+        s.assign(train, to: l2)
+        s.assign(s.buildVehicle(.truck, at: sc.t(148, 60), heading: Double.pi, payer: .district(sc.b.id), nation: 1)!, to: l3)
+        return (farmYard, cityYard, train)
     }
 }

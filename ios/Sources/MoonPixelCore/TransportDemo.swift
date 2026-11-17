@@ -1,0 +1,79 @@
+import Foundation
+
+// A small working transport set laid on the real land near the traveller, for trying the vehicles and for the
+// UI tests: a street with a car and a bus line, a high-speed line with its stations, a runway with an airliner,
+// and (where there is water near) a quay with a ferry. Everything is planned, paid (from a district stocked for
+// the demonstration), felled and built by the same calls the player and the planner use: no tile is painted.
+
+public struct TransportDemo: Equatable {
+    public var district: Int?
+    public var car: Int?, bus: Int?, train: Int?, plane: Int?, ship: Int?
+    public var lines: [Int] = []
+    public var notes: [String] = []
+    public init() {}
+}
+
+extension Society {
+    @discardableResult public func transportDemo(near p: TilePos) -> TransportDemo {
+        var out = TransportDemo()
+        let nation = realm.player.nation
+        let o0 = world.findSite(from: p, minR: 6, maxR: 80, salt: 717, avoid: [], avoidDist: 0)
+        let o = o0.isNone ? p + TilePos(6, 0) : o0
+        let d = foundDistrict(name: "Demo", at: o, nation: nation, money: 200_000,
+                              store: ["stone": 20_000, "planks": 5000, "iron": 5000, "parts": 5000, "moonsteel": 200, "fuel": 20_000, "tools": 50, "food": 5000])
+        d.autoBuild = false
+        out.district = d.id
+        var laid: [TilePos] = []
+        func lay(_ k: WayKind, _ a: TilePos, _ b: TilePos) -> Bool {
+            let plan = planWay(k, from: a, to: b)
+            guard plan.ok, let id = startWay(plan, payer: .district(d.id), nation: nation, by: "district:\(d.id)") else { out.notes.append("\(k.rawValue): \(plan.reason)"); return false }
+            finishSite(id)
+            laid = plan.cells
+            return true
+        }
+        // a street with a car and a bus
+        let s0 = TilePos(o.x, o.y + 2), s1 = TilePos(o.x + 40, o.y + 2)
+        if lay(.street, s0, s1) {
+            // the car past the bus stop, facing along the street
+            let c = laid[min(12, laid.count - 2)], n = laid[min(13, laid.count - 1)]
+            out.car = buildVehicle(.car, at: c, heading: atan2(Double(n.y - c.y), Double(n.x - c.x)), payer: .district(d.id), nation: nation)?.id
+            if let a = addStop(.busStop, at: TilePos(o.x + 6, o.y + 2), name: "Demo Sq", nation: nation, district: d.id),
+               let b = addStop(.busStop, at: TilePos(o.x + 38, o.y + 2), name: "Demo End", nation: nation, district: d.id),
+               let l = addLine(.bus, stops: [a.id, b.id], name: "Demo bus", headway: 90, nation: nation, payer: .district(d.id)),
+               let v = buildVehicle(.bus, at: TilePos(o.x + 6, o.y + 2), heading: 0, payer: .district(d.id), nation: nation) {
+                assign(v, to: l); out.bus = v.id; out.lines.append(l.id)
+            }
+        }
+        // a high-speed line, powered by a station of the district (staffed by its people)
+        if lay(.hsr, TilePos(o.x, o.y + 6), TilePos(o.x + 60, o.y + 6)) {
+            _ = placeCityBuilding(d, kind: "power", at: TilePos(o.x, o.y + 30))
+            if let f = placeCityBuilding(d, kind: "flats", at: TilePos(o.x + 8, o.y + 30)), let fi = d.buildings.firstIndex(where: { $0.id == f }) {
+                for k in d.buildings[fi].floors.indices { d.buildings[fi].floors[k].residents = 12; d.buildings[fi].floors[k].food = 300 }
+                d.ledger.imported = d.population
+            }
+            d.staffing = Dictionary(uniqueKeysWithValues: d.buildings.map { ($0.id, 1.0) })
+            refreshServices(d)
+            if let a = addStop(.station, at: TilePos(o.x + 2, o.y + 6), name: "Demo HSR", nation: nation, district: d.id),
+               let b = addStop(.station, at: TilePos(o.x + 58, o.y + 6), name: "Demo HSR East", nation: nation, district: d.id),
+               let l = addLine(.hsr, stops: [a.id, b.id], name: "Demo express", headway: 240, nation: nation, payer: .district(d.id)),
+               let v = buildVehicle(.hsr, at: TilePos(o.x + 2, o.y + 6), heading: 0, payer: .district(d.id), nation: nation) {
+                assign(v, to: l); out.train = v.id; out.lines.append(l.id)
+            }
+        }
+        // a runway, three tiles wide, and an airliner at its western end
+        var runway = true, middle: [TilePos] = []
+        for y in (o.y + 12)...(o.y + 14) { runway = lay(.runway, TilePos(o.x, y), TilePos(o.x + 50, y)) && runway; if y == o.y + 13 { middle = laid } }
+        if runway, middle.count > 2 {
+            out.plane = buildVehicle(.airliner, at: middle[1], heading: atan2(Double(middle[2].y - middle[1].y), Double(middle[2].x - middle[1].x)), payer: .district(d.id), nation: nation)?.id
+        }
+        if out.plane == nil { out.notes.append("airliner: no runway laid") }
+        // a quay and a ferry where there is deep enough water near
+        if let w = nearestWater(o, 40) {
+            let land = [TilePos(w.x - 1, w.y), TilePos(w.x + 1, w.y), TilePos(w.x, w.y - 1), TilePos(w.x, w.y + 1)].first { world.isLand($0.x, $0.y) && !world.blocked($0.x, $0.y) }
+            if let q = land, lay(.quay, q, q) {
+                out.ship = buildVehicle(.ferry, at: w, heading: 0, payer: .district(d.id), nation: nation)?.id
+            } else { out.notes.append("ferry: no bank to build a quay on") }
+        } else { out.notes.append("ferry: no deep water within 40 tiles") }
+        return out
+    }
+}

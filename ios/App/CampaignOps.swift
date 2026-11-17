@@ -550,6 +550,8 @@ struct MorePanel: View {
                     Chip(title: model.viewMode == .first ? L("第三人称", "Third person") : L("第一人称", "First person"), icon: model.viewMode == .first ? "person.fill.viewfinder" : "eye.fill", id: "ViewFirst") {
                         model.showMore = false; model.viewMode = model.viewMode == .first ? .third : .first; if !model.render3D { model.render3D = true }
                     }
+                    Chip(title: L("交通管理", "Transport"), icon: "tram.fill", id: "Transport") { model.showMore = false; model.showTransport = true }
+                    Chip(title: L("都市并入开放世界", "Bring the metro city in"), icon: "building.2.fill", id: "MetroImport") { model.showMore = false; model.importMetroCity() }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {

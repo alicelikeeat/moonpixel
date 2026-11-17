@@ -156,3 +156,73 @@ final class NetworkTests: XCTestCase {
         XCTAssertFalse(s.passable(NetNode(sc.t(77, 100).x, sc.t(77, 100).y, 0), Profile(mode: .water, draft: 1.5)))
     }
 }
+
+final class TransportMigrationTests: XCTestCase {
+    func testASaveFromBeforeTransportOpensAndRunsWithNoNetwork() throws {
+        let s = makeSociety(9, villages: 2, per: 10)
+        runYears(s, 0.05)
+        // a v2.6 save: no transport at all in the realm, a body without vehicle fields
+        var json = try JSONSerialization.jsonObject(with: try JSONEncoder().encode(s.snapshot())) as! [String: Any]
+        var realm = json["realm"] as! [String: Any]
+        realm.removeValue(forKey: "transportBox")
+        json["realm"] = realm
+        let old = try JSONSerialization.data(withJSONObject: json)
+        XCTAssertFalse(String(data: old, encoding: .utf8)!.contains("transportBox"))
+        let s2 = makeSociety(9, villages: 2, per: 10)
+        s2.restore(try JSONDecoder().decode(Society.Snapshot.self, from: old))
+        XCTAssertNil(s2.realm.transportBox, "nothing is invented on loading")
+        runYears(s2, 0.02)
+        XCTAssertNil(s2.realm.transportBox, "and nothing appears until something is built")
+        XCTAssertEqual(s2.agents.count > 0, s.agents.count > 0)
+        // the first thing built makes the network, which then saves and loads with the world
+        s2.carry("stone", 100)
+        let p = s2.planWay(.street, from: s2.world.findFree(near: TilePos(40, 40), maxR: 10), to: s2.world.findFree(near: TilePos(46, 40), maxR: 10))
+        if p.ok, let id = s2.startWay(p, payer: .pack) { s2.finishSite(id) }
+        let again = try JSONDecoder().decode(Society.Snapshot.self, from: try JSONEncoder().encode(s2.snapshot()))
+        XCTAssertEqual(again.realm?.transportBox?.sites.count, s2.realm.transport.sites.count)
+    }
+}
+
+final class LockTests: XCTestCase {
+    func testAShipWaitsForTheLockChamberAndTheLockIsCounted() {
+        var sc = TransportScene()
+        sc.cities()
+        let s = sc.s
+        var lk = WaterLock(); lk.id = s.realm.transport.take(); lk.cell = sc.t(77, 40); lk.cycle = 20
+        s.realm.transport.locks.append(lk)
+        let ferry = s.buildVehicle(.ferry, at: sc.t(77, 30), heading: Double.pi / 2, payer: .district(sc.a.id), nation: 1)!
+        ferry.control = .manual; ferry.input.throttle = 1
+        s.realm.player.body = Body(at: ferry.pos, z: 0, depth: 0)
+        var waited = 0.0
+        sc.run(80) {
+            if ferry.lockWait > 0 { waited += 1.0 / 30 }
+            return ferry.tile.y > sc.t(0, 44).y
+        }
+        XCTAssertGreaterThan(waited, 15, "it stood in the chamber while it filled")
+        XCTAssertEqual(s.realm.transport.locks[0].passed, 1)
+        XCTAssertGreaterThan(ferry.tile.y, sc.t(0, 44).y, "and went on after")
+    }
+}
+
+final class TransportLawTests: XCTestCase {
+    func testLandReturnedToNatureTakesTheBridgeVehiclesStopsAndBuildingsOnIt() {
+        var sc = TransportScene()
+        sc.cities(withLinks: true)
+        let s = sc.s
+        let br = s.realm.transport.bridges[0]
+        let c = br.cells[0]
+        let car = s.buildVehicle(.car, at: TilePos(c.x - 2, c.y), payer: .district(sc.a.id), nation: 1)!
+        let farCar = s.buildVehicle(.car, at: sc.t(10, 60), payer: .district(sc.a.id), nation: 1)!
+        let stop = s.addStop(.busStop, at: TilePos(c.x - 3, c.y), name: "Bank", nation: 1)!
+        let other = s.addStop(.busStop, at: sc.t(10, 60), name: "W", nation: 1)!
+        _ = s.addLine(.bus, stops: [stop.id, other.id], name: "Gone", headway: 60, nation: 1)
+        s.world.revertChunk(c.x >> 5, c.y >> 5)
+        s.landReturned(cx: c.x >> 5, cy: c.y >> 5)
+        XCTAssertNil(s.net.bridge(br.id))
+        XCTAssertNil(s.net.vehicle(car.id))
+        XCTAssertNotNil(s.net.vehicle(farCar.id), "only what stood on that land")
+        XCTAssertNil(s.net.stop(stop.id))
+        XCTAssertTrue(s.net.lines.isEmpty, "a line left with one stop is closed")
+        XCTAssertFalse(s.isCorridor(TilePos(c.x - 2, c.y)) && (c.x - 2) >> 5 == c.x >> 5)
+    }
+}

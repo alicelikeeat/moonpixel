@@ -752,6 +752,80 @@ public enum Figure3D {
         return m
     }
 
+    /// A vehicle, centred on the origin, its length along +x (forward), its width along z, its wheels on y = 0.
+    /// Its size is the vehicle's own (`VehicleSpec.length` and `deckW`), so what is drawn is what collides.
+    public static func vehicle(_ k: VehicleKind, livery: RGBA = RGBA(200, 60, 50)) -> Mesh3D {
+        var m = Mesh3D()
+        let sp = k.spec
+        let L = Float(sp.length), W = Float(max(0.5, sp.deckW + 0.2)), hl = L / 2, hw = W / 2
+        let glass = RGBA(150, 200, 230), dark = RGBA(40, 42, 48), white = RGBA(235, 236, 240), steel = RGBA(150, 156, 170)
+        func wheels(_ xs: [Float]) { for x in xs { for z in [-hw, hw - 0.12] { m.box(x - 0.15, 0, z, x + 0.15, 0.3, z + 0.12, dark, faces: .all) } } }
+        switch k {
+        case .car:
+            m.box(-hl, 0.12, -hw, hl, 0.45, hw, livery, faces: .all)
+            m.box(-hl * 0.45, 0.45, -hw + 0.05, hl * 0.4, 0.75, hw - 0.05, glass, faces: .all)
+            wheels([-hl * 0.6, hl * 0.6])
+        case .bus:
+            m.box(-hl, 0.2, -hw, hl, 1.5, hw, livery, faces: .all)
+            m.box(-hl + 0.1, 0.85, -hw - 0.01, hl - 0.3, 1.25, hw + 0.01, glass, faces: .all)
+            m.box(hl - 0.05, 0.7, -hw + 0.08, hl + 0.01, 1.35, hw - 0.08, glass, faces: .all)
+            wheels([-hl * 0.65, hl * 0.65])
+        case .truck:
+            m.box(hl - 0.7, 0.25, -hw, hl, 1.3, hw, livery, faces: .all)
+            m.box(hl - 0.05, 0.8, -hw + 0.1, hl + 0.01, 1.2, hw - 0.1, glass, faces: .all)
+            m.box(-hl, 0.35, -hw, hl - 0.75, 1.7, hw, steel, faces: .all)
+            wheels([-hl * 0.7, -hl * 0.3, hl * 0.7])
+        case .train, .hsr:
+            let body = k == .hsr ? white : livery
+            m.box(-hl, 0.25, -hw, hl - (k == .hsr ? 0.8 : 0), 1.5, hw, body, faces: .all)
+            if k == .hsr { m.box(hl - 0.8, 0.25, -hw + 0.1, hl, 1.0, hw - 0.1, body, faces: .all); m.box(hl - 0.8, 1.0, -hw + 0.2, hl - 0.2, 1.3, hw - 0.2, glass, faces: .all) }
+            m.box(-hl + 0.1, 0.95, -hw - 0.01, hl - 1, 1.25, hw + 0.01, glass, faces: .all)
+            m.box(-hl, 0.25, -hw - 0.02, hl - 1, 0.4, hw + 0.02, livery, faces: .all)        // the stripe
+            m.box(-hl, 0, -hw + 0.1, hl, 0.25, hw - 0.1, dark, faces: .all)
+        case .airliner, .cargoPlane:
+            m.box(-hl, 0.6, -0.45, hl - 0.6, 1.5, 0.45, k == .airliner ? white : steel, faces: .all)
+            m.box(hl - 0.6, 0.7, -0.35, hl, 1.35, 0.35, k == .airliner ? white : steel, faces: .all)
+            m.box(hl - 0.55, 1.15, -0.3, hl - 0.2, 1.35, 0.3, glass, faces: .all)
+            m.box(-0.6, 0.85, -2.5, 0.6, 1.0, 2.5, steel, faces: .all)                      // the wings
+            m.box(-hl, 1.5, -0.08, -hl + 0.7, 2.6, 0.08, livery, faces: .all)              // the fin
+            m.box(-hl, 1.3, -0.9, -hl + 0.5, 1.4, 0.9, steel, faces: .all)
+            for z in [Float(-1.2), 1.2] { m.box(-0.2, 0.55, z - 0.2, 0.6, 0.85, z + 0.2, dark, faces: .all) }   // engines
+            m.box(hl - 0.8, 0, -0.08, hl - 0.6, 0.6, 0.08, dark, faces: .all); m.box(-0.3, 0, -0.5, 0, 0.6, -0.3, dark, faces: .all); m.box(-0.3, 0, 0.3, 0, 0.6, 0.5, dark, faces: .all)
+        case .ferry, .liner, .freighter:
+            m.box(-hl, -0.5, -hw, hl - 0.4, 0.6, hw, k == .freighter ? RGBA(60, 70, 90) : white, faces: .all)
+            m.box(hl - 0.4, -0.5, -hw + 0.3, hl, 0.6, hw - 0.3, k == .freighter ? RGBA(60, 70, 90) : white, faces: .all)
+            m.box(-hl, -0.5, -hw - 0.01, hl - 0.4, -0.2, hw + 0.01, livery, faces: .all)
+            switch k {
+            case .freighter:
+                m.box(-hl + 0.2, 0.6, -hw + 0.1, -hl + 1.4, 2.2, hw - 0.1, white, faces: .all)
+                for i in 0..<4 { let x = -hl + 1.7 + Float(i) * 0.95; m.box(x, 0.6, -hw + 0.15, x + 0.85, 1.4, hw - 0.15, [livery, steel, RGBA(70, 120, 90), RGBA(200, 150, 60)][i], faces: .all) }
+            default:
+                m.box(-hl + 0.3, 0.6, -hw + 0.15, hl - 0.8, 1.6, hw - 0.15, white, faces: .all)
+                m.box(-hl + 0.4, 1.1, -hw + 0.14, hl - 0.9, 1.4, hw - 0.14, glass, faces: .all)
+                if k == .liner { m.box(-hl + 0.6, 1.6, -hw + 0.3, hl - 1.4, 2.4, hw - 0.3, white, faces: .all) }
+                m.box(-0.2, 1.6, -0.25, 0.3, 2.5, 0.25, livery, faces: .all)              // funnel
+            }
+        }
+        return m
+    }
+
+    /// A bridge or viaduct deck, one tile long (along x) and wide, with railings; set at the deck's height.
+    public static func deck(rail: Bool) -> Mesh3D {
+        var m = Mesh3D()
+        let top = RGBA(120, 122, 128), side = RGBA(90, 92, 98)
+        m.box(0, -0.35, 0, 1, 0, 1, rail ? RGBA(110, 100, 90) : top, faces: .all)
+        m.box(0, 0, 0, 1, 0.45, 0.06, side, faces: .all); m.box(0, 0, 0.94, 1, 0.45, 1, side, faces: .all)
+        if rail { for z in [Float(0.3), 0.66] { m.box(0, 0, z, 1, 0.08, z + 0.05, RGBA(200, 205, 215), faces: .all) } }
+        return m
+    }
+
+    /// A bridge pier from the water or ground up to under the deck (one tile tall, scaled).
+    public static func pier() -> Mesh3D {
+        var m = Mesh3D()
+        m.box(0.3, 0, 0.3, 0.7, 1, 0.7, RGBA(120, 116, 110), faces: .all)
+        return m
+    }
+
     /// One guide rail of an elevator shaft, one tile tall from y = 0 (scaled to the shaft's height).
     public static func liftRail() -> Mesh3D {
         var m = Mesh3D()

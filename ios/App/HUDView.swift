@@ -14,6 +14,7 @@ struct HUDView: View {
         ZStack(alignment: .top) {                         // whatever grows, the top row (clock, speed) stays on screen
             if model.showMap { mapOverlay }
             if !model.showMap { PlayControls() }
+            if !model.showMap, let d = model.drive { DriveHUD(d: d) }
             VStack(spacing: 8) {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -68,6 +69,8 @@ struct HUDView: View {
         }
         .overlay { if model.showBackpack { BackpackPanel() } }
         .overlay { if let id = model.liftPanel { LiftPanel(id: id) } }
+        .overlay { if model.showTravel { TravelPanel() } }
+        .overlay { if model.showTransport { TransportPanel() } }
         .overlay { if model.showRealm { RealmPanel() } }
         .overlay { if let id = model.civDetail { CivNationSheet(id: id) } }
         .overlay { if let id = model.towerDetail { TowerSheet(id: id) } }

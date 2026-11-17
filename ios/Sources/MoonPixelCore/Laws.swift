@@ -346,6 +346,8 @@ public final class LawRun {
                 // and nothing is left hanging in the air: every storey above the land goes with it
                 // elevators on this land go with it (goods in them back to their source, riders to a landing)
                 for e in s.realm.lifts where e.x + e.w > c.cx * 32 && e.x < c.cx * 32 + 32 && e.y + e.d > c.cy * 32 && e.y < c.cy * 32 + 32 { s.removeLift(e.id) }
+                // and the transport on it: bridges, tunnels, stops, vehicles, district buildings
+                if s.realm.transportBox != nil { s.landReturned(cx: c.cx, cy: c.cy) }
                 // a standing tower on this land goes first, so its floors are not made again from it
                 if let st = s.realm.standing {
                     let keep = st.filter { t in !(t.x + t.w > c.cx * 32 && t.x < c.cx * 32 + 32 && t.y + t.d > c.cy * 32 && t.y < c.cy * 32 + 32) }

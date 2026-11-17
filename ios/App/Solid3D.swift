@@ -86,6 +86,9 @@ final class SolidRenderer {
     private var standards: [Int: ModelEntity] = [:]
     /// Outside elevators: the car (moved to its real height every frame) and the shaft's rails.
     private var liftEntities: [Int: (car: ModelEntity, rails: [ModelEntity], top: Float)] = [:]
+    private var vehicleEntities: [Int: ModelEntity] = [:]
+    private var deckEntities: [Int: [ModelEntity]] = [:]
+    private var cabHeading: Double?
     private var pool: [ModelEntity] = []
     private let player = ModelEntity()
     private let playerRing = ModelEntity()
@@ -233,7 +236,20 @@ final class SolidRenderer {
         target = jump ? want : SIMD3(want.x, target.y + (want.y - target.y) * min(1, dt * 10), want.z)
         distance = 24 / Float(max(0.2, scene.zoom))
         let first = model.viewMode == .first && model.watch == .none
-        if first {
+        // in a vehicle: the view turns with it (what the traveller looked at stays the same relative to the cab)
+        let car = society.playerVehicle
+        if let v = car {
+            if let h = cabHeading { yaw -= Float(v.heading - h) }
+            cabHeading = v.heading
+            if !first { distance *= max(1, Float(v.spec.length) / 3) }
+        } else { cabHeading = nil }
+        if first, let v = car, let b = body, b.seat == 0 {
+            // the driver's seat: forward in the cab, at eye height above its floor
+            let seat = v.world(v.spec.length * 0.3, -0.15)
+            let eye = SIMD3<Float>(Float(seat.x / 16), Float(b.z) + 1.15, Float(seat.y / 16))
+            let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
+            camera.look(at: eye + dir, from: eye, relativeTo: nil)
+        } else if first {
             let eye = SIMD3<Float>(want.x, feet + 1.35, want.z)
             let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
             camera.look(at: eye + dir, from: eye, relativeTo: nil)
@@ -256,6 +272,7 @@ final class SolidRenderer {
         updateAnimals(world, society, model, reach: reach, dt: dt)
         updateStandards(world, society, model, reach: reach)
         updateLifts(society, model, reach: reach)
+        updateVehicles(world, society, model, reach: reach)
         updateMachines(world, society, model, reach: reach)
         updateLabels(world, society, model, reach: reach)
         updatePreview(world, scene)
@@ -274,6 +291,10 @@ final class SolidRenderer {
         for d in [agents, soldiers, animals, standards] { for e in d.values { e.removeFromParent() } }
         for v in liftEntities.values { v.car.removeFromParent(); for r in v.rails { r.removeFromParent() } }
         liftEntities = [:]
+        for e in vehicleEntities.values { e.removeFromParent() }
+        vehicleEntities = [:]
+        for d in deckEntities.values { for e in d { e.removeFromParent() } }
+        deckEntities = [:]
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
         for r in roofs.values { r.entity.removeFromParent() }
         roofs = [:]
@@ -709,6 +730,61 @@ final class SolidRenderer {
             }
         }
         for (id, v) in liftEntities where !seen.contains(id) { v.car.removeFromParent(); for r in v.rails { r.removeFromParent() }; liftEntities[id] = nil }
+    }
+
+    /// Vehicles in reach at their real place, height and heading; bridge decks at their height over the water or road below.
+    private func updateVehicles(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
+        guard society.realm.transportBox != nil, model.depth == 0, let vp = model.scene?.viewPos else {
+            for e in vehicleEntities.values { e.removeFromParent() }; vehicleEntities = [:]; return
+        }
+        var seen = Set<Int>()
+        for v in society.net.vehicles where v.pos.distance(to: vp) <= reach + 160 {
+            seen.insert(v.id)
+            let e = vehicleEntities[v.id] ?? {
+                let m = ModelEntity()
+                m.model = model3D(key: "vehicle-\(v.kind.rawValue)") { Figure3D.vehicle(v.kind) }
+                root.addChild(m)
+                vehicleEntities[v.id] = m
+                return m
+            }()
+            let base: Float = v.kind.mode == .water ? groundY(world, v.pos) + 0.35 : groundY(world, v.pos)
+            e.position = SIMD3(Float(v.x / 16), base + Float(v.z), Float(v.y / 16))
+            var q = simd_quatf(angle: Float(-v.heading), axis: [0, 1, 0])
+            if v.kind.mode == .air && v.flight == .air {
+                q = q * simd_quatf(angle: Float(v.input.steer) * 0.4, axis: [1, 0, 0]) * simd_quatf(angle: Float(v.vz) * 0.05, axis: [0, 0, 1])
+            }
+            e.orientation = q
+            // the traveller's own car from the driver's seat: its roof would be in the way
+            e.isEnabled = !(v.playerDriving && model.viewMode == .first)
+        }
+        for (id, e) in vehicleEntities where !seen.contains(id) { e.removeFromParent(); vehicleEntities[id] = nil }
+        // bridge decks (rebuilt when a bridge is built, opened, raised or taken down)
+        var seenB = Set<Int>()
+        for b in society.net.bridges where b.hp > 0 {
+            guard let first = b.cells.first, first.center.distance(to: vp) <= reach + 400 else { continue }
+            let key = b.id &* 31 &+ (b.state == .open || b.state == .raising ? 1 : 0)
+            seenB.insert(key)
+            if deckEntities[key] != nil { continue }
+            var es: [ModelEntity] = []
+            let raised = b.kind == .opening && (b.state == .open || b.state == .raising)
+            for (i, t) in b.cells.enumerated() {
+                let g = groundY(world, t.center)
+                let deck = ModelEntity()
+                deck.model = model3D(key: "deck-\(b.deck.mode == .rail)") { Figure3D.deck(rail: b.deck.mode == .rail) }
+                let lift: Float = raised ? Float(min(i, b.cells.count - 1 - i)) * 1.6 : 0
+                deck.position = SIMD3(Float(t.x), g + Float(b.deckZ) + lift, Float(t.y))
+                root.addChild(deck); es.append(deck)
+                if i % 2 == 0 {
+                    let pier = ModelEntity()
+                    pier.model = model3D(key: "pier") { Figure3D.pier() }
+                    pier.position = SIMD3(Float(t.x), g - 1, Float(t.y))
+                    pier.scale = SIMD3(1, Float(b.deckZ) + 0.65, 1)
+                    root.addChild(pier); es.append(pier)
+                }
+            }
+            deckEntities[key] = es
+        }
+        for (k, es) in deckEntities where !seenB.contains(k) { for e in es { e.removeFromParent() }; deckEntities[k] = nil }
     }
 
     private func updateStandards(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {

@@ -326,7 +326,18 @@ CI_RESULT_PLACEHOLDER
 
 ### 界面测试（CI 的 iOS 模拟器）
 
-UI_RESULT_PLACEHOLDER
+CI 第 56 次运行（提交 `d0391c5`，GitHub 托管的 macOS 26 / iPhone 17 Pro 模拟器，`-retry-tests-on-failure -test-iterations 2`）：**8 个界面测试全部通过**，其中两个是在第二次尝试时通过的：
+
+| 测试 | 结果 |
+|---|---|
+| `testMenuWorldsAndHUDButtons` | 第一次通过（466 秒）。v2.6 前两次运行中它因上一个测试存下的 3D 视角而失败（日志 `3d true`），改为启动参数选的视角只在本次运行有效后通过 |
+| `testFirstPersonLooksUpAndDownAndItStays` | 第一次通过：第一人称上下拖动后俯仰保持 |
+| `testRidingTheOutsideElevator` | 第一次通过：`In the car · Storey 4 · 18.5 m -> In the car · Ground · 2.5 m` |
+| `testCommandModeBuildsAndReturnsToTheWorld`、`testMetroModeBuildsAndKeepsTheCity`、`testMetroFailedSaveKeepsTheCityAndRetryLeaves` | 第一次通过 |
+| `testFailedSaveBlocksLeavingAndRetryLeaves` | **第一次失败**（“重试保存后应离开”），第二次通过 |
+| `testThreeDViewShowsTheSameGameAndSwitchesBack` | **第一次失败**（“64×”按钮在屏幕外，y = −23），第二次通过。这个间歇问题在第 53、54 次运行也出现过，原因未确认 |
+
+`v2.6` 已由该次运行发布。
 
 ### 性能（实测，Linux x86_64 发布构建，`V26BenchTests`，不是手机）
 
@@ -339,6 +350,31 @@ UI_RESULT_PLACEHOLDER
 | 2000 个丢弃/拾取命令 | 13–16 ms |
 
 真机未测：帧率、GPU 时间（含透明楼板的片元开销）、内存峰值、发热都没有数据。
+
+## v2.7：大都市与可驾驶现代交通
+
+基线：v2.6（`d0391c5`），核心测试 247 个（4 个跳过）。详细设计与验收矩阵见 [TRANSPORT.md](TRANSPORT.md)。
+
+### 核心测试
+
+本地 Linux x86_64 发布构建：**280 个测试，5 个跳过（多种子长跑和四个只在设置环境变量时运行的基准），0 失败**。新增：
+
+| 组 | 数量 | 内容 |
+|---|---|---|
+| `NetworkTests` | 7 | 预览与砍伐（木材归付款方、不再种树）、过河只能走桥与拆桥断路、高架不与下方道路相连、过河方式比较（绕行/清障/修桥/渡轮）、隧道与绕开建筑、开启桥、吃水与净空 |
+| `DrivingTests` | 11 | 汽车操控与碰撞、手动/自动交接不跳变、公交内走动跳跃、高铁牵引制动停站、信号保护、断电无牵引、客机自动全程与手动起飞坠毁、轮船操控与倒车、渡轮线路过桥靠泊 |
+| `CityTransportTests` | 10 | 农场→货车→铁路→货车→电梯→食用全链守恒、电梯停电高层挨饿与恢复、通勤（电梯+公交+高铁）、港口原料→工厂→消费与出口、拥堵/战争/缺粮/断电、行驶中存档、都市并入、规划顺序与保护、拆桥停运与绕行、燃料与维修 |
+| `TransportDemoTests` | 1 | 演示在真实地形上按同样规则修建，汽车可驾驶 |
+| `TransportMigrationTests`、`LockTests`、`TransportLawTests` | 3 | 旧档不凭空生成网络、船闸等待、归墟移除地块上的交通 |
+| `V27BenchTests` | 1 | 基准（设置 `MP_BENCH` 时运行） |
+
+### 界面测试
+
+新增 `testDrivingACarFromTheTravelPanel`：从“出行”上车驾驶、看速度、自动驾驶切换、刹停、下车。结果见 CI（本节在 CI 结果出来后更新）。
+
+### 性能
+
+见 [TRANSPORT.md 第 10 节](TRANSPORT.md#10-性能实测linux-x86_64-发布构建v27benchtests不是手机)。真机未测。
 
 ## 未验证事项
 

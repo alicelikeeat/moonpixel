@@ -101,3 +101,7 @@ Persistence（Store.swift、SaveCoordinator、SaveFile.swift）── 只保存�
 - **没有统一的 `RenderSnapshot` 类型。** 2D 与 3D 已经读取同一个 Society 和同一份拾取结果，但不是同一个不可变快照对象。
 - **数量单位仍是 `Double`。** 确定性靠固定顺序累加和每城固定随机流保证（有测试），没有改用定点数；跨平台逐位一致没有测试。
 - **事件**：文明层的新闻和战斗记录各有上限（400 / 300 条），另有按种类的累计计数；还没有统一的事件编号与因果链。
+
+## 交通与都市区（v2.7）
+
+`Transport.swift`（地块、桥、隧道、船闸、规划与施工、寻路）、`Vehicle.swift`（各类车辆的物理、自动驾驶、远处推进、信号）、`Lines.swift`（车站、线路、出行规划、货运、瓶颈）、`District.swift`（都市区、市政、人口账本、规划器、都市并入、通勤）、`TransportTick.swift`（每步的交通时钟、旅人上下车与车内走动）、`TransportDemo.swift`（演示）。状态都在 `realm.transportBox` 中，随世界快照一起保存。界面：`TransportOps.swift`、`DriveHUD.swift`、`TransportPanels.swift`、`VehicleRender.swift`，3D 在 `Solid3D.updateVehicles`。详见 [TRANSPORT.md](TRANSPORT.md)。

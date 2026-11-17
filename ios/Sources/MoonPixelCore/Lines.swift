@@ -166,7 +166,8 @@ extension Society {
             guard let lid = v.task.line, let l = tr.line(lid), v.task.at < l.stops.count, let st = tr.stop(l.stops[v.task.at]) else { continue }
             if !v.task.standing {
                 // arrived? at the stop, stopped (a ship at its berth, a plane on the ground)
-                let there = v.tile.distance2(st.tile) <= (v.kind.mode == .rail ? 4 : (v.kind.mode == .air ? 9 : 2)) && v.pathI >= v.path.count
+                let reach = v.kind.mode == .road ? Int(v.spec.length) + 2 : (v.kind.mode == .rail ? 3 : (v.kind.mode == .air ? 3 : 1))
+                let there = v.tile.distance2(st.tile) <= reach * reach && v.pathI >= v.path.count
                 let still = v.kind.mode == .water ? (v.berthed || abs(v.speed) < 0.3) : (abs(v.speed) < 0.3 && v.flight == .ground)
                 if there && still && v.control == .auto || (v.control == .manual && there && still && v.playerDriving) {
                     v.task.standing = true
@@ -222,11 +223,12 @@ extension Society {
         v.riders = stay
         // goods for here are unloaded: into the yard (to change), or into their destination
         for (sid, amt) in v.cargo.sorted(by: { $0.key < $1.key }) {
-            guard let sh = net.shipments.first(where: { $0.id == sid }), sh.leg < sh.legs.count, sh.legs[sh.leg].to == st.id else { continue }
+            // each load finds its own leg: the one of this line that ends here (a shipment may be split over several loads)
+            guard let sh = net.shipments.first(where: { $0.id == sid }), let k = sh.legs.firstIndex(where: { $0.line == l.id && $0.to == st.id }) else { continue }
             v.cargo[sid] = nil
-            sh.leg += 1
+            sh.leg = max(sh.leg, k + 1)
             record([(sh.key, amt)], from: "vehicle \(v.id)", to: "yard \(st.name)", note: "unload shipment \(sid)")
-            if sh.leg >= sh.legs.count {
+            if k + 1 >= sh.legs.count {
                 deliver(sh, amt, at: st)
             } else {
                 st.yard[sid, default: 0] += amt
@@ -255,7 +257,7 @@ extension Society {
         }
         // goods whose next leg is this line, to a stop ahead
         for (sid, amt) in st.yard.sorted(by: { $0.key < $1.key }) where amt > 0 {
-            guard let sh = net.shipments.first(where: { $0.id == sid }), sh.leg < sh.legs.count, sh.legs[sh.leg].line == l.id, sh.legs[sh.leg].from == st.id, ahead.contains(sh.legs[sh.leg].to) else { continue }
+            guard let sh = net.shipments.first(where: { $0.id == sid }), let k = sh.legs.firstIndex(where: { $0.from == st.id }), sh.legs[k].line == l.id, ahead.contains(sh.legs[k].to) else { continue }
             let room = v.spec.cargo - v.load
             guard room > 1e-9 else { break }
             let take = min(room, amt)
@@ -457,13 +459,14 @@ extension Society {
 
     /// Changes of yard that need no vehicle (adjacent yards): done straight away.
     func transferYards() {
-        for sh in net.shipments where sh.state == .waiting && sh.leg < sh.legs.count && sh.legs[sh.leg].line == 0 {
-            let lg = sh.legs[sh.leg]
-            guard let a = net.stop(lg.from), let b = net.stop(lg.to), let amt = a.yard[sh.id], amt > 0 else { continue }
-            a.yard[sh.id] = nil
-            sh.leg += 1
-            record([(sh.key, amt)], from: "yard \(a.name)", to: "yard \(b.name)", note: "transfer shipment \(sh.id)")
-            if sh.leg >= sh.legs.count { deliver(sh, amt, at: b) } else { b.yard[sh.id, default: 0] += amt }
+        for sh in net.shipments where sh.state != .delivered && sh.state != .returned {
+            for (k, lg) in sh.legs.enumerated() where lg.line == 0 {
+                guard let a = net.stop(lg.from), let b = net.stop(lg.to), let amt = a.yard[sh.id], amt > 0 else { continue }
+                a.yard[sh.id] = nil
+                sh.leg = max(sh.leg, k + 1)
+                record([(sh.key, amt)], from: "yard \(a.name)", to: "yard \(b.name)", note: "transfer shipment \(sh.id)")
+                if k + 1 >= sh.legs.count { deliver(sh, amt, at: b) } else { b.yard[sh.id, default: 0] += amt }
+            }
         }
     }
 

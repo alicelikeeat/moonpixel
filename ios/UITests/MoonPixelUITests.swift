@@ -429,4 +429,45 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(later.contains("Ground") || later.contains("地面"), "and stopped at the ground: \(later)")
         shot("34-car-down")
     }
+
+    /// The transport demo: get into the car from the travel panel, drive it, hand it to the autopilot and back,
+    /// brake, get out. The speed shown comes from the vehicle itself.
+    func testDrivingACarFromTheTravelPanel() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--transport-demo"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20))
+        sleep(9)
+        guard app.buttons["travel-open"].waitForExistence(timeout: 10) else { return XCTFail("no travel button") }
+        app.buttons["travel-open"].tap(); sleep(1)
+        shot("40-travel")
+        let drive = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'board-drive-'")).firstMatch
+        guard drive.waitForExistence(timeout: 5) else { return XCTFail("no vehicle to drive near the traveller") }
+        drive.tap(); sleep(1)
+        let speed = app.staticTexts["drive-speed"]
+        guard speed.waitForExistence(timeout: 5) else { return XCTFail("no driving display") }
+        let slider = app.sliders["drive-throttle"]
+        XCTAssertTrue(slider.exists, "the throttle")
+        slider.adjust(toNormalizedSliderPosition: 0.9)
+        sleep(3)
+        let moving = speed.label
+        print("UITEST drive: \(moving)")
+        XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving)")
+        shot("41-driving")
+        // the autopilot takes over (no destination: it holds), then back to the driver
+        app.buttons["drive-auto"].tap(); sleep(3)
+        shot("42-autopilot")
+        app.buttons["drive-auto"].tap(); sleep(1)
+        slider.adjust(toNormalizedSliderPosition: 0)
+        app.descendants(matching: .any)["drive-brake"].firstMatch.press(forDuration: 4)
+        sleep(1)
+        print("UITEST drive stopped: \(speed.label)")
+        XCTAssertEqual(speed.label, "0 km/h", "it stopped")
+        guard app.buttons["drive-exit"].waitForExistence(timeout: 5) else { return XCTFail("no way out when stopped") }
+        app.buttons["drive-exit"].tap(); sleep(1)
+        XCTAssertFalse(app.staticTexts["drive-speed"].exists, "out of the car, the driving display is gone")
+        shot("43-out")
+    }
 }
+

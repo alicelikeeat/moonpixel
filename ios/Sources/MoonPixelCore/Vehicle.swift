@@ -24,7 +24,7 @@ public enum VehicleKind: String, Codable, CaseIterable {
         case .ferry, .liner, .freighter: return .water
         }
     }
-    public var spec: VehicleSpec { VehicleSpec.of(self) }
+    public var spec: VehicleSpec { VehicleSpec.table[self]! }
     public func name(zh: Bool) -> String {
         let n: [VehicleKind: (String, String)] = [.car: ("Car", "汽车"), .bus: ("Bus", "公交车"), .truck: ("Lorry", "货车"), .train: ("Train", "列车"), .hsr: ("High-speed train", "高铁"),
             .airliner: ("Airliner", "客机"), .cargoPlane: ("Cargo plane", "货机"), .ferry: ("Ferry", "渡轮"), .liner: ("Liner", "客轮"), .freighter: ("Freighter", "货轮")]
@@ -38,6 +38,9 @@ public enum Energy: String, Codable { case diesel, electric, jet, bunker
 }
 
 public struct VehicleSpec: Equatable {
+    static let table: [VehicleKind: VehicleSpec] = Dictionary(uniqueKeysWithValues: VehicleKind.allCases.map { ($0, VehicleSpec.of($0)) })
+    /// At most this many vehicles get full physics at once (the nearest to the traveller); the rest move along their way.
+    public static let physicsCap = 40
     public var maxSpeed: Double, reverseMax: Double, accel: Double, brake: Double, emergency: Double
     public var wheelbase: Double, maxSteer: Double, radius: Double, length: Double
     public var seats: Int, cargo: Double
@@ -158,6 +161,8 @@ public final class Vehicle: Codable {
     public var crashes = 0
     /// Tiles just passed (newest last): a train covers these behind its front.
     public var trail: [TilePos] = []
+    /// The network revision its way was last planned on (a vehicle with no way tries again when the network changes).
+    public var plannedRev = 0
     public init() {}
 
     public var spec: VehicleSpec { kind.spec }
@@ -257,11 +262,34 @@ extension Society {
         let tr = realm.transport
         bridgesStep(dt)
         holdTrack()
+        bucketVehicles()
         let me = realm.player.body.map { Vec2($0.x, $0.y) }
+        // full physics for the vehicles nearest the traveller (and any driven by hand), within reach, up to the cap
+        var close: Set<Int> = []
+        if let p = me {
+            let inReach = tr.vehicles.filter { $0.pos.distance(to: p) <= 96 * 16 }
+            for v in inReach.sorted(by: { ($0.pos.distance(to: p), $0.id) < ($1.pos.distance(to: p), $1.id) }).prefix(VehicleSpec.physicsCap) { close.insert(v.id) }
+        }
         for v in tr.vehicles.sorted(by: { $0.id < $1.id }) {
-            let near = v.playerAboard || (me.map { $0.distance(to: v.pos) <= 96 * 16 } ?? false) || v.control == .manual
+            if v.halted == "no way" && v.plannedRev != tr.revision && v.control == .auto { v.replan = true }
+            let near = v.playerAboard || close.contains(v.id) || v.control == .manual
             if near { physics(v, dt) } else { farStep(v, dt) }
         }
+    }
+
+    /// Vehicles by 4 x 4 tile cell, for the checks between neighbours (never every pair).
+    func bucketVehicles() {
+        var b: [Int64: [Vehicle]] = [:]
+        for v in realm.transport.vehicles { b[MP.chunkKey(v.tile.x >> 2, v.tile.y >> 2), default: []].append(v) }
+        vehicleBuckets = b
+    }
+
+    /// Vehicles within about 8 tiles of a point (from the cells around it).
+    func vehiclesAround(_ p: Vec2) -> [Vehicle] {
+        let t = Motion.tile(p.x, p.y)
+        var out: [Vehicle] = []
+        for dy in -2...2 { for dx in -2...2 { if let l = vehicleBuckets[MP.chunkKey((t.x >> 2) + dx, (t.y >> 2) + dy)] { out += l } } }
+        return out
     }
 
     /// Fixed substeps of real physics; the controls come from the driver (autopilot or player).
@@ -303,7 +331,7 @@ extension Society {
 
     /// Electric traction draws from the grid of the district the vehicle belongs to (or of the nearest
     /// district on the way); without spare power there is none.
-    func gridPower(for v: Vehicle) -> Bool {
+    public func gridPower(for v: Vehicle) -> Bool {
         if case .district(let id) = v.owner, let d = net.district(id) { return d.spareGrid > 0 }
         return net.districts.contains { $0.nation == v.nation && $0.spareGrid > 0 }
     }
@@ -338,7 +366,7 @@ extension Society {
             level = l
         }
         // other vehicles on the same level: never closer than both their sizes (moving apart is allowed)
-        for o in realm.transport.vehicles where o !== v && o.level == level && o.kind.mode == v.kind.mode && (o.kind.mode != .air || o.flight == v.flight) {
+        for o in vehiclesAround(v.pos) where o !== v && o.level == level && o.kind.mode == v.kind.mode && (o.kind.mode != .air || o.flight == v.flight) {
             let r = (o.spec.radius + v.spec.radius) * 16
             let dNow = o.pos.distance(to: v.pos), dNew = o.pos.distance(to: Vec2(nx, ny))
             if dNew < r && dNew < dNow { bump(v, other: o); return }
@@ -587,7 +615,7 @@ extension Society {
                 v.lockWait = wait
             }
         }
-        for o in realm.transport.vehicles where o !== v && o.kind.mode == .water {
+        for o in vehiclesAround(v.pos) where o !== v && o.kind.mode == .water {
             let r = (o.spec.radius + v.spec.radius) * 16
             if o.pos.distance(to: Vec2(nx, ny)) < r && o.pos.distance(to: Vec2(nx, ny)) < o.pos.distance(to: v.pos) { bump(v, other: o); return }
         }
@@ -627,7 +655,7 @@ extension Society {
                 c.throttle = target > v.speed + 0.05 ? 1 : (target < v.speed - 0.2 ? -0.6 : 0.3 * target / max(1, s.maxSpeed))
                 if target < 0.05 && v.speed < 0.3 { c.throttle = 0; c.brake = 1 }
             } else {
-                if v.speed < target - 0.2 { c.throttle = min(1, (target - v.speed) / 2 + 0.25) } else if v.speed > target + 0.1 { c.brake = min(1, (v.speed - target) / 2 + 0.2) }
+                if v.speed < target - 0.2 { c.throttle = min(1, (target - v.speed) / 2 + 0.25) } else if v.speed > target + 0.1 { c.brake = min(1, (v.speed - target) + 0.3) }
             }
         case .air:
             autoFly(v, &c)
@@ -672,7 +700,7 @@ extension Society {
     func gapLimit(_ v: Vehicle) -> Double {
         var lim = Double.infinity
         let fwd = Vec2(cos(v.heading), sin(v.heading))
-        for o in realm.transport.vehicles where o !== v && o.level == v.level && o.kind.mode == v.kind.mode {
+        for o in vehiclesAround(v.pos) where o !== v && o.level == v.level && o.kind.mode == v.kind.mode {
             let rel = (o.pos - v.pos) * (1.0 / 16)
             let along = rel.x * fwd.x + rel.y * fwd.y
             let side = abs(-rel.x * fwd.y + rel.y * fwd.x)
@@ -822,6 +850,7 @@ extension Society {
     /// Find the way to the job's next goal from exactly where the vehicle is.
     func plan(_ v: Vehicle) {
         v.replan = false
+        v.plannedRev = realm.transport.revision
         guard let goal = v.task.goal ?? lineGoal(v) else { v.path = []; v.pathI = 0; return }
         var from = v.node
         if v.kind.mode == .air {
@@ -833,7 +862,7 @@ extension Society {
         }
         if !passable(from, profile(v.kind)), v.kind.mode == .road, let near = nearestWay(v) { from = near }
         if let r = route(from: from, to: goal, profile(v.kind)) {
-            v.path = r; v.pathI = r.count > 1 ? 1 : 0
+            v.path = r; v.pathI = r.count > 1 ? 1 : r.count               // the first node is where it stands
             if v.halted == "no way" || v.halted == "bridge gone" { v.halted = nil }
         } else {
             v.path = []; v.pathI = 0

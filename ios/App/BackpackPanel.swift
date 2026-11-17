@@ -17,6 +17,7 @@ struct PlayControls: View {
                 HStack(alignment: .bottom) {
                     Spacer()
                     VStack(spacing: 10) {
+                        round("car.fill", L("出行", "Travel"), id: "travel-open") { model.showTravel = true }
                         if model.nearLift != nil {
                             round("arrow.up.arrow.down", L("电梯", "Elevator"), id: "lift-open") { model.liftPanel = model.nearLift }
                         }
@@ -28,6 +29,7 @@ struct PlayControls: View {
                         round("arrow.up.circle.fill", L("跳跃", "Jump"), id: "jump", big: true) { model.jumpQueued = true }
                     }
                     .padding(.trailing, 14).padding(.bottom, 86)
+                    .opacity(model.drive?.driving == true ? 0 : 1).allowsHitTesting(model.drive?.driving != true)
                 }
             }
             VStack(spacing: 6) {
@@ -37,7 +39,7 @@ struct PlayControls: View {
                         .padding(.horizontal, 10).padding(.vertical, 4).glass(Capsule()).allowsHitTesting(false)
                         .accessibilityIdentifier("height-line")
                 }
-                hotbar.padding(.bottom, 64)
+                hotbar.padding(.bottom, 64).opacity(model.drive?.driving == true ? 0 : 1).allowsHitTesting(model.drive?.driving != true)
             }
             // the camera, for assistive technology and UI tests
             Text(model.cameraLine).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)

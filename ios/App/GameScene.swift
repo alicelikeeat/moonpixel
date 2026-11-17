@@ -36,7 +36,7 @@ final class GameScene: SKScene {
     private let ghost = SKSpriteNode()
     private var joyTouch: UITouch?
     private var joyOrigin = CGPoint.zero
-    private var joyVec = CGVector.zero
+    var joyVec = CGVector.zero
     private var tapStart: [ObjectIdentifier: CGPoint] = [:]
     var lastTime: TimeInterval = 0
     /// The saved body is checked once, when the world is first shown (a bad place is put right, with a reason).
@@ -66,6 +66,8 @@ final class GameScene: SKScene {
     var roofNodes: [Int: SKSpriteNode] = [:]
     var crestNodes: [TilePos: SKSpriteNode] = [:]
     var liftNodes: [Int: SKShapeNode] = [:]
+    var vehicleNodes: [Int: SKNode] = [:]
+    var driveAcc = 0.0
     var simDebt = 0.0
     private var badgeNodes: [TilePos: SKNode] = [:]
     private var otherTouches: [UITouch] = []
@@ -241,7 +243,14 @@ final class GameScene: SKScene {
             walkT += dt * 8
         }
         if model.following, let a = society.agents[model.selectedID] { player = a.pos }
-        else if !model.lawBusy { moveBody(society, world, model, wish: moving ? (mv.length > 1 ? mv.normalized : mv) * (90.0 * (mv.length > 0.92 ? 1.8 : 1.0)) : .zero, dt: dt) }
+        else if !model.lawBusy {
+            let wish = moving ? (mv.length > 1 ? mv.normalized : mv) * (90.0 * (mv.length > 0.92 ? 1.8 : 1.0)) : Vec2.zero
+            if society.playerVehicle != nil { rideFrame(society, model, wish: wish, dt: dt) }
+            else {
+                moveBody(society, world, model, wish: wish, dt: dt)
+                if model.drive != nil { model.refreshDrive() }
+            }
+        }
         // pressure plates notice who stands on them
         let here = player.tile
         if here != lastTile { society.press(lastTile, down: false, in: world); society.press(here, down: true, in: world); lastTile = here }
@@ -266,6 +275,7 @@ final class GameScene: SKScene {
                 model.perf.time("soldiers") { updateSoldiers(society, model) }
                 model.perf.time("roofs") { updateRoofs(society, model) }
                 updateLifts2D(society, model)
+                updateVehicles2D(society, model)
             }
         }
 

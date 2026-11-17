@@ -25,7 +25,7 @@ brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 
 | `ios/App` | SpriteKit 场景、RealityKit 3D 视角（`Solid3D.swift`）与 SwiftUI 界面 |
 | `ios/Tests`、`ios/UITests` | 核心测试与模拟器界面测试 |
 | `content/` + `tools/gen_swift_content.py` | 地块与群系数据（JSON），生成 `ContentData.swift` |
-| `docs/` | [身体、背包、高楼与电梯](docs/PLAYER3D.md)、[迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、多种子运行记录（[v1.6](docs/runs/seeds-v1.6.txt)、[v1.3](docs/runs/seeds-v1.3.txt)） |
+| `docs/` | [大都市与现代交通](docs/TRANSPORT.md)、[身体、背包、高楼与电梯](docs/PLAYER3D.md)、[迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、多种子运行记录（[v1.6](docs/runs/seeds-v1.6.txt)、[v1.3](docs/runs/seeds-v1.3.txt)） |
 
 ## 功能
 
@@ -60,6 +60,7 @@ brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 
 - **玩家贡献**（v1.6）：修桥恢复通路、送粮解除饥荒、护送或截击车队、收复旧都、接纳难民，按真实前后变化记入纪事，同一件事只记一次。
 - **第一人称、身体与背包**（v2.6）：3D 有第一人称（可上下看，俯仰 ±85°）和第三人称；跳跃、坠落、落地伤害、楼板与天花板碰撞由同一个固定步长的身体完成，2D 与 3D 共用。背包、装备、快捷栏、丢弃与拾取、吃东西都基于同一个背包，每个命令只执行一次。见 [docs/PLAYER3D.md](docs/PLAYER3D.md)。
 - **真正的高楼与外置电梯**（v2.6）：附近塔楼有多少层就能上到第几层（不再截到 40 层），楼层只在用到时生成；外置观光电梯的轿厢真实升降，门只在停稳对位时开，超载不走，停电时靠应急电源停到楼层，载人载货只在轿厢里；塔楼高层的口粮由电梯真实送达。楼板在 3D 中半透明显示（可调）。
+- **大都市与可驾驶现代交通**（v2.7）：在开放世界里修街道、高速、铁路、高铁、机场和港口，建人行桥、公路桥、铁路桥、高架和开启桥（修前预览砍伐与费用）；亲自驾驶汽车、高铁、客机和轮船，也可交给自动驾驶或当乘客；线路、班次、换乘、货运链和都市区（住宅、商业、工业、农业、物流、市政）真实联动；都市模式的城市可并入开放世界。见 [docs/TRANSPORT.md](docs/TRANSPORT.md)。
 - **多世界**、**一句话创建世界**、**照片 / GIF / 视频生成像素角色**（Apple Vision 本机识别）、**素材导入**、**内存预算与一键清理**。
 
 哪些内容经过了验证、哪些没有，见 [docs/TESTING.md](docs/TESTING.md)。目前只在 CI 的 iOS 模拟器里运行过，没有真机验证。

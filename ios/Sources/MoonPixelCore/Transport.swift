@@ -312,10 +312,10 @@ extension Society {
     /// May a tree be planted here? Never on a way, a bridge, a kept-clear corridor (a road, a railway, a
     /// runway and its margins, a building's door), or anything built.
     public func canPlant(_ t: TilePos) -> Bool {
-        world.isLand(t.x, t.y) && world.tile(2, t.x, t.y) == 0 && world.tile(1, t.x, t.y) == 0 && !isCorridor(t) && bridge(at: t) == nil
+        world.isLand(t.x, t.y) && world.tile(2, t.x, t.y) == 0 && world.tile(1, t.x, t.y) == 0 && !isCorridor(t) && (realm.transportBox == nil || bridge(at: t) == nil)
     }
 
-    public func isCorridor(_ t: TilePos) -> Bool { realm.transport.corridor.contains(MP.chunkKey(t.x, t.y)) }
+    public func isCorridor(_ t: TilePos) -> Bool { realm.transportBox?.corridor.contains(MP.chunkKey(t.x, t.y)) ?? false }
     func keepClear(_ t: TilePos) { realm.transport.corridor.insert(MP.chunkKey(t.x, t.y)) }
 
     public func bridge(at t: TilePos) -> Bridge? { net.bridgeAt[MP.chunkKey(t.x, t.y)].flatMap { net.bridge($0) } }
@@ -699,6 +699,51 @@ extension Society {
         }
         for v in tr.vehicles { v.replan = true }
         return true
+    }
+
+    // MARK: when the land returns to nature (a law)
+
+    /// Everything of the network on this chunk goes with the land: decks, tunnels, stops (and the lines' calls
+    /// there), vehicles (their riders are set down, their goods are written off in the books as taken by the law),
+    /// kept-clear corridors, and the district buildings standing there (their residents are booked as gone).
+    public func landReturned(cx: Int, cy: Int) {
+        let tr = realm.transport
+        func inside(_ t: TilePos) -> Bool { t.x >> 5 == cx && t.y >> 5 == cy }
+        tr.bridges.removeAll { $0.cells.contains(where: inside) }
+        tr.tunnels.removeAll { $0.cells.contains(where: inside) }
+        tr.corridor = tr.corridor.filter { !inside(TilePos(MP.keyCX($0), MP.keyCY($0))) }
+        tr.crossings = tr.crossings.filter { !inside(TilePos(MP.keyCX($0), MP.keyCY($0))) }
+        tr.locks.removeAll { inside($0.cell) }
+        // vehicles
+        for v in tr.vehicles where inside(v.tile) {
+            for (sid, amt) in v.cargo { if let sh = tr.shipments.first(where: { $0.id == sid }) { record([(sh.key, amt)], from: "vehicle \(v.id)", to: "taken by the law", note: "lost shipment \(sid)"); sh.amount -= amt } }
+            for r in v.riders { if case .commuter(let id) = r.who, let i = tr.commuters.firstIndex(where: { $0.id == id }) { tr.commuters[i].state = tr.commuters[i].toWork ? .home : .atWork; tr.commuters[i].vehicle = nil } }
+            if v.playerAboard, var b = realm.player.body { b.vehicle = nil; b.lx = nil; b.ly = nil; b.lz = nil; b.seat = nil; b.state = .falling; realm.player.body = b }
+            for l in tr.lines { l.vehicles.removeAll { $0 == v.id } }
+        }
+        tr.vehicles.removeAll { inside($0.tile) }
+        // stops (and the lines that called there)
+        let gone = Set(tr.stops.filter { inside($0.tile) }.map { $0.id })
+        for st in tr.stops where gone.contains(st.id) {
+            for (sid, amt) in st.yard { if let sh = tr.shipments.first(where: { $0.id == sid }) { record([(sh.key, amt)], from: "yard \(st.name)", to: "taken by the law", note: "lost shipment \(sid)"); sh.amount -= amt } }
+            for r in st.waiting { if case .commuter(let id) = r.who, let i = tr.commuters.firstIndex(where: { $0.id == id }) { tr.commuters[i].state = tr.commuters[i].toWork ? .home : .atWork } }
+        }
+        tr.stops.removeAll { gone.contains($0.id) }
+        for l in tr.lines { l.stops.removeAll { gone.contains($0) } }
+        for l in tr.lines where l.stops.count < 2 { for vid in l.vehicles { tr.vehicle(vid)?.task = VehicleTask() } }
+        tr.lines.removeAll { $0.stops.count < 2 }
+        for v in tr.vehicles { if let lid = v.task.line, tr.line(lid) == nil { v.task = VehicleTask() }; v.replan = true }
+        for sh in tr.shipments where sh.state != .delivered && sh.amount <= sh.delivered + 1e-9 { sh.state = .delivered; sh.done = world.time }
+        // district buildings on that land
+        for d in tr.districts {
+            for b in d.buildings where inside(TilePos(b.x, b.y)) || inside(TilePos(b.x + b.w - 1, b.y + b.d - 1)) {
+                let n = b.residents
+                if n > 0 { d.ledger.deaths["law", default: 0] += n }
+                tr.commuters.removeAll { ($0.home == d.id && $0.homeB == b.id) || ($0.work == d.id && $0.workB == b.id) }
+            }
+            d.buildings.removeAll { inside(TilePos($0.x, $0.y)) || inside(TilePos($0.x + $0.w - 1, $0.y + $0.d - 1)) }
+        }
+        tr.revision += 1
     }
 
     // MARK: opening bridges
