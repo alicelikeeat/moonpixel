@@ -270,7 +270,8 @@ final class GameModel: ObservableObject {
         if let i = args.firstIndex(of: "--perf-log"), i + 1 < args.count { perfLogEvery = Double(args[i + 1]) ?? 0 }
         if args.contains("--perf") { showPerf = true }
         if args.contains("--plain-render") { plainRender = true }
-        if args.contains("--3d") { render3D = true } else if args.contains("--2d") { render3D = false }
+        if args.contains("--3d") { render3D = true } else if args.contains("--2d") || args.contains("--autostart") { render3D = false }
+        if args.contains("--autostart") && !args.contains("--first-person") { viewMode = .third }
         if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)); swarmFixed = true }
         guard scene == nil, let i = args.firstIndex(of: "--autostart") else { return }
         let seed = (i + 1 < args.count ? Int(args[i + 1]) : nil) ?? 7

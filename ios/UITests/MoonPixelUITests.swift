@@ -204,6 +204,7 @@ final class MoonPixelUITests: XCTestCase {
         more(app, "Worlds")
         _ = app.buttons["retry-exit"].waitForExistence(timeout: 15)      // the failing save runs on a background queue first
         shot("20-exit-blocked")
+        print("UITEST save-state: " + app.staticTexts["save-state"].label + " toast: " + app.staticTexts["last-toast"].label)
         XCTAssertTrue(app.otherElements["exit-blocked"].exists || app.buttons["retry-exit"].exists, "leaving was refused with an explanation")
         XCTAssertTrue(app.buttons["Map"].exists, "the world is still open")
         XCTAssertFalse(app.buttons["create-world"].exists, "not back at the world list")
@@ -410,18 +411,18 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(line.waitForExistence(timeout: 15), "the height is shown")
         sleep(2)
         shot("33-in-the-car")
+        guard app.buttons["lift-open"].waitForExistence(timeout: 10) else { return XCTFail("no elevator button beside the car") }
+        app.buttons["lift-open"].tap(); sleep(1)
+        XCTAssertTrue(app.buttons["lift-stop-0"].exists && app.buttons["lift-stop-5"].exists, "its landings, ground to storey 5")
+        XCTAssertFalse(app.buttons["lift-stop-6"].exists, "and none it does not stop at")
+        shot("35-lift-panel")
+        // send it to the ground and watch the height shown fall
+        app.buttons["lift-stop-0"].tap(); sleep(1)
+        app.buttons["close-panel"].tap()
         let first = line.label
-        sleep(8)
+        sleep(5)
         let later = line.label
         XCTAssertNotEqual(first, later, "the car moved: \(first) -> \(later)")
-        shot("34-car-up")
-        if app.buttons["lift-open"].waitForExistence(timeout: 5) {
-            app.buttons["lift-open"].tap(); sleep(1)
-            XCTAssertTrue(app.buttons["lift-stop-0"].exists && app.buttons["lift-stop-5"].exists, "its landings, ground to storey 5")
-            XCTAssertFalse(app.buttons["lift-stop-6"].exists, "and none it does not stop at")
-            shot("35-lift-panel")
-            app.buttons["lift-stop-0"].tap(); sleep(1)
-            app.buttons["close-panel"].tap()
-        } else { XCTFail("no elevator button beside the car") }
+        shot("34-car-down")
     }
 }

@@ -42,6 +42,8 @@ struct PlayControls: View {
             // the camera, for assistive technology and UI tests
             Text(model.cameraLine).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)
                 .accessibilityIdentifier("camera-state").allowsHitTesting(false)
+            Text("save running \(model.saveRunning) exit \(model.exitRequested) blocked \(model.exitBlocked != nil)").font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)
+                .accessibilityIdentifier("save-state").allowsHitTesting(false)
         }
     }
 

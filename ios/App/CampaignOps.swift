@@ -529,6 +529,20 @@ struct MorePanel: View {
                     Chip(title: L("指挥模式", "Command"), icon: "flag.2.crossed.fill", id: "Command") { model.showMore = false; model.startCommand() }
                     Chip(title: L("村落", "Village"), icon: "house.fill", id: "Village") { model.showMore = false; model.nextVillage() }
                 }
+                group(L("形象与素材", "Looks and pictures")) {
+                    Chip(title: L("形象", "Photo"), icon: "person.crop.circle.badge.plus", id: "Photo") { model.showMore = false; model.pick = .player }
+                    Chip(title: L("素材", "Import"), icon: "photo.badge.plus", id: "Import") { model.showMore = false; model.pick = .asset }
+                }
+                group(L("系统", "System")) {
+                    Chip(title: L("保存", "Save"), icon: "square.and.arrow.down.fill", id: "Save") { model.showMore = false; model.save(announce: true) }
+                    Chip(title: L("清理", "Clean"), icon: "sparkles", id: "Clean") { model.showMore = false; model.cleanMemory(announce: true) }
+                    Chip(title: model.showPerf ? L("关闭性能", "Hide perf") : L("性能", "Performance"), icon: "speedometer", id: "Perf") {
+                        model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
+                    }
+                    Chip(title: L("作弊", "Cheats"), icon: "wand.and.rays", id: "Cheats") { model.showMore = false; model.showCheats = true }
+                    Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
+                }
+                // (last, so the buttons above stay where they always were)
                 group(L("视角与操作", "View and controls")) {
                     Chip(title: model.viewMode == .first ? L("第三人称", "Third person") : L("第一人称", "First person"), icon: model.viewMode == .first ? "person.fill.viewfinder" : "eye.fill", id: "ViewFirst") {
                         model.showMore = false; model.viewMode = model.viewMode == .first ? .third : .first; if !model.render3D { model.render3D = true }
@@ -548,19 +562,6 @@ struct MorePanel: View {
                         Slider(value: $model.floorOpacity, in: 0.15...1).accessibilityIdentifier("floor-opacity")
                     }
                     Text(L("只改变画面：楼板照样承重、照样挡人。", "Only the picture changes: floors hold and stop you the same.")).font(.system(size: 9, design: .rounded)).opacity(0.6)
-                }
-                group(L("形象与素材", "Looks and pictures")) {
-                    Chip(title: L("形象", "Photo"), icon: "person.crop.circle.badge.plus", id: "Photo") { model.showMore = false; model.pick = .player }
-                    Chip(title: L("素材", "Import"), icon: "photo.badge.plus", id: "Import") { model.showMore = false; model.pick = .asset }
-                }
-                group(L("系统", "System")) {
-                    Chip(title: L("保存", "Save"), icon: "square.and.arrow.down.fill", id: "Save") { model.showMore = false; model.save(announce: true) }
-                    Chip(title: L("清理", "Clean"), icon: "sparkles", id: "Clean") { model.showMore = false; model.cleanMemory(announce: true) }
-                    Chip(title: model.showPerf ? L("关闭性能", "Hide perf") : L("性能", "Performance"), icon: "speedometer", id: "Perf") {
-                        model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
-                    }
-                    Chip(title: L("作弊", "Cheats"), icon: "wand.and.rays", id: "Cheats") { model.showMore = false; model.showCheats = true }
-                    Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
                 }
             }
         }
