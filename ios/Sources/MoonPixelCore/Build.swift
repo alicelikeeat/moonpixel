@@ -171,6 +171,7 @@ extension Society {
         if bridging && out.placed > 0 { creditBridge(before: routesBefore, cells: pre.cells.filter { $0.ok }.map { $0.pos }) }
         if w.depth == 0 { for s in settlements.values where !s.abandoned && pre.cells.contains(where: { s.inArea($0.pos) }) { s.planT = 0; s.cityT = 0 } }
         for lg in realm.legions { lg.supplyT = 0 }            // routes notice the change themselves (chunk stamps)
+        if realm.liftBox != nil { checkLifts() }          // a landing built over or taken away
         return out
     }
 
@@ -202,6 +203,7 @@ extension Society {
             if p.group == 3 { updateNetwork(around: t, in: w) }
             realm.depots.removeAll { $0.x == t.x && $0.y == t.y }
             for lg in realm.legions { lg.supplyT = 0 }            // routes notice the change themselves (chunk stamps)
+            if realm.liftBox != nil { checkLifts() }
             if w.depth == 0 { for s in settlements.values where !s.abandoned && s.inArea(t) { s.cityT = 0 } }
             return p
         }

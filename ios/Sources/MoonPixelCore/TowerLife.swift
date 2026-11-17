@@ -177,7 +177,8 @@ extension Civ {
                 work += need[i] * liftCost(t, i)
             }
             let total = need.reduce(0, +)
-            if total > 0 {
+            if t.realLift == true { t.liftLoad = 0 }        // its own elevators carry it (Society.supplyTowers)
+            else if total > 0 {
                 let share = min(1, carrying(t, city: c) / max(1e-9, work))
                 let have = c.foodNutrition - CivFood.all.reduce(0.0) { $0 + (c.reserved[$1.key] ?? 0) * $1.nutrition }
                 let send = min(total * share, max(0, have))

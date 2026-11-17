@@ -68,6 +68,10 @@ extension Society {
         syncDetailed(c)
         if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t) }
         syncShownOwners(c)
+        // towers with real elevators get their food by them, and only while they stand
+        let served = liftServedTowers
+        for t in c.towerIndex.towers.values { let want: Bool? = served.contains(t.id) ? true : nil; if t.realLift != want { t.realLift = want } }
+        supplyTowers()
         c.advance(to: world.time)
         refreshStanding(c)
         c.born.removeAll()

@@ -569,6 +569,7 @@ public final class Society {
 
     // MARK: tick
     public func tick(_ dt: Double) {
+        if realm.liftBox != nil { liftsStep(dt) }
         world.advance(dt)
         tickCount += 1
         // planning and resource scans are the heavy part of a town's work. When many fall due together

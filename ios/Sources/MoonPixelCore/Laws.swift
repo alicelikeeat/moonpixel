@@ -344,6 +344,8 @@ public final class LawRun {
                 // the land returns to nature all the way down: mines, ruins dug out and stairs under it go too
                 if plan.mode == .guixu { let u = s.underworld(); if u.storedSize(MP.chunkKey(c.cx, c.cy)) > 0 || u.loaded(c.cx, c.cy) { u.revertChunk(c.cx, c.cy); result.chunks += 1 } }
                 // and nothing is left hanging in the air: every storey above the land goes with it
+                // elevators on this land go with it (goods in them back to their source, riders to a landing)
+                for e in s.realm.lifts where e.x + e.w > c.cx * 32 && e.x < c.cx * 32 + 32 && e.y + e.d > c.cy * 32 && e.y < c.cy * 32 + 32 { s.removeLift(e.id) }
                 // a standing tower on this land goes first, so its floors are not made again from it
                 if let st = s.realm.standing {
                     let keep = st.filter { t in !(t.x + t.w > c.cx * 32 && t.x < c.cx * 32 + 32 && t.y + t.d > c.cy * 32 && t.y < c.cy * 32 + 32) }
