@@ -66,7 +66,7 @@ extension Society {
         for t in settlements.values.filter({ !$0.abandoned }).sorted(by: { $0.id < $1.id }) { c.discover(around: t.center, radius: 2, gen: world.gen, detailed: detailed) }
         if let t = explorer { c.discover(around: t, radius: 3, gen: world.gen, detailed: detailed) }
         syncDetailed(c)
-        if let t = explorer { showNearby(c, around: t); foldAway(c, from: t) }
+        if let t = explorer { showNearby(c, around: t); showForces(c); foldAway(c, from: t) }
         c.advance(to: world.time)
         c.born.removeAll()
     }
@@ -183,6 +183,7 @@ extension Society {
             s.wood = wood; s.stone = stone
             city.shownAs = s.id
             reflag(s)
+            raiseTowers(of: city, in: s, c)
             emit("civ_town_seen", [s.name(zh: zh), p.name(zh: zh)], site.center)
             return                                                          // one a step: never a sudden crowd
         }
@@ -219,6 +220,7 @@ extension Society {
             s.food = 0; s.wood = 0; s.stone = 0
             s.abandoned = true; detach(s)
             city.shownAs = nil
+            returnForces(c, city: city)
             invalidateGrid()
             repairReferences()
         }

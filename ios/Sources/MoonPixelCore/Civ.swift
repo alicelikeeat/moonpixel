@@ -174,6 +174,9 @@ public final class Civ: Codable {
     public var fights: [CivFight] = []
     /// Buildings that grow upwards (Vertical.swift): their floors, plans and people.
     public var towerIndex = TowerIndex()
+    /// A battle of command mode fought for a real war of the nation the player governs: what was staked
+    /// from its treasury, against whom, and whether it has been settled (it is settled once).
+    public var campaign: CivCampaign?
     /// How many times each kind of news has happened, ever (the news list itself keeps only the latest).
     public var happened: [String: Int] = [:]
     /// Results of the commands seen lately, by id (a repeated id is not carried out twice), oldest first.
@@ -196,7 +199,7 @@ public final class Civ: Codable {
     // read if present, so a save from before a field existed still opens (with that field's default).
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
-        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex
+        case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -216,7 +219,7 @@ public final class Civ: Codable {
         try c.encode(nextUnit, forKey: .nextUnit); try c.encode(nextProject, forKey: .nextProject); try c.encode(nextNation, forKey: .nextNation)
         try c.encode(totals, forKey: .totals); try c.encode(rng, forKey: .rng); try c.encode(born, forKey: .born)
         try c.encode(commandOrder.compactMap { commandResults[$0] }, forKey: .commandResults); try c.encode(pendingCommands, forKey: .pendingCommands)
-        try c.encode(towerIndex, forKey: .towerIndex)
+        try c.encode(towerIndex, forKey: .towerIndex); try c.encodeIfPresent(campaign, forKey: .campaign)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -252,6 +255,7 @@ public final class Civ: Codable {
         for r in try c.decodeIfPresent([CommandResult].self, forKey: .commandResults) ?? [] { commandResults[r.id] = r; commandOrder.append(r.id) }
         pendingCommands = try c.decodeIfPresent([WorldCommand].self, forKey: .pendingCommands) ?? []
         towerIndex = try c.decodeIfPresent(TowerIndex.self, forKey: .towerIndex) ?? TowerIndex()
+        campaign = try c.decodeIfPresent(CivCampaign.self, forKey: .campaign)
     }
 
     var dayLength: Double { MP.daySeconds }

@@ -42,6 +42,8 @@ public final class CivForce: Codable {
     public var path: [Int64] = []
     public var progress = 0.0
     public var morale = 0.8
+    /// Soldiers lent to the detailed world while the traveller is near (they come back when the town folds away).
+    public var lent: Int?
     public init() {}
 }
 

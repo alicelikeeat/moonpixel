@@ -118,4 +118,55 @@ final class CivBridgeTests: XCTestCase {
         let held = c.foodHeld(), want = c.foodExpected()
         for f in CivFood.all { XCTAssertEqual(held[f.key] ?? 0, want[f.key] ?? 0, accuracy: 0.01 + 1e-6 * abs(want[f.key] ?? 0), f.key) }
     }
+
+    /// With the traveller there, the regional layer is real: a tower stands as storeys, a force lends real
+    /// soldiers (who go back to it afterwards), machines have pictures, and a battle fought by hand counts once.
+    func testNearTheTravellerTowersSoldiersMachinesAndCampaignsAreReal() {
+        let s = makeSociety(5)
+        hours(s, 3)
+        let c = s.civ
+        guard let city = c.cities.values.filter({ $0.detail == nil && $0.pop >= 30 }).sorted(by: { $0.id < $1.id }).first else { return XCTFail("no regional city") }
+        // the city has a six-floor tower and a force at home
+        let home = Blueprint.plan(use: .home, w: 12, d: 10, layout: 0, seed: 1)
+        c.towerIndex.plans[home.key] = home
+        let t = Tower(base: Cell3(0, 0, 0)); t.id = c.towerIndex.nextTower; c.towerIndex.nextTower += 1
+        t.city = city.id; t.nation = city.nation; t.w = 12; t.d = 10; t.material = 2; t.nameEn = "Spire"
+        t.floors = (0..<6).map { var f = TowerFloor(z: Int64($0 * 4), plan: home.key); f.stage = .inUse; return f }
+        c.towerIndex.towers[t.id] = t
+        let f = CivForce(); f.id = c.nextForce; c.nextForce += 1; f.nation = city.nation; f.region = city.regionKey; f.home = city.id
+        var u = CivUnit(); u.id = c.nextUnit; c.nextUnit += 1; u.kind = "levy"; u.nation = city.nation; u.force = f.id; u.hp = 100
+        c.units[u.id] = u; f.units = [u.id]; f.crew = city.people.takeAdults(20); f.food = ["grain": 0]
+        c.forces[f.id] = f
+        XCTAssertEqual(c.audit(), [])
+        let size = c.cfg.regionTiles
+        s.explorer = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
+        hours(s, 2)
+        guard let town = s.settlements.values.first(where: { $0.fromCiv == city.id && !$0.abandoned }) else { return XCTFail("not shown") }
+        XCTAssertEqual(t.real, true, "the tower was built for real")
+        XCTAssertGreaterThanOrEqual(s.realm.storeyTop ?? 0, 5, "five storeys above its ground floor")
+        XCTAssertNotEqual(s.storeyWorld(5).tile(0, town.center.x + 14, town.center.y - 14), 0, "a floor on its top storey")
+        XCTAssertNotNil(f.lent, "the force lent soldiers to the town")
+        let soldiers = town.members.compactMap { s.agents[$0] }.filter { $0.legion != nil }.count
+        XCTAssertGreaterThan(soldiers, 0, "real soldiers in its garrison")
+        XCTAssertEqual(f.crew.total, 20 - (f.lent ?? 0), "counted out of the force")
+        XCTAssertEqual(c.audit(), [])
+        XCTAssertTrue(s.machinesInView().contains { $0.kind == "levy" }, "its machines are in view")
+        for k in CivUnitDef.all { XCTAssertTrue(PixelArt.civUnit(k.key, color: RGBA(200, 60, 60)).px.contains { $0 != 0 }, "a picture of \(k.key)") }
+        XCTAssertNotEqual(PixelArt.civUnit("frame", color: RGBA(200, 60, 60)).px, PixelArt.civUnit("carrier", color: RGBA(200, 60, 60)).px)
+        // away again: the soldiers are back with their force
+        s.explorer = TilePos(city.rx * size - 6 * size, city.ry * size)
+        hours(s, 1)
+        XCTAssertNil(f.lent); XCTAssertEqual(f.crew.total, 20)
+        XCTAssertEqual(c.audit(), [])
+        // a campaign: staked once, settled once
+        let foe = c.newPolity(origin: "first", near: nil)
+        c.polities[city.nation]!.treasury = 1000
+        c.declare(city.nation, on: foe)
+        guard let camp = c.beginCampaign(city.nation) else { return XCTFail("no campaign") }
+        XCTAssertEqual(camp.stake, 200); XCTAssertEqual(c.polities[city.nation]!.treasury, 800)
+        XCTAssertEqual(c.beginCampaign(city.nation)?.id, camp.id, "the same battle while it lasts: not staked twice")
+        XCTAssertEqual(c.polities[city.nation]!.treasury, 800)
+        XCTAssertTrue(c.settleCampaign(won: true)); XCTAssertFalse(c.settleCampaign(won: true), "settled once")
+        XCTAssertEqual(c.polities[city.nation]!.treasury, 1200)
+    }
 }

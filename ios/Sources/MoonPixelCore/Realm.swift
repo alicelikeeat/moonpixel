@@ -284,7 +284,7 @@ extension Society {
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
         "succession": ("A succession dispute shakes the united realm", "继承争议动摇了统一王朝"), "independence": ("%@ demands independence", "%@ 要求独立"),
-        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "storey_added": ("%@ built a house up to %@ storeys", "%@ 把一座房子加盖到 %@ 层"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
+        "refugees": ("%@ people fled %@", "%@ 人逃离了 %@"), "tower_seen": ("%@ stands %@ storeys high", "%@ 高 %@ 层"), "storey_added": ("%@ built a house up to %@ storeys", "%@ 把一座房子加盖到 %@ 层"), "civ_town_seen": ("%@ of %@ comes into view", "%@（%@）出现在眼前"), "restart": ("No one is left. Civilisation must begin again", "世间已无人烟，文明将重新开始"),
         "resettled": ("New settlers begin again: %@", "新的移民重新开始：%@"), "arsenal": ("%@ mastered %@", "%@ 掌握了 %@"),
         "capital_named": ("%@ made %@ its capital", "%@ 定都 %@"), "capital_lost": ("%@ lost its capital %@", "%@ 的首都 %@ 失守"),
         "capital_moved": ("%@ moved its capital to %@", "%@ 迁都至 %@"), "capital_restored": ("%@ raised a new capital at %@", "%@ 在 %@ 重建首都"),

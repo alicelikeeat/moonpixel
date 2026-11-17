@@ -67,6 +67,30 @@ extension GameScene {
         return t
     }
 
+    /// Machines of the regional wars standing by a town in view (frames, carriers, aircraft...), as pictures
+    /// in their nation's colour; aircraft and sky carriers float above with a shadow under them.
+    func updateMachines(_ society: Society, _ model: GameModel) {
+        var seen = Set<Int>()
+        if model.depth == 0 {
+            for m in society.machinesInView() where abs(m.pos.x - viewPos.x) < 1400 && abs(m.pos.y - viewPos.y) < 1000 {
+                seen.insert(m.id)
+                let node = machineNodes[m.id] ?? {
+                    let key = "civ:" + m.kind + m.color
+                    let t = animalTex[key] ?? PixelArt.civUnit(m.kind, color: RGBA(hex: m.color)).texture
+                    animalTex[key] = t
+                    let n = SKSpriteNode(texture: t)
+                    n.name = "machine"
+                    addChild(n); machineNodes[m.id] = n
+                    return n
+                }()
+                let lift: Double = m.layer.air ? 40 : 0
+                node.position = CGPoint(x: m.pos.x, y: -(m.pos.y - lift))
+                node.zPosition = 10 + CGFloat(m.pos.y) * 0.001 + (m.layer.air ? 400 : 0)
+            }
+        }
+        for (id, n) in machineNodes where !seen.contains(id) { n.removeFromParent(); machineNodes[id] = nil }
+    }
+
     /// Every army in the field gets a standard, its strength and morale, its engines and, in battle, a front line.
     /// Far away (zoomed out) this is all there is to see of it; close up the soldiers themselves are drawn too.
     func updateLegions(_ society: Society, _ model: GameModel) {

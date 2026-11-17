@@ -493,8 +493,9 @@ final class SolidRenderer {
         let now = world.time
         let phase = Int(CACurrentMediaTime() * 6.5)
         var seen = Set<Int>()
-        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:])
-            : society.crowdSplit(center: scene.viewPos, halfW: reach, halfH: reach, limit: GameScene.maxCharacters, soldiersApart: !model.plainRender)
+        let upstairs = world.storey > 0 ? society.storeyView(storey: world.storey, center: scene.viewPos, halfW: reach, halfH: reach) : (shown: [], at: [:])
+        let split: (shown: [Agent], badges: [TilePos: Int]) = world.storey > 0 ? (upstairs.shown, [:]) : (model.depth > 0 ? ([], [:])
+            : society.crowdSplit(center: scene.viewPos, halfW: reach, halfH: reach, limit: GameScene.maxCharacters, soldiersApart: !model.plainRender))
         for a in split.shown {
             seen.insert(a.id)
             let fresh = agents[a.id] == nil
@@ -511,7 +512,7 @@ final class SolidRenderer {
             let rides = a.legion != nil && a.unit == MoonPixelCore.Unit.cavalry
             mount(e, rides: rides, phase: phase + a.id, moving: a.moving)
             turn(e, facing: a.facing, lying: a.sleeping)
-            settle(e, at: place(a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
+            settle(e, at: place(upstairs.at[a.id] ?? a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
         }
         for (id, e) in agents where !seen.contains(id) { give(e); agents[id] = nil }
         host?.badges = split.badges

@@ -47,6 +47,7 @@ final class GameScene: SKScene {
     var dragTouch: UITouch?
     var previewNodes: [SKSpriteNode] = []
     var legionNodes: [Int: SKNode] = [:]
+    var machineNodes: [Int: SKSpriteNode] = [:]
     var frameAvg = 1.0 / 60
     var effectBudget = 120
     /// One budget for what is drawn: decoration is cut before soldiers (see RenderBudget).
@@ -367,7 +368,11 @@ final class GameScene: SKScene {
         var seen = Set<Int>()
         // at most 50 characters on screen; everyone else becomes a number on their building
         // nobody from the surface is drawn underground
-        let split: (shown: [Agent], badges: [TilePos: Int]) = model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters, soldiersApart: !model.plainRender)
+        // on a storey: the families asleep in its beds; underground: nobody from above
+        let upstairs = world.storey > 0 ? society.storeyView(storey: world.storey, center: viewPos, halfW: halfW, halfH: halfH) : (shown: [], at: [:])
+        let split: (shown: [Agent], badges: [TilePos: Int]) = world.storey > 0 ? (upstairs.shown, [:])
+            : (model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters, soldiersApart: !model.plainRender))
+        updateMachines(society, model)
         updateBadges(split.badges)
         for a in split.shown {
             seen.insert(a.id)
@@ -403,8 +408,9 @@ final class GameScene: SKScene {
             let side = abs(a.facing.x) > abs(a.facing.y)
             node.xScale = side && a.facing.x < 0 ? -1 : 1
             node.zRotation = a.sleeping ? -.pi / 2 : 0
-            node.position = CGPoint(x: a.pos.x, y: -(a.pos.y + 4))
-            node.zPosition = 10 + CGFloat(a.pos.y) * 0.001
+            let ap = upstairs.at[a.id] ?? a.pos
+            node.position = CGPoint(x: ap.x, y: -(ap.y + 4))
+            node.zPosition = 10 + CGFloat(ap.y) * 0.001
             if let bar = node.childNode(withName: "bar") as? SKSpriteNode {
                 bar.isHidden = !working
                 if working, let t = a.task { bar.xScale = CGFloat(min(1, max(0.05, t.t / t.dur))) * node.xScale; bar.position.x = -7 * node.xScale }

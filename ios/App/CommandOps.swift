@@ -23,9 +23,22 @@ extension GameModel {
         var sim = got.value.flatMap { $0.winner == nil ? $0 : nil }
         if sim != nil { showToast(got.source == .previous ? L("继续上次的对局（载入上一版存档）", "Taking up the last battle (from the previous save)") : L("继续上次的对局", "Taking up the last battle")) }
         else if got.keptAside != nil { showToast(L("对局存档损坏，已另存，开始新对局", "The battle save was damaged; it was kept aside and a new battle started")) }
-        if sim == nil { sim = Skirmish(seed: w.seed &+ commandCount &* 977, worldSeed: w.seed, player: a, enemy: b) }
+        if sim == nil {
+            // governing a nation that is at war: this battle is fought for that war, with part of its treasury
+            // staked as extra moonstone; the result reaches the world once, when the battle ends
+            if let n = civCommand, let camp = s.civ.beginCampaign(n), !camp.settled, let me = s.civ.polities[camp.nation], let foe = s.civ.polities[camp.foe] {
+                sim = Skirmish(seed: w.seed &+ commandCount &* 977, worldSeed: w.seed, player: (me.name(zh: GameModel.zh), me.color), enemy: (foe.name(zh: GameModel.zh), foe.color), credits: 3000 + camp.stake)
+                showToast(String(format: L("世界战役：为 %@ 对 %@ 的战争而战，国库出资 %d", "World campaign: fighting %@'s war on %@, %d from the treasury"), me.name(zh: GameModel.zh), foe.name(zh: GameModel.zh), Int(camp.stake)))
+            } else { sim = Skirmish(seed: w.seed &+ commandCount &* 977, worldSeed: w.seed, player: a, enemy: b) }
+        }
         let session = SkirmishSession(sim: sim!, store: CommandLine.arguments.contains("--command-auto") ? nil : store)
-        session.onExit = { [weak self] in self?.command = nil }
+        session.onExit = { [weak self, weak session] in
+            // a finished campaign battle is settled in the world, once
+            if let win = session?.sim.winner, let civ = self?.society?.civ, civ.settleCampaign(won: win == 0) {
+                self?.showToast(win == 0 ? L("战役胜利：敌国厌战上升，出资加倍返还", "Campaign won: the enemy tires and the stake comes back doubled") : L("战役失利：出资损失，本国厌战上升", "Campaign lost: the stake is gone and the nation tires"))
+            }
+            self?.command = nil
+        }
         session.refresh()
         command = session
     }

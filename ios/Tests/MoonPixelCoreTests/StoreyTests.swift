@@ -174,6 +174,15 @@ final class StoreyTests: XCTestCase {
         for other in houses where other !== raised { other.owner = other.owner ?? -999 }
         runYears(s, 0.3)
         XCTAssertEqual(s.audit(), [])
+        // asleep, the family upstairs is seen on that storey, in its beds
+        if let up = raised.upstairs?.first {
+            for id in raised.residents { if let a = s.agents[id], s.household(a, s.world.time) == up { a.sleeping = true; a.home = raised.id } }
+            let v = s.storeyView(storey: 1, center: TilePos(raised.x, raised.y).center, halfW: 400, halfH: 400)
+            let mine = v.shown.filter { raised.residents.contains($0.id) }      // (other houses may have grown storeys of their own)
+            XCTAssertFalse(mine.isEmpty, "someone is asleep upstairs")
+            for a in mine { let p = v.at[a.id]!.tile; XCTAssertTrue(p.x > raised.x && p.x < raised.x + raised.w - 1 && p.y > raised.y && p.y < raised.y + raised.h - 1, "inside the house") }
+            if (raised.levels ?? 1) == 2 { XCTAssertFalse(s.storeyView(storey: 2, center: TilePos(raised.x, raised.y).center, halfW: 400, halfH: 400).shown.contains { raised.residents.contains($0.id) }) }
+        }
         if let up = raised.upstairs?.first { XCTAssertTrue(raised.residents.contains { s.agents[$0].map { s.household($0, s.world.time) } == up }, "they are residents of the house") }
     }
 }

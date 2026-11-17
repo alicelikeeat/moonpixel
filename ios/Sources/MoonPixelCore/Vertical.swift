@@ -128,6 +128,8 @@ public final class Tower: Codable {
     /// floor that changed downwards only.
     public var load: [Double] = [], strength: [Double] = []
     public var recomputed = 0                // floors whose load was worked out at the last change (for tests and the panel)
+    /// Built as a real multi-storey building in the open world (when its city came into view).
+    public var real: Bool?
     public var liftLoad = 0.0                // yesterday's work for lifts and stairs over what they can do (over 1: not everything got up)
     public init(base: Cell3) { self.base = base }
 
