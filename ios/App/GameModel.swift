@@ -86,11 +86,13 @@ final class GameModel: ObservableObject {
     var plainRender = false
     /// The world is drawn as solids by RealityKit instead of as sprites; the game underneath is the same.
     @Published var render3D = UserDefaults.standard.bool(forKey: "render3D") {
-        didSet { UserDefaults.standard.set(render3D, forKey: "render3D") }
+        didSet { if GameModel.keepViewSettings { UserDefaults.standard.set(render3D, forKey: "render3D") } }
     }
+    /// Views chosen in the game are kept; a view asked for by a launch argument (tests, demos) is for that run only.
+    static var keepViewSettings = true
     /// In 3D: from behind the traveller (third person) or through their eyes (first person).
     @Published var viewMode: ViewMode = ViewMode(rawValue: UserDefaults.standard.string(forKey: "viewMode") ?? "") ?? .third {
-        didSet { UserDefaults.standard.set(viewMode.rawValue, forKey: "viewMode"); inputReset += 1 }
+        didSet { if GameModel.keepViewSettings { UserDefaults.standard.set(viewMode.rawValue, forKey: "viewMode") }; inputReset += 1 }
     }
     /// How fast a drag turns the view (0.4 ... 2.5), and whether up and down are swapped.
     @Published var lookSensitivity: Double = (UserDefaults.standard.object(forKey: "lookSensitivity") as? Double) ?? 1 {
@@ -270,6 +272,8 @@ final class GameModel: ObservableObject {
         if let i = args.firstIndex(of: "--perf-log"), i + 1 < args.count { perfLogEvery = Double(args[i + 1]) ?? 0 }
         if args.contains("--perf") { showPerf = true }
         if args.contains("--plain-render") { plainRender = true }
+        let launchView = args.contains("--3d") || args.contains("--2d") || args.contains("--first-person")
+        if launchView { GameModel.keepViewSettings = false }
         if args.contains("--3d") { render3D = true } else if args.contains("--2d") || args.contains("--autostart") { render3D = false }
         if args.contains("--autostart") && !args.contains("--first-person") { viewMode = .third }
         if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)); swarmFixed = true }

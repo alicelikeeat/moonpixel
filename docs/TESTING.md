@@ -305,7 +305,7 @@ CI_RESULT_PLACEHOLDER
 
 ### 核心测试
 
-命令：`cd ios && swift test -c release -Xswiftc -enable-testing`。本地 Linux x86_64 发布构建：**246 个测试，4 个跳过（多种子长跑和三个只在设置环境变量时运行的基准），0 失败**。macOS 上的同一套测试由 CI 运行。
+命令：`cd ios && swift test -c release -Xswiftc -enable-testing`。本地 Linux x86_64 发布构建：**247 个测试，4 个跳过（多种子长跑和三个只在设置环境变量时运行的基准），0 失败**。macOS 上的同一套测试由 CI 运行。
 
 | 强制验收项 | 测试 | 结果 |
 |---|---|---|
