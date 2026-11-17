@@ -339,25 +339,28 @@ public enum PixelArt {
         return img
     }
 
-    /// A storey seen from above: the level below, darkened, wherever this storey is open air; this storey's
-    /// floors, walls and things over it. So you see where you are standing and what lies beneath.
-    public static func bakeStorey(layers: [[UInt8]], below: [[UInt8]]) -> Bitmap {
-        var img = bakeChunk(layers: below)
-        for i in 0..<(img.w * img.h) {
-            let o = i * 4
-            img.px[o] = UInt8(Double(img.px[o]) * 0.42); img.px[o + 1] = UInt8(Double(img.px[o + 1]) * 0.42); img.px[o + 2] = UInt8(Double(img.px[o + 2]) * 0.5)
-        }
+    /// A storey seen from above: the ground and every storey under this one show through the open air,
+    /// each darker the further down it is; this storey's floors, walls and things lie over them. So you
+    /// see where you stand and what is beneath. `below` is the ground first, then storey 1, 2 ...
+    public static func bakeStorey(layers: [[UInt8]], below: [[[UInt8]]]) -> Bitmap {
+        var img = below.first.map { bakeChunk(layers: $0) } ?? Bitmap(MP.chunkPx + 16, MP.chunkPx + 24)
+        func dim(_ f: Double) { for i in 0..<(img.w * img.h) { let o = i * 4; img.px[o] = UInt8(Double(img.px[o]) * f); img.px[o + 1] = UInt8(Double(img.px[o + 1]) * f); img.px[o + 2] = UInt8(Double(img.px[o + 2]) * min(1, f * 1.1)) } }
         let at = atlas
-        let g = layers[0], st = layers[1], ob = layers[2], de = layers[3]
-        for i in 0..<MP.chunkArea where g[i] != 0 {
-            let x = (i % 32) * 16 + 8, y = (i / 32) * 16 + 24
-            img.blit(at, sx: (Int(g[i]) % 16) * cell, sy: (Int(g[i]) / 16) * cell, sw: 16, sh: 16, dx: x, dy: y, blend: false)
-            if st[i] != 0 { img.blit(at, sx: (Int(st[i]) % 16) * cell, sy: (Int(st[i]) / 16) * cell, sw: 16, sh: 16, dx: x, dy: y, blend: false) }
+        func lay(_ l: [[UInt8]]) {
+            let g = l[0], st = l[1], ob = l[2], de = l[3]
+            for i in 0..<MP.chunkArea where g[i] != 0 {
+                let x = (i % 32) * 16 + 8, y = (i / 32) * 16 + 24
+                img.blit(at, sx: (Int(g[i]) % 16) * cell, sy: (Int(g[i]) / 16) * cell, sw: 16, sh: 16, dx: x, dy: y, blend: false)
+                if st[i] != 0 { img.blit(at, sx: (Int(st[i]) % 16) * cell, sy: (Int(st[i]) / 16) * cell, sw: 16, sh: 16, dx: x, dy: y, blend: false) }
+            }
+            for i in 0..<MP.chunkArea where g[i] != 0 {
+                let x = (i % 32) * 16, y = (i / 32) * 16 + 8
+                for id in [de[i], ob[i]] where id != 0 { img.blit(at, sx: (Int(id) % 16) * cell, sy: (Int(id) / 16) * cell, sw: cell, sh: cell, dx: x, dy: y, blend: true) }
+            }
         }
-        for i in 0..<MP.chunkArea where g[i] != 0 {
-            let x = (i % 32) * 16, y = (i / 32) * 16 + 8
-            for id in [de[i], ob[i]] where id != 0 { img.blit(at, sx: (Int(id) % 16) * cell, sy: (Int(id) / 16) * cell, sw: cell, sh: cell, dx: x, dy: y, blend: true) }
-        }
+        dim(0.55)
+        for l in below.dropFirst() { lay(l); dim(0.8) }
+        lay(layers)
         return img
     }
 
