@@ -2675,6 +2675,114 @@
 "zh": "人行桥"
 },
 "bridge": 1
+},
+{
+"id": 164,
+"key": "wall_concrete",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"walk": 1.0,
+"art": [
+"wall",
+"#c8c6c0",
+"#a4a29c",
+"#6a7a8c"
+],
+"name": {
+"en": "Concrete Wall",
+"zh": "混凝土墙"
+}
+},
+{
+"id": 165,
+"key": "wall_glass",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"walk": 1.0,
+"art": [
+"wall",
+"#a8d0e8",
+"#5a8cb0",
+"#e8eef2"
+],
+"name": {
+"en": "Glass Curtain Wall",
+"zh": "玻璃幕墙"
+}
+},
+{
+"id": 166,
+"key": "wall_limestone",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"walk": 1.0,
+"art": [
+"wall",
+"#e2d6bc",
+"#bfb092",
+"#4e5866"
+],
+"name": {
+"en": "Limestone Wall",
+"zh": "石灰岩墙"
+}
+},
+{
+"id": 167,
+"key": "wall_deco",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"walk": 1.0,
+"art": [
+"wall",
+"#d8cfb8",
+"#9a8c70",
+"#c9a24a"
+],
+"name": {
+"en": "Art Deco Wall",
+"zh": "装饰艺术墙"
+}
+},
+{
+"id": 168,
+"key": "wall_brownstone",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"walk": 1.0,
+"art": [
+"wall",
+"#8a5a44",
+"#6a4232",
+"#2e2a28"
+],
+"name": {
+"en": "Brownstone Wall",
+"zh": "褐石墙"
+}
+},
+{
+"id": 169,
+"key": "spire_steel",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"walk": 1.0,
+"art": [
+"wall",
+"#d6dde4",
+"#8e9aa6",
+"#f2f6fa"
+],
+"name": {
+"en": "Steel Spire",
+"zh": "不锈钢尖顶"
+}
 }
 ]
 }

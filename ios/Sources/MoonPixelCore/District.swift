@@ -64,6 +64,12 @@ public struct CityKind: Equatable {
         CityKind(key: "highrise", en: "High-rise flats", zh: "超高层住宅", use: .residential, w: 10, d: 10, storeys: 20, homesPerFloor: 20, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 9, money: 1400, goods: ["stone": 26, "iron": 6, "parts": 5], inputs: [:], outputs: [:]),
         CityKind(key: "skyscraper", en: "Skyscraper", zh: "摩天大楼", use: .commercial, w: 12, d: 12, storeys: 30, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 14, money: 2500, goods: ["stone": 30, "iron": 8, "parts": 6], inputs: [:], outputs: [:]),
         CityKind(key: "mall", en: "Shopping mall", zh: "购物中心", use: .commercial, w: 16, d: 12, storeys: 3, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 8, money: 1200, goods: ["stone": 30, "planks": 10, "iron": 4], inputs: ["wares": 0.6], outputs: [:]),
+        // New York-style towers (see NewYork.swift): setbacks, crowns and spires; and brownstone rows
+        CityKind(key: "brownstone", en: "Brownstone row", zh: "褐石联排", use: .residential, w: 12, d: 7, storeys: 4, homesPerFloor: 8, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 500, goods: ["stone": 16, "planks": 8], inputs: [:], outputs: [:]),
+        CityKind(key: "pencil", en: "Slim residential tower", zh: "纤细住宅塔", use: .residential, w: 9, d: 9, storeys: 60, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 16, money: 3200, goods: ["stone": 8, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "crown", en: "Crowned skyscraper", zh: "尖顶摩天楼", use: .commercial, w: 13, d: 13, storeys: 56, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 20, money: 4000, goods: ["stone": 12, "iron": 4, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "deco", en: "Art Deco skyscraper", zh: "装饰艺术摩天楼", use: .commercial, w: 15, d: 15, storeys: 64, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 26, money: 5200, goods: ["stone": 14, "iron": 4, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "supertall", en: "Supertall glass tower", zh: "超高层玻璃塔", use: .commercial, w: 13, d: 13, storeys: 94, homesPerFloor: 0, jobsPerFloor: 26, service: nil, capacity: 0, radius: 0, upkeep: 32, money: 7000, goods: ["stone": 8, "iron": 5, "parts": 3], inputs: [:], outputs: [:]),
         CityKind(key: "school", en: "School", zh: "学校", use: .utility, w: 7, d: 6, storeys: 2, homesPerFloor: 0, jobsPerFloor: 10, service: "education", capacity: 1500, radius: 0, upkeep: 10, money: 900, goods: ["stone": 18, "planks": 8], inputs: [:], outputs: [:]),
     ]
     public static let byKey: [String: CityKind] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
@@ -292,6 +298,7 @@ extension Society {
         switch kind {
         case "highrise", "skyscraper", "mall": return ("wall_concrete", "wall_glass", "stone_floor")
         case "tower", "offices", "clinic", "power", "waterworks", "sewage", "refinery": return ("wall_concrete", "wall_glass", "stone_floor")
+        case "brownstone": return ("wall_brownstone", "wall_glass", "wood_floor")
         case "terrace", "school", "firehall": return ("wall_brick", "wall_glass", "wood_floor")
         case "flats", "mixed", "shops": return ("wall_brick", "wall_glass", "brick_floor")
         default: return ("wall_brick", "wall_brick", "stone_floor")
@@ -299,6 +306,7 @@ extension Society {
     }
 
     func raiseCity(_ b: CityBuilding, _ d: District) {
+        if Skyline.isTower(b.kind) && b.w >= 9 && b.w == b.d { raiseTower(b, d); return }
         let face = Society.facade(b.kind)
         let wall = content.tid(face.wall), window = content.tid(face.window), floor = content.tid(face.floor), door = content.tid("door_wood")
         let glassAll = b.kind == "skyscraper"
@@ -358,6 +366,7 @@ extension Society {
     /// An elevator up the outside of a building of three or more floors, paid from the district's store.
     @discardableResult func liftFor(_ bi: Int, _ d: District) -> Int? {
         let b = d.buildings[bi]
+        if Skyline.isTower(b.kind) && b.w >= 9 && b.w == b.d { return coreLift(bi, d) }
         guard b.floors.count >= 3, b.lift == nil else { return b.lift }
         let sides: [(TilePos, Int, Int)] = [(TilePos(-1, 0), b.x + b.w + 1, b.y + b.d / 2 - 1), (TilePos(1, 0), b.x - 3, b.y + b.d / 2 - 1),
                                             (TilePos(0, 1), b.x + b.w / 2 - 1, b.y - 3)]
@@ -712,10 +721,10 @@ extension Society {
             let occupancy = d.homes > 0 ? pop / Double(d.homes) : 1
             let jobs = Double(d.jobs)
             if (d.store["food"] ?? 0) < pop * 4 && d.buildings.filter({ $0.kind == "farm" }).count < Int(pop / 300) + 1 { key = "farm" }
-            else if occupancy > 0.85 { key = nextKind(d, ["flats", "terrace", "tower", "highrise"], pop) }
+            else if occupancy > 0.85 { key = nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], pop) }
             else if jobs < pop * 0.6 {
                 key = d.buildings.filter({ ["shops", "mall"].contains($0.kind) }).count <= d.buildings.filter({ $0.kind == "factory" }).count
-                    ? nextKind(d, ["shops", "offices", "mall", "skyscraper"], pop) : "factory"
+                    ? nextKind(d, ["shops", "offices", "mall", "skyscraper", "crown", "deco", "supertall"], pop) : "factory"
             }
         }
         guard let k = key, let def = CityKind.byKey[k] else { return }
@@ -734,7 +743,8 @@ extension Society {
     /// thousands builds towers), taking the one it has fewest of, so streets do not repeat one building.
     func nextKind(_ d: District, _ group: [String], _ pop: Double) -> String {
         // what each kind needs: people already living in the district
-        let needs: [String: Double] = ["flats": 0, "terrace": 0, "shops": 0, "offices": 300, "tower": 400, "mall": 800, "highrise": 900, "skyscraper": 1500]
+        let needs: [String: Double] = ["flats": 0, "terrace": 0, "shops": 0, "offices": 300, "tower": 400, "mall": 800, "highrise": 900, "skyscraper": 1500,
+                                     "brownstone": 150, "pencil": 1300, "crown": 1100, "deco": 1600, "supertall": 2400]
         let open = group.filter { pop >= needs[$0] ?? 0 }
         let pool = open.isEmpty ? [group[0]] : open
         return pool.min { a, b in

@@ -520,6 +520,31 @@ public enum AnimeArt {
                 c.rect(bx + 6, by + 8, 20, 13, c3, ink: 1.1, radius: 1, shade: Shade(shadow: 0.25))
                 c.rect(bx + 15.4, by + 8, 1.2, 13, c2)
                 c.rect(bx + 8, by + 10, 4, 2, RGBA(255, 255, 255, 120))
+            } else if t.key == "wall_limestone" {
+                c.rect(bx, by - 12, 32, 44, c1, ink: 1.5, radius: 1.5, shade: Shade(shadow: 0.14, light: 0.1))
+                c.rect(bx, by - 12, 32, 15, c1.lightened(0.12), ink: 1.2, radius: 1.5)
+                for x in [1.0, 25] { c.rect(bx + x, by + 4, 6, 27, c2, ink: 1, radius: 1) }
+                c.rect(bx + 10, by + 6, 12, 22, c3, ink: 1.1, radius: 1, shade: Shade(shadow: 0.2))
+                c.rect(bx + 10, by + 16, 12, 1.6, c1)
+                c.poly([(bx + 12, by + 26), (bx + 15, by + 8), (bx + 17, by + 8), (bx + 14, by + 26)], RGBA(255, 255, 255, 80))
+            } else if t.key == "wall_deco" {
+                c.rect(bx, by - 12, 32, 44, c1, ink: 1.5, radius: 1.5, shade: Shade(shadow: 0.14, light: 0.1))
+                c.rect(bx, by - 12, 32, 15, c1.lightened(0.12), ink: 1.2, radius: 1.5)
+                c.rect(bx + 1, by + 4, 30, 2, c3, ink: 0.8); c.rect(bx + 1, by + 28, 30, 2, c3, ink: 0.8)
+                c.poly([(bx + 5, by + 9), (bx + 16, by + 20), (bx + 27, by + 9), (bx + 27, by + 13), (bx + 16, by + 24), (bx + 5, by + 13)], c3, ink: 1)
+                c.rect(bx + 14, by + 21, 4, 7, c2, ink: 0.8)
+            } else if t.key == "wall_brownstone" {
+                c.rect(bx, by - 12, 32, 44, c1, ink: 1.5, radius: 1.5, shade: Shade(shadow: 0.2, light: 0.12))
+                c.rect(bx, by - 12, 32, 15, c1.lightened(0.14), ink: 1.2, radius: 1.5)
+                c.rect(bx + 6, by + 3, 20, 3, RGBA(hex: "#e0d0b0"), ink: 1)
+                c.rect(bx + 8, by + 6, 16, 22, c3, ink: 1.1, radius: 1)
+                c.rect(bx + 8, by + 16, 16, 1.6, RGBA(hex: "#e0d0b0")); c.rect(bx + 15.4, by + 6, 1.2, 22, RGBA(hex: "#e0d0b0"))
+                c.rect(bx + 10, by + 8, 3, 6, RGBA(255, 255, 255, 90))
+            } else if t.key == "spire_steel" {
+                c.rect(bx, by - 12, 32, 44, c2, ink: 1.5, radius: 1.5, shade: Shade(shadow: 0.25, light: 0.2))
+                c.rect(bx, by - 12, 32, 15, c1, ink: 1.2, radius: 1.5)
+                for x in [4.0, 12, 20, 28] { c.rect(bx + x, by + 4, 1.4, 27, c3) }
+                c.rect(bx + 7, by + 6, 2, 12, RGBA(255, 255, 255, 200))
             }
         case "door":
             c.rect(bx + 4, by - 8, 24, 40, c2, ink: 1.5, radius: 3)

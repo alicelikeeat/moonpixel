@@ -327,6 +327,7 @@ final class SolidRenderer {
 
         updateChunks(world, model)
         updateLayers(model)
+        updateSkyline(model)
         let reach = Double(distance) * 1.5 * 16 + 64
         updateActors(world, society, model, scene, reach: reach, dt: dt)
         if !model.plainRender { updateSoldiers(world, society, model, reach: reach, dt: dt); updateRoofs(world, society, model, scene, reach: reach) }
@@ -549,6 +550,43 @@ final class SolidRenderer {
             } }
         }
         for (k, e) in layerChunks where !wanted.contains(k) { e.entity.removeFromParent(); layerChunks[k] = nil }
+    }
+
+    // MARK: the skyline: tall district towers drawn whole
+
+    private let skyline = ModelEntity()
+    private var skylineKey = ""
+    private var skylineFrame = 0
+
+    /// Only the storeys near the one you are on are meshed from their tiles, so a 60-floor tower would end a
+    /// few floors above you. Every district tower within reach is drawn as its massing (a box per setback
+    /// tier, its windows, piers, ledges, crown and spire) for the floors that are not meshed: the street
+    /// floor and the storeys near yours come from the real tiles, the rest from the massing.
+    private func updateSkyline(_ model: GameModel) {
+        guard let society = model.society else { return }
+        if skyline.parent == nil { skyline.name = "skyline"; root.addChild(skyline) }
+        skyline.isEnabled = model.depth != 1
+        guard model.depth != 1 else { return }
+        skylineFrame += 1
+        if skylineFrame % 20 != 1 { return }                 // a few times a second is plenty
+        let c = TilePos(Int(target.x.rounded(.down)), Int(target.z.rounded(.down)))
+        let blocks = society.skylineBlocks(near: c, radius: 280)
+        let n = model.depth >= OpenWorld.storeyBase ? model.depth - OpenWorld.storeyBase : 0
+        let span = Solid3DLimits.storeySpan
+        let r = min(3, Int(distance * 1.3 / 32) + 1)
+        let ccx = Int((target.x / 32).rounded(.down)), ccy = Int((target.z / 32).rounded(.down))
+        let anime = Bitmap.animeStyle
+        let key = "\(blocks.count):\(blocks.map { $0.building &* 31 &+ $0.to }.reduce(0, &+)):\(n):\(ccx):\(ccy):\(r):\(anime)"
+        if key == skylineKey { return }
+        skylineKey = key
+        let mesh = Mesh3D.skyline(blocks, skip: { b in
+            // the street floor is always the real one; near you, the storeys around yours are too
+            let bx = (b.x + b.w / 2) >> 5, by = (b.y + b.d / 2) >> 5
+            let near = abs(bx - ccx) <= r && abs(by - ccy) <= r
+            return near ? [0..<1, max(0, n - span)..<(n + span + 1)] : [0..<1]
+        }, anime: anime)
+        let m = anime ? mesh.inked(width: 0.06) : mesh
+        skyline.model = resource(m).map { ModelComponent(mesh: $0, materials: [solidMaterial]) }
     }
 
     private func layerBuilt(_ lk: LayerChunk, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ rev: Int) {

@@ -248,6 +248,28 @@ public enum PixelArt {
                 img.rect(bx, by - 6, 16, 22, c2); img.rect(bx, by - 6, 16, 8, c1)
                 img.rect(bx + 3, by + 5, 10, 6, c3); img.rect(bx + 3, by + 5, 10, 1, c3.darkened(0.3)); img.rect(bx + 8, by + 5, 1, 6, c2)
                 img.rect(bx, by + 15, 16, 1, c2.darkened(0.4))
+            } else if t.key == "wall_limestone" {
+                // dressed stone: pale blocks, a recessed window ribbon between two piers
+                img.rect(bx, by - 6, 16, 22, c1); img.rect(bx, by - 6, 16, 8, c1.lightened(0.1))
+                img.rect(bx, by + 2, 3, 14, c2); img.rect(bx + 13, by + 2, 3, 14, c2)
+                img.rect(bx + 5, by + 3, 6, 11, c3); img.rect(bx + 5, by + 8, 6, 1, c1)
+                for y in [6, 11] { img.rect(bx, by + y, 3, 1, c2.darkened(0.2)); img.rect(bx + 13, by + y, 3, 1, c2.darkened(0.2)) }
+            } else if t.key == "wall_deco" {
+                // Art Deco: stone with a gold chevron and gold bands
+                img.rect(bx, by - 6, 16, 22, c1); img.rect(bx, by - 6, 16, 8, c1.lightened(0.1))
+                img.rect(bx, by + 2, 16, 1, c3); img.rect(bx, by + 14, 16, 1, c3)
+                for i in 0..<5 { img.rect(bx + 3 + i, by + 5 + i, 1, 2, c3); img.rect(bx + 12 - i, by + 5 + i, 1, 2, c3) }
+                img.rect(bx + 7, by + 10, 2, 4, c2)
+            } else if t.key == "wall_brownstone" {
+                // brownstone: warm brown blocks, a tall sash window with a pale lintel
+                img.rect(bx, by - 6, 16, 22, c1); img.rect(bx, by - 6, 16, 8, c1.lightened(0.12))
+                for y in [5, 10] { img.rect(bx, by + y, 16, 1, c2) }
+                img.rect(bx + 4, by + 3, 8, 11, c3); img.rect(bx + 3, by + 2, 10, 2, RGBA(hex: "#d8c8a8")); img.rect(bx + 4, by + 8, 8, 1, RGBA(hex: "#d8c8a8"))
+            } else if t.key == "spire_steel" {
+                // brushed steel: bright vertical ribs and a glint
+                img.rect(bx, by - 6, 16, 22, c2); img.rect(bx, by - 6, 16, 8, c1)
+                for x in [2, 6, 10, 14] { img.rect(bx + x, by + 2, 1, 14, c3) }
+                img.rect(bx + 4, by + 3, 1, 6, RGBA(255, 255, 255))
             }
         case "door":
             img.rect(bx + 2, by - 4, 12, 20, c2); img.rect(bx + 3, by - 3, 10, 19, c1)
