@@ -23,12 +23,20 @@ struct DriveHUD: View {
                         if model.render3D { model.viewMode = model.cockpit ? .first : .third }
                     }
                     if d.canLeave { pill(L("下车", "Get out"), icon: "figure.walk.departure", id: "drive-exit") { model.leaveVehicle() } }
+                    if d.driving && d.fuel < 0.95 && d.energy.contains(L("燃", "uel")) || d.halted.contains(L("燃料", "fuel")) {
+                        pill(L("加油", "Refuel"), icon: "fuelpump.fill", id: "drive-refuel") { model.refuelHere() }
+                    }
+                    // the walking controls are hidden while driving: the elevator stays reachable from here
+                    if d.driving, let lift = model.nearLift {
+                        pill(L("电梯", "Elevator"), icon: "arrow.up.arrow.down", id: "drive-lift") { model.liftPanel = lift }
+                    }
                 }
             }
             Spacer()
             if d.driving && !d.auto { controls }
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        // below the status line and the speed buttons at the top, above nothing at the bottom
+        .padding(.horizontal, 12).padding(.top, 92).padding(.bottom, 8)
         .overlay(alignment: .bottomLeading) {
             // what the vehicle itself reports, for assistive technology and UI tests
             Text(diag).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1).allowsHitTesting(false).accessibilityIdentifier("drive-state")
@@ -42,7 +50,7 @@ struct DriveHUD: View {
 
     private var gauges: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(d.kind.name(zh: GameModel.zh) + " · " + d.name).font(.system(size: 12, weight: .bold, design: .rounded))
+            Text(d.kind.name(zh: GameModel.zh) + " · " + d.name + (model.clockLine.isEmpty ? "" : "  " + model.clockLine)).font(.system(size: 12, weight: .bold, design: .rounded))
             Text(String(format: "%.0f km/h", d.kmh)).font(.system(size: 26, weight: .heavy, design: .rounded)).monospacedDigit()
                 .accessibilityIdentifier("drive-speed").accessibilityLabel(String(format: "%.0f km/h", d.kmh))
             Text(String(format: L("限速 %.0f · 档位 %@", "Limit %.0f · gear %@"), d.limitKmh, d.gear)).font(.system(size: 10, design: .rounded)).monospacedDigit()

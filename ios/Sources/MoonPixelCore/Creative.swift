@@ -86,7 +86,7 @@ extension Society {
     /// parts, food, tools); never past what it can carry. The save is marked like any other cheat.
     /// Returns what was given.
     @discardableResult public func supplyPack() -> [String: Double] {
-        let shares: [(String, Double)] = [("stone", 0.30), ("planks", 0.18), ("wood", 0.14), ("iron", 0.12), ("parts", 0.12), ("food", 0.10), ("tools", 0.04)]
+        let shares: [(String, Double)] = [("stone", 0.28), ("planks", 0.16), ("wood", 0.12), ("iron", 0.12), ("parts", 0.12), ("food", 0.10), ("fuel", 0.06), ("tools", 0.04)]
         var given: [String: Double] = [:]
         let free = max(0, invCfg.capacity - packWeight())
         guard free >= 1 else { return given }

@@ -218,3 +218,26 @@ final class AviationProbe: XCTestCase {
         print("PROBE trips", s.realm.transport.lines.filter { $0.kind.mode == .air }.map { "\($0.name): \($0.trips)" }, "crashes", s.realm.transport.stats.crashes)
     }
 }
+
+/// A car the traveller builds with no fuel in the pack can be filled: from the pack once it has fuel
+/// (one-tap materials now pack some), or from a district's depot nearby.
+final class RefuelTests: XCTestCase {
+    func testACarBuiltWithAnEmptyPackCanBeRefuelled() {
+        let s = makeSociety(7)
+        let home = s.settlements.values.filter { !$0.abandoned }.min { $0.id < $1.id }!.center
+        let d = s.transportDemo(near: home)
+        guard let carId = d.car, let car = s.realm.transport.vehicle(carId) else { return XCTFail("demo car") }
+        car.owner = .pack; car.fuel = 0
+        s.realm.player.body = Body(at: car.pos, z: 0, depth: 0)
+        XCTAssertNil(s.board(car.id, drive: true))
+        s.pack.change("fuel", -s.pack.free("fuel"))
+        // no fuel in the pack: the demo district's depot nearby fills it
+        let (n1, from1) = s.refuelHere()
+        XCTAssertGreaterThan(n1, 0); XCTAssertEqual(from1, "Demo")
+        car.fuel = 0
+        let got = s.supplyPack()
+        XCTAssertGreaterThan(got["fuel"] ?? 0, 0, "one-tap materials include fuel")
+        let (n2, from2) = s.refuelHere()
+        XCTAssertGreaterThan(n2, 0); XCTAssertEqual(from2, "own", "from the pack first")
+    }
+}

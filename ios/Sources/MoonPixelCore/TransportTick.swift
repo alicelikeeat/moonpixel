@@ -42,6 +42,20 @@ extension Society {
         for d in net.districts { d.trainDraw = 0 }
     }
 
+    /// Fill the tank of the vehicle the traveller is in: from its owner's store (the pack, for one the traveller
+    /// built), else from the depot of a district within 60 tiles. Returns what went in, and from where.
+    @discardableResult public func refuelHere() -> (Double, String) {
+        guard let v = playerVehicle, v.spec.energy.good == "fuel" else { return (0, "") }
+        let got = refuel(v)
+        if got > 0 { return (got, "own") }
+        guard let d = net.districts.filter({ $0.center.distance2(v.tile) <= 60 * 60 && ($0.store["fuel"] ?? 0) > 1 }).min(by: { $0.center.distance2(v.tile) < $1.center.distance2(v.tile) }) else { return (0, "") }
+        let n = min(v.spec.tank - v.fuel, d.store["fuel"] ?? 0)
+        d.add("fuel", -n); v.fuel += n
+        record([("fuel", n)], from: d.holding.name, to: "tank of \(v.id)", note: "fuel at the district depot")
+        if v.halted == "no fuel" { v.halted = nil }
+        return (n, d.name)
+    }
+
     // MARK: the traveller and vehicles
 
     /// The vehicle the traveller is in, if any.

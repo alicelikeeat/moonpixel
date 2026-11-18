@@ -13,7 +13,8 @@ struct HUDView: View {
     var body: some View {
         ZStack(alignment: .top) {                         // whatever grows, the top row (clock, speed) stays on screen
             if model.showMap { mapOverlay }
-            if !model.showMap { PlayControls() }
+            // driving: the vehicle's own controls take the bottom of the screen (walking controls and tabs step aside)
+            if !model.showMap && !(model.drive?.driving ?? false) { PlayControls() }
             if !model.showMap, let d = model.drive { DriveHUD(d: d) }
             VStack(spacing: 8) {
                 HStack(alignment: .top, spacing: 8) {
@@ -49,7 +50,7 @@ struct HUDView: View {
                 Spacer(minLength: 0)
                 if model.watch != .none { watchBar }
                 if model.pendingPlan != nil || !model.buildMode.isEmpty { buildBar }
-                tabBar
+                if !(model.drive?.driving ?? false) { tabBar }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)       // if it ever overflows, the top stays on screen

@@ -32,6 +32,7 @@ public enum Items {
         ItemDef(key: "planks", en: "Planks", zh: "木板", kind: .material, weight: 0.6, stack: 99, nutrition: 0, shelfDays: 0, equip: nil, icon: "planks"),
         ItemDef(key: "iron", en: "Iron", zh: "铁锭", kind: .material, weight: 1.5, stack: 64, nutrition: 0, shelfDays: 0, equip: nil, icon: "anvil"),
         ItemDef(key: "moonsteel", en: "Moonsteel", zh: "月钢", kind: .material, weight: 1.2, stack: 64, nutrition: 0, shelfDays: 0, equip: nil, icon: "anvil"),
+        ItemDef(key: "fuel", en: "Fuel", zh: "燃油", kind: .material, weight: 0.5, stack: 100, nutrition: 0, shelfDays: 0, equip: nil, icon: "barrel"),
         ItemDef(key: "parts", en: "Parts", zh: "构件", kind: .part, weight: 1, stack: 32, nutrition: 0, shelfDays: 0, equip: nil, icon: "workbench"),
         ItemDef(key: "tools", en: "Tools", zh: "工具", kind: .tool, weight: 2, stack: 8, nutrition: 0, shelfDays: 0, equip: "hand", icon: "pick"),
         ItemDef(key: "weapons", en: "Weapons", zh: "武器", kind: .weapon, weight: 3, stack: 8, nutrition: 0, shelfDays: 0, equip: "hand", icon: "sword"),

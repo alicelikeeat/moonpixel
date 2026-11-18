@@ -246,10 +246,19 @@ extension GameModel {
     }
 
     /// A car from the pack's materials, on the road where the traveller stands.
+    func refuelHere() {
+        guard let s = society else { return }
+        let (n, from) = s.refuelHere()
+        if n <= 0 { showToast(L("没有燃油：用快捷栏旁的“一键物资”，或开到城区附近再加油", "No fuel: use Materials in one go, or drive near a district")); return }
+        showToast(String(format: L("加了 %.0f 燃油（%@）", "Filled %.0f fuel (%@)"), n, from == "own" ? L("背包", "pack") : from))
+        refreshDrive()
+    }
+
     func buildCarHere() {
         guard let s = society, let b = s.realm.player.body else { return }
         if let v = s.buildVehicle(.car, at: b.pos.tile, payer: .pack, nation: s.realm.player.nation) {
-            showToast(String(format: L("造了一辆车（燃料 %.0f）", "Built a car (fuel %.0f)"), v.fuel))
+            showToast(v.fuel > 0 ? String(format: L("造了一辆车（燃料 %.0f）", "Built a car (fuel %.0f)"), v.fuel)
+                                 : L("造了一辆车，但背包里没有燃油：上车后点“加油”", "Built a car, but there is no fuel in the pack: get in and tap Refuel"))
             refreshTravel()
         } else { showToast(L("这里造不了车：需要在路上，并要铁 4、构件 3", "No car here: it needs a road and 4 iron, 3 parts")) }
     }
