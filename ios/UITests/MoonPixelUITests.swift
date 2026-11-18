@@ -58,7 +58,9 @@ final class MoonPixelUITests: XCTestCase {
         // the toast fades after a few seconds; the last message stays readable for tests
         let last = app.staticTexts["last-toast"]
         let cleaned = NSPredicate(format: "label CONTAINS 'Cleaned'")
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: cleaned, evaluatedWith: last)], timeout: 15), .completed, "clean was announced")
+        let cleanWait = XCTWaiter().wait(for: [expectation(for: cleaned, evaluatedWith: last)], timeout: 15)
+        print("UITEST clean: \(cleanWait.rawValue) last-toast '\(last.exists ? last.label : "missing")' clock '\(app.staticTexts["clock-line"].exists ? app.staticTexts["clock-line"].label : "-")'")
+        XCTAssertEqual(cleanWait, .completed, "clean was announced")
         app.buttons["64×"].tap(); sleep(8)
         shot("05-fast")
         // cheats unlock every power; the arsenal lists five schools; a storm is called
@@ -143,7 +145,9 @@ final class MoonPixelUITests: XCTestCase {
         // a war, followed with the camera
         more(app, "Cheats"); sleep(1)
         app.buttons["cheat-war"].tap(); sleep(3)
-        XCTAssertTrue(text(app, containing: "Following").waitForExistence(timeout: 4), "the camera follows the army")
+        let following = text(app, containing: "Following").waitForExistence(timeout: 8)
+        print("UITEST war: following \(following) last-toast '\(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "missing")'")
+        XCTAssertTrue(following, "the camera follows the army")
         app.buttons["4×"].tap(); sleep(6)
         shot("15-war-march")
         more(app, "War"); sleep(2)

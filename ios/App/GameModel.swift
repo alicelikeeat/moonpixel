@@ -671,7 +671,9 @@ final class GameModel: ObservableObject {
         if s.playerVehicle == nil { refreshDrive() }
         let phaseIcon: String
         switch w.dayPhase { case .dawn: phaseIcon = "🌅"; case .day: phaseIcon = "☀︎"; case .dusk: phaseIcon = "🌇"; case .night: phaseIcon = "☾" }
-        let cl = phaseIcon + " " + w.clockText
+        // in ten-minute steps: a HUD that changed every game minute would redraw all the time at 64x
+        let mins = Int(w.hour * 60) / 10 * 10
+        let cl = phaseIcon + " " + String(format: "%02d:%02d", mins / 60, mins % 60)
         if clockLine != cl { clockLine = cl }
         cameraLine = render3D ? (solid?.cameraState ?? "") : "2d"
         if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
