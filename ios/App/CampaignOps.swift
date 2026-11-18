@@ -213,7 +213,7 @@ extension GameModel {
         let fresh = s.events(after: lastSeenEvent)
         guard let last = fresh.last else { return }
         lastSeenEvent = last.id
-        showToast(last.text)
+        showNews(last.text)
         for e in fresh where GameModel.noticeKinds.contains(e.kind) {
             notices.append(Notice(id: e.id, text: e.text, pos: Vec2(e.x, e.y), kind: e.kind, until: Date().addingTimeInterval(14)))
         }

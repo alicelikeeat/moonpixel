@@ -647,7 +647,10 @@ final class GameModel: ObservableObject {
     }
 
     // MARK: HUD
-    func showToast(_ text: String) { toast = text; toastID += 1 }
+    func showToast(_ text: String) { toast = text; toastID += 1; ownToastUntil = Date().addingTimeInterval(4) }
+    /// World news (a house finished, a couple courting) waits while the answer to the player's own action is on screen.
+    func showNews(_ text: String) { if Date() >= ownToastUntil { toast = text; toastID += 1 } }
+    private var ownToastUntil = Date.distantPast
 
     /// Bytes this world occupies on disk (chunks + index + assets).
     func mapBytes() -> Int { totalBytes() }
