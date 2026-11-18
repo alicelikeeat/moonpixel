@@ -145,7 +145,11 @@ final class CityTransportTests: XCTestCase {
         let s = sc.s
         // congestion: lorries crowding one street far from the traveller
         s.realm.player.body = Body(at: sc.t(15, 130).center, z: 0, depth: 0)
-        for k in 0..<4 { _ = s.buildVehicle(.car, at: sc.t(120 + k % 2, 60), heading: 0, payer: .district(sc.b.id), nation: 1) }
+        // four cars built a few tiles apart, then queued nose to tail on two tiles
+        for k in 0..<4 {
+            guard let v = s.buildVehicle(.car, at: sc.t(100 + k * 4, 60), heading: 0, payer: .district(sc.b.id), nation: 1) else { return XCTFail("car \(k): \(String(describing: s.wayKind(at: sc.t(100 + k * 4, 60)))) iron \(sc.b.store["iron"] ?? -1) parts \(sc.b.store["parts"] ?? -1)") }
+            v.x = Double(sc.t(120, 60).x * 16) + 3 + Double(k) * 7; v.control = .manual
+        }
         s.countTraffic()
         XCTAssertTrue(s.bottlenecks().contains { $0.hasPrefix("jam:") }, "\(s.bottlenecks())")
         // war: a line into a nation at war is suspended, and nobody may wait for it
@@ -339,6 +343,9 @@ final class TransportDemoTests: XCTestCase {
         s.realm.player.body = Body(at: TilePos(0, 0).center, z: 0, depth: 0)
         let d = s.transportDemo(near: TilePos(0, 0))
         XCTAssertNotNil(d.car, "\(d.notes)"); XCTAssertNotNil(d.bus, "\(d.notes)")
+        // no vehicle stands on another
+        let vs = s.net.vehicles
+        for a in vs { for b in vs where a.id < b.id && a.kind.mode == b.kind.mode && a.kind.mode == .road { XCTAssertGreaterThan(a.pos.distance(to: b.pos), (a.spec.radius + b.spec.radius) * 16, "\(a.kind) and \(b.kind) built on top of each other") } }
         let car = s.net.vehicle(d.car!)!
         XCTAssertGreaterThan(car.fuel, 0)
         XCTAssertTrue(s.realm.transport.ledger.contains { $0.note.hasPrefix("build") }, "paid like any other way")
@@ -368,6 +375,21 @@ final class TransportDemoTests: XCTestCase {
         for _ in 0..<30 { s7.steer(c7); s7.tick(1.0 / 15) }
         XCTAssertGreaterThan(car7.speed * 7.2, 10, "km/h after two seconds")
         XCTAssertGreaterThan(car7.pos.distance(to: q0) / 16, 3)
+        // the app's own start: beside the first village, the game running a few seconds before the demo
+        let s8 = makeSociety(7)
+        let start8 = s8.world.findFree(near: s8.settlements[1]!.center + TilePos(0, 4), maxR: 8).center
+        s8.realm.player.body = Body(at: start8, z: 0, depth: 0)
+        for _ in 0..<(6 * 30) { s8.tick(1.0 / 30) }
+        let d8 = s8.transportDemo(near: start8.tile)
+        XCTAssertNotNil(d8.bus, "\(d8.notes)"); XCTAssertNotNil(d8.train, "\(d8.notes)")
+        let car8 = s8.net.vehicle(d8.car!)!
+        s8.realm.player.body = Body(at: car8.world(0, 1.2), z: 0, depth: 0)
+        for _ in 0..<(9 * 30) { s8.tick(1.0 / 30) }
+        XCTAssertNil(s8.board(car8.id, drive: true))
+        var c8 = Controls(); c8.throttle = 1
+        let r0 = car8.pos
+        for _ in 0..<60 { s8.steer(c8); s8.tick(1.0 / 30) }
+        XCTAssertGreaterThan(car8.speed * 7.2, 10); XCTAssertGreaterThan(car8.pos.distance(to: r0) / 16, 2)
         // the 3D models have the vehicles' own size
         for k in VehicleKind.allCases { XCTAssertFalse(Figure3D.vehicle(k).isEmpty, "\(k)") }
     }

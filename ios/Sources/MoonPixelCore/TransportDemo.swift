@@ -24,6 +24,17 @@ extension Society {
         d.autoBuild = false
         out.district = d.id
         var laid: [TilePos] = []
+        /// A tile of the laid way that is the way itself (not a bridge deck or a tunnel), searching from `i` towards `towards`.
+        func onWay(_ cells: [TilePos], _ k: WayKind, from i: Int, towards end: Int) -> TilePos? {
+            let step = end >= i ? 1 : -1
+            var j = max(0, min(cells.count - 1, i))
+            while j >= 0 && j < cells.count {
+                if wayKind(at: cells[j]) == k && bridge(at: cells[j]) == nil && tunnel(at: cells[j]) == nil { return cells[j] }
+                if j == end { break }
+                j += step
+            }
+            return nil
+        }
         func lay(_ k: WayKind, _ a: TilePos, _ b: TilePos) -> Bool {
             let plan = planWay(k, from: a, to: b)
             guard plan.ok, let id = startWay(plan, payer: .district(d.id), nation: nation, by: "district:\(d.id)") else { out.notes.append("\(k.rawValue): \(plan.reason)"); return false }
@@ -34,24 +45,30 @@ extension Society {
         // a street with a car and a bus
         let s0 = TilePos(o.x, o.y + 2), s1 = TilePos(o.x + 40, o.y + 2)
         if lay(.street, s0, s1) {
-            // the car at the start of the street's longest straight run (past the bus stop), facing along it
-            var best = (start: min(12, laid.count - 2), run: 0)
-            var i = min(8, laid.count - 2)
-            while i < laid.count - 1 {
-                let dx = laid[i + 1].x - laid[i].x, dy = laid[i + 1].y - laid[i].y
+            // the car on a street of its own (the bus line has the first one), at the start of its longest
+            // straight run, facing along it, and clear of the bus stop
+            let busStreet = laid
+            let busStop = onWay(busStreet, .street, from: 6, towards: busStreet.count - 1) ?? busStreet[0]
+            let busEnd = onWay(busStreet, .street, from: busStreet.count - 3, towards: 0) ?? busStreet[busStreet.count - 1]
+            let road = lay(.street, TilePos(o.x, o.y - 4), TilePos(o.x + 30, o.y - 4)) ? laid : busStreet
+            var best = (start: min(road == busStreet ? 12 : 1, road.count - 2), run: 0)
+            var i = road == busStreet ? min(8, road.count - 2) : 0
+            while i < road.count - 1 {
+                let dx = road[i + 1].x - road[i].x, dy = road[i + 1].y - road[i].y
                 var j = i + 1
-                while j < laid.count - 1 && laid[j + 1].x - laid[j].x == dx && laid[j + 1].y - laid[j].y == dy { j += 1 }
-                if j - i > best.run { best = (i, j - i) }
+                while j < road.count - 1 && road[j + 1].x - road[j].x == dx && road[j + 1].y - road[j].y == dy { j += 1 }
+                let clear = !(i...j).contains { road[$0].distance2(busStop) <= 16 }
+                if clear && j - i > best.run { best = (i, j - i) }
                 i = j
             }
-            let c = laid[best.start], n = laid[best.start + 1]
+            let c = road[best.start], n = road[best.start + 1]
             out.car = buildVehicle(.car, at: c, heading: atan2(Double(n.y - c.y), Double(n.x - c.x)), payer: .district(d.id), nation: nation)?.id
-            if let a = addStop(.busStop, at: TilePos(o.x + 6, o.y + 2), name: "Demo Sq", nation: nation, district: d.id),
-               let b = addStop(.busStop, at: TilePos(o.x + 38, o.y + 2), name: "Demo End", nation: nation, district: d.id),
+            if let a = addStop(.busStop, at: busStop, name: "Demo Sq", nation: nation, district: d.id),
+               let b = addStop(.busStop, at: busEnd, name: "Demo End", nation: nation, district: d.id),
                let l = addLine(.bus, stops: [a.id, b.id], name: "Demo bus", headway: 90, nation: nation, payer: .district(d.id)),
-               let v = buildVehicle(.bus, at: TilePos(o.x + 6, o.y + 2), heading: 0, payer: .district(d.id), nation: nation) {
+               let v = buildVehicle(.bus, at: busStop, heading: 0, payer: .district(d.id), nation: nation) {
                 assign(v, to: l); out.bus = v.id; out.lines.append(l.id)
-            }
+            } else { out.notes.append("bus: stops \(busStop) \(busEnd) on \(String(describing: wayKind(at: busStop)))/\(String(describing: wayKind(at: busEnd))), \(realm.transport.stops.count) stops") }
         }
         // a high-speed line, powered by a station of the district (staffed by its people)
         if lay(.hsr, TilePos(o.x, o.y + 6), TilePos(o.x + 60, o.y + 6)) {
@@ -62,12 +79,17 @@ extension Society {
             }
             d.staffing = Dictionary(uniqueKeysWithValues: d.buildings.map { ($0.id, 1.0) })
             refreshServices(d)
-            if let a = addStop(.station, at: TilePos(o.x + 2, o.y + 6), name: "Demo HSR", nation: nation, district: d.id),
-               let b = addStop(.station, at: TilePos(o.x + 58, o.y + 6), name: "Demo HSR East", nation: nation, district: d.id),
+            let track = laid
+            let w = onWay(track, .hsr, from: 2, towards: track.count - 1) ?? track[0]
+            let e = onWay(track, .hsr, from: track.count - 3, towards: 0) ?? track[track.count - 1]
+            let wi = track.firstIndex(of: w) ?? 0
+            let nx = track[min(wi + 1, track.count - 1)]
+            if let a = addStop(.station, at: w, name: "Demo HSR", nation: nation, district: d.id),
+               let b = addStop(.station, at: e, name: "Demo HSR East", nation: nation, district: d.id),
                let l = addLine(.hsr, stops: [a.id, b.id], name: "Demo express", headway: 240, nation: nation, payer: .district(d.id)),
-               let v = buildVehicle(.hsr, at: TilePos(o.x + 2, o.y + 6), heading: 0, payer: .district(d.id), nation: nation) {
+               let v = buildVehicle(.hsr, at: w, heading: atan2(Double(nx.y - w.y), Double(nx.x - w.x)), payer: .district(d.id), nation: nation) {
                 assign(v, to: l); out.train = v.id; out.lines.append(l.id)
-            }
+            } else { out.notes.append("train: stations \(w) \(e) on \(String(describing: wayKind(at: w)))/\(String(describing: wayKind(at: e))), vehicles \(realm.transport.vehicles.map { "\($0.kind)@\($0.tile)" })") }
         }
         // a runway, three tiles wide, and an airliner at its western end
         var runway = true, middle: [TilePos] = []

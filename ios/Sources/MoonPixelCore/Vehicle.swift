@@ -201,6 +201,9 @@ extension Society {
         let n = NetNode(t.x, t.y, level)
         let standable = kind.mode == .air ? (wayKind(at: t)?.mode == .air) : (passable(n, p) || (kind.mode == .road && passableOffRoad(t, level)))
         guard standable, let h = holding(payer) else { return nil }
+        // never made on top of another vehicle of the same element (it could not move off it)
+        let here = t.center
+        if realm.transportBox?.vehicles.contains(where: { $0.kind.mode == kind.mode && $0.level == level && $0.pos.distance(to: here) < ($0.spec.radius + kind.spec.radius + 0.3) * 16 + ($0.kind.mode == .rail ? $0.spec.length * 16 : 0) }) == true { return nil }
         if Goods.take(kind.spec.build, from: h) != nil { return nil }
         let tr = realm.transport
         record(kind.spec.build.map { ($0.key, $0.value) }, from: h.name, to: "vehicle works", note: "build \(kind.rawValue)")
