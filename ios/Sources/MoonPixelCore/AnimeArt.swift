@@ -581,6 +581,147 @@ public enum AnimeArt {
         case "tent":
             c.poly([(bx + 2, by + 30), (bx + 16, by + 2), (bx + 30, by + 30)], c1, ink: 1.5, shade: Shade(shadow: 0.25))
             c.poly([(bx + 12, by + 30), (bx + 16, by + 16), (bx + 20, by + 30)], shadowed(c1, 0.45))
+        case "star":
+            // a fallen star fragment: a glowing five-point star with a halo
+            c.ellipse(bx + 16, by + 20, 11, 11, RGBA(255, 240, 160, 70))
+            var pts: [(Double, Double)] = []
+            for i in 0..<10 { let ang = Double(i) * .pi / 5 - .pi / 2, rr = i % 2 == 0 ? 9.5 : 4.0; pts.append((bx + 16 + cos(ang) * rr, by + 20 + sin(ang) * rr)) }
+            c.poly(pts, RGBA(255, 226, 110), ink: 1.2, shade: Shade(shadow: 0.15, light: 0.25))
+            c.ellipse(bx + 13, by + 16, 1.6, 1.6, .white)
+        case "anvil":
+            c.ellipse(bx + 16, by + 30, 11, 2.5, RGBA(0, 0, 0, 50))
+            c.rect(bx + 11, by + 18, 10, 12, RGBA(90, 70, 50), ink: 1.2, radius: 1, shade: Shade())
+            c.poly([(bx + 3, by + 12), (bx + 29, by + 12), (bx + 26, by + 19), (bx + 8, by + 19), (bx + 2, by + 15)], c1, ink: 1.4, shade: Shade(shadow: 0.25))
+            c.rect(bx + 6, by + 12, 18, 2, c1.lightened(0.3))
+        case "campfire_out":
+            c.line(bx + 7, by + 28, bx + 25, by + 24, 3, RGBA(70, 60, 55), ink: 1); c.line(bx + 7, by + 24, bx + 25, by + 28, 3, RGBA(60, 52, 48), ink: 1)
+            for (x, y) in [(13.0, 22.0), (18, 20), (16, 25)] { c.ellipse(bx + x, by + y, 2, 1.5, RGBA(120, 116, 118)) }
+            c.curve([(bx + 16, by + 18), (bx + 14, by + 12), (bx + 18, by + 6)], 1.2, RGBA(200, 200, 210, 140))
+        case "well_broken":
+            c.ellipse(bx + 16, by + 22, 12, 8, shadowed(c1, 0.2), ink: 1.5, shade: Shade()); c.ellipse(bx + 16, by + 21, 8, 5, RGBA(40, 44, 50))
+            c.line(bx + 5, by + 20, bx + 5, by + 6, 2.4, RGBA(110, 80, 55), ink: 1)
+            c.line(bx + 27, by + 20, bx + 24, by + 10, 2.4, RGBA(110, 80, 55), ink: 1)
+            c.rect(bx + 20, by + 26, 6, 3, shadowed(c1, 0.3), ink: 0.8, radius: 1)
+        case "sign":
+            c.rect(bx + 14.5, by + 12, 3, 19, RGBA(120, 82, 50), ink: 1.1, radius: 1)
+            c.rect(bx + 4, by + 2, 24, 13, c1, ink: 1.4, radius: 2, shade: Shade(shadow: 0.18))
+            for y in [6.0, 10] { c.line(bx + 8, by + y, bx + 24, by + y, 1.0, shadowed(c1, 0.45)) }
+        case "pillar":
+            c.rect(bx + 8, by - 4, 16, 34, c1, ink: 1.4, radius: 1.5, shade: Shade(shadow: 0.22))
+            c.rect(bx + 5, by - 7, 22, 5, c1.lightened(0.1), ink: 1.2, radius: 1.5); c.rect(bx + 5, by + 27, 22, 4, shadowed(c1, 0.15), ink: 1.2, radius: 1)
+            for x in [12.0, 16, 20] { c.line(bx + x, by - 1, bx + x, by + 26, 0.8, shadowed(c1, 0.3)) }
+            c.line(bx + 10, by + 6, bx + 14, by + 12, 1.0, shadowed(c1, 0.5))       // a crack
+        case "statue":
+            c.rect(bx + 6, by + 22, 20, 9, shadowed(c1, 0.15), ink: 1.3, radius: 1.5, shade: Shade())
+            c.ellipse(bx + 16, by - 4, 5, 5.5, c1, ink: 1.3, shade: Shade(shadow: 0.25))
+            c.poly([(bx + 10, by + 22), (bx + 11, by + 4), (bx + 21, by + 4), (bx + 22, by + 22)], c1, ink: 1.3, shade: Shade(shadow: 0.25))
+            c.line(bx + 21, by + 6, bx + 26, by - 6, 2.4, c1, ink: 1)            // a raised arm
+        case "altar":
+            c.rect(bx + 3, by + 14, 26, 17, c1, ink: 1.4, radius: 2, shade: Shade(shadow: 0.2))
+            c.rect(bx + 1, by + 11, 30, 5, c1.lightened(0.12), ink: 1.2, radius: 1.5)
+            c.ellipse(bx + 16, by + 8, 4, 3, t.key == "altar_pure" ? RGBA(200, 240, 255) : RGBA(255, 200, 120), ink: 1)
+            c.ellipse(bx + 16, by + 6, 7, 7, t.key == "altar_pure" ? RGBA(200, 240, 255, 70) : RGBA(255, 200, 120, 70))
+        case "pot":
+            c.poly([(bx + 9, by + 18), (bx + 23, by + 18), (bx + 21, by + 30), (bx + 11, by + 30)], RGBA(196, 110, 80), ink: 1.3, shade: Shade())
+            c.rect(bx + 8, by + 16, 16, 3, RGBA(210, 126, 92), ink: 1, radius: 1)
+            for (x, col) in [(12.0, RGBA(240, 90, 110)), (16, RGBA(250, 210, 80)), (20, RGBA(120, 150, 250))] {
+                c.line(bx + 16, by + 16, bx + x, by + 8, 1.0, RGBA(80, 150, 80)); c.ellipse(bx + x, by + 7, 2.4, 2.4, col, ink: 0.8)
+            }
+        case "scarecrow":
+            c.line(bx + 16, by + 31, bx + 16, by + 2, 2.4, RGBA(130, 90, 55), ink: 1)
+            c.line(bx + 4, by + 10, bx + 28, by + 10, 2.2, RGBA(130, 90, 55), ink: 1)
+            c.poly([(bx + 9, by + 8), (bx + 23, by + 8), (bx + 21, by + 22), (bx + 11, by + 22)], c1, ink: 1.2, shade: Shade())
+            c.ellipse(bx + 16, by + 3, 5, 5, RGBA(230, 200, 140), ink: 1.1, shade: Shade())
+            c.poly([(bx + 8, by + 0), (bx + 24, by + 0), (bx + 16, by - 7)], RGBA(170, 130, 70), ink: 1.1)
+            c.ellipse(bx + 14, by + 3, 0.9, 0.9, AnimeArt.ink); c.ellipse(bx + 18, by + 3, 0.9, 0.9, AnimeArt.ink)
+        case "grave":
+            c.ellipse(bx + 16, by + 30, 11, 2.5, RGBA(0, 0, 0, 45))
+            c.rect(bx + 9, by + 8, 14, 22, c1, ink: 1.4, radius: 6, shade: Shade(shadow: 0.22))
+            c.line(bx + 16, by + 12, bx + 16, by + 22, 1.4, shadowed(c1, 0.45)); c.line(bx + 12.5, by + 15, bx + 19.5, by + 15, 1.4, shadowed(c1, 0.45))
+            c.ellipse(bx + 9, by + 30, 3, 1.5, RGBA(110, 170, 90))
+        case "chimney":
+            c.rect(bx + 9, by + 2, 14, 29, c1, ink: 1.4, radius: 1, shade: Shade(shadow: 0.2))
+            for y in stride(from: 6.0, to: 30, by: 6) { c.line(bx + 9, by + y, bx + 23, by + y, 0.8, shadowed(c1, 0.35)) }
+            c.rect(bx + 7, by - 1, 18, 4, shadowed(c1, 0.1), ink: 1.2, radius: 1)
+            for (i, y) in [-6.0, -13, -20].enumerated() { c.ellipse(bx + 16 + Double(i) * 2, by + y, 4 + Double(i), 3 + Double(i) * 0.6, RGBA(220, 220, 228, 150)) }
+        case "antenna":
+            c.line(bx + 16, by + 31, bx + 16, by - 12, 1.8, c1, ink: 1)
+            for (y, w) in [(-6.0, 6.0), (2, 9), (10, 12)] { c.line(bx + 16 - w, by + y, bx + 16 + w, by + y, 1.4, c1, ink: 0.8) }
+            c.ellipse(bx + 16, by - 13, 2.2, 2.2, RGBA(255, 80, 80), ink: 0.8); c.ellipse(bx + 16, by - 13, 5, 5, RGBA(255, 80, 80, 60))
+        case "ai_core":
+            c.rect(bx + 4, by + 6, 24, 25, RGBA(60, 64, 80), ink: 1.4, radius: 4, shade: Shade(shadow: 0.25))
+            c.ellipse(bx + 16, by + 17, 7, 7, RGBA(110, 220, 255), ink: 1.1, shade: Shade(shadow: 0.1, light: 0.3))
+            c.ellipse(bx + 16, by + 17, 11, 11, RGBA(110, 220, 255, 60))
+            for x in [8.0, 24] { c.rect(bx + x - 1, by + 9, 2, 2, RGBA(120, 255, 160)) }
+        case "bones":
+            for (x0, y0, x1, y1) in [(6.0, 26.0, 22.0, 20.0), (10, 20, 26, 28)] {
+                c.line(bx + x0, by + y0, bx + x1, by + y1, 2.4, RGBA(236, 230, 214), ink: 1)
+                for (x, y) in [(x0, y0), (x1, y1)] { c.ellipse(bx + x, by + y, 2.2, 2.2, RGBA(236, 230, 214), ink: 0.9) }
+            }
+            c.ellipse(bx + 22, by + 14, 5, 4.5, RGBA(236, 230, 214), ink: 1.1, shade: Shade())
+            c.ellipse(bx + 20.5, by + 14, 1.1, 1.3, AnimeArt.ink); c.ellipse(bx + 23.5, by + 14, 1.1, 1.3, AnimeArt.ink)
+        case "shell":
+            var fan: [(Double, Double)] = [(bx + 16, by + 28)]
+            for i in 0...8 { let ang = .pi + Double(i) * .pi / 8; fan.append((bx + 16 + cos(ang) * 10, by + 26 + sin(ang) * 9)) }
+            c.poly(fan, c1, ink: 1.2, shade: Shade(shadow: 0.18))
+            for i in 1...7 { let ang = .pi + Double(i) * .pi / 8; c.line(bx + 16, by + 27, bx + 16 + cos(ang) * 9, by + 26 + sin(ang) * 8, 0.8, shadowed(c1, 0.3)) }
+        case "citygate", "citygate_open":
+            // a stone gatehouse with a wooden gate, open or shut
+            c.rect(bx - 4, by - 12, 40, 43, c1, ink: 1.6, radius: 2, shade: Shade(shadow: 0.2))
+            for x in stride(from: -4.0, to: 36, by: 8) { c.rect(bx + x + 1, by - 18, 6, 7, c1.lightened(0.08), ink: 1.1, radius: 1) }     // battlements
+            c.poly([(bx + 6, by + 31), (bx + 6, by + 6), (bx + 16, by - 2), (bx + 26, by + 6), (bx + 26, by + 31)], RGBA(40, 34, 40), ink: 1.2)
+            if kind == "citygate" {
+                c.poly([(bx + 6, by + 31), (bx + 6, by + 6), (bx + 16, by - 2), (bx + 26, by + 6), (bx + 26, by + 31)], RGBA(140, 95, 55), ink: 1.2, shade: Shade(shadow: 0.2))
+                for x in [11.0, 16, 21] { c.line(bx + x, by + 2, bx + x, by + 31, 0.9, RGBA(100, 66, 38)) }
+                c.line(bx + 6, by + 16, bx + 26, by + 16, 1.4, RGBA(80, 80, 90))
+            } else {
+                c.rect(bx + 7, by + 26, 18, 5, RGBA(150, 140, 120))               // the road through it
+            }
+        case "lever", "lever_on":
+            c.rect(bx + 8, by + 24, 16, 7, RGBA(120, 120, 130), ink: 1.2, radius: 1.5, shade: Shade())
+            let on = kind == "lever_on"
+            c.line(bx + 16, by + 25, bx + (on ? 24 : 8), by + 10, 2, RGBA(130, 90, 55), ink: 1)
+            c.ellipse(bx + (on ? 24 : 8), by + 10, 2.6, 2.6, on ? RGBA(120, 230, 120) : RGBA(230, 90, 90), ink: 1)
+        case "plate", "trap":
+            c.rect(bx + 5, by + 24, 22, 6, c1, ink: 1.2, radius: 2, shade: Shade(shadow: 0.2))
+            if kind == "trap" || t.key == "trap" {
+                for x in stride(from: 7.0, to: 27, by: 4) { c.poly([(bx + x, by + 24), (bx + x + 2, by + (t.key == "trap_sprung" ? 12 : 20)), (bx + x + 4, by + 24)], RGBA(200, 200, 210), ink: 0.8) }
+            }
+        case "wire":
+            c.curve([(bx, by + 18), (bx + 8, by + 22), (bx + 16, by + 23), (bx + 24, by + 22), (bx + 32, by + 18)], 1.4, RGBA(60, 60, 70))
+            c.rect(bx + 14, by + 20, 4, 6, RGBA(240, 200, 60), ink: 0.8, radius: 1)
+        case "banner":
+            c.line(bx + 8, by + 31, bx + 8, by - 14, 2.4, RGBA(140, 110, 70), ink: 1)
+            c.ellipse(bx + 8, by - 15, 2, 2, RGBA(230, 200, 90), ink: 0.8)
+            c.poly([(bx + 9, by - 12), (bx + 28, by - 10), (bx + 25, by - 1), (bx + 28, by + 8), (bx + 9, by + 6)], c1, ink: 1.3, shade: Shade(shadow: 0.22))
+            c.ellipse(bx + 17, by - 2, 3.5, 3.5, c3, ink: 0.9)
+        case "throne":
+            c.rect(bx + 6, by - 8, 20, 26, RGBA(170, 40, 60), ink: 1.4, radius: 4, shade: Shade(shadow: 0.25))
+            c.rect(bx + 4, by + 14, 24, 9, RGBA(220, 180, 80), ink: 1.3, radius: 2, shade: Shade())
+            c.rect(bx + 6, by + 22, 4, 9, RGBA(200, 160, 70), ink: 1); c.rect(bx + 22, by + 22, 4, 9, RGBA(200, 160, 70), ink: 1)
+            for x in [10.0, 16, 22] { c.poly([(bx + x - 2, by - 8), (bx + x, by - 13), (bx + x + 2, by - 8)], RGBA(240, 200, 80), ink: 0.9) }
+        case "tower":
+            c.rect(bx + 4, by - 26, 24, 57, c1, ink: 1.6, radius: 2, shade: Shade(shadow: 0.22))
+            for x in stride(from: 4.0, to: 28, by: 6) { c.rect(bx + x, by - 31, 4, 6, c1.lightened(0.08), ink: 1, radius: 1) }
+            for y in [-16.0, -2, 12] { c.rect(bx + 13, by + y, 6, 8, RGBA(40, 36, 48), ink: 1, radius: 3) }
+            for y in stride(from: -20.0, to: 30, by: 7) { c.line(bx + 4, by + y, bx + 28, by + y, 0.7, shadowed(c1, 0.3)) }
+        case "mill":
+            c.rect(bx + 8, by + 6, 16, 25, c1, ink: 1.4, radius: 2, shade: Shade(shadow: 0.2))
+            c.poly([(bx + 6, by + 7), (bx + 16, by - 3), (bx + 26, by + 7)], RGBA(170, 80, 60), ink: 1.2, shade: Shade())
+            c.rect(bx + 13, by + 22, 6, 9, RGBA(110, 75, 45), ink: 1, radius: 2)
+            for i in 0..<4 {
+                let ang = Double(i) * .pi / 2 + .pi / 4
+                let tip = (bx + 16 + cos(ang) * 17, by + 4 + sin(ang) * 17), mid = (bx + 16 + cos(ang + 0.25) * 15, by + 4 + sin(ang + 0.25) * 15)
+                c.poly([(bx + 16, by + 4), tip, mid], RGBA(240, 236, 220), ink: 1)
+            }
+            c.ellipse(bx + 16, by + 4, 2, 2, RGBA(110, 75, 45), ink: 0.9)
+        case "ballista":
+            c.ellipse(bx + 9, by + 27, 4, 4, RGBA(110, 75, 45), ink: 1.1); c.ellipse(bx + 23, by + 27, 4, 4, RGBA(110, 75, 45), ink: 1.1)
+            c.rect(bx + 4, by + 18, 24, 6, RGBA(140, 95, 55), ink: 1.2, radius: 1.5, shade: Shade())
+            c.curve([(bx + 6, by + 6), (bx + 16, by + 14), (bx + 26, by + 6)], 2, RGBA(150, 105, 60))
+            c.line(bx + 6, by + 6, bx + 26, by + 6, 0.8, RGBA(230, 230, 230))
+            c.line(bx + 16, by + 20, bx + 16, by - 4, 1.6, RGBA(90, 90, 100), ink: 0.8)
+            c.poly([(bx + 14, by - 3), (bx + 16, by - 8), (bx + 18, by - 3)], RGBA(200, 200, 210), ink: 0.8)
         default:
             // not painted yet: the pixel tile, smoothed and inked
             var px = Bitmap(PixelArt.cell, PixelArt.cell)
@@ -683,5 +824,82 @@ extension AnimeArt {
         m.quad([-hw, -sink, 0], [hw, -sink, 0], [hw, height - sink, 0], [-hw, height - sink, 0], normal: [0, 0, 1],
                uv: ([u0, vb], [u1, vb], [u1, vt], [u0, vt]))
         return m
+    }
+}
+
+// MARK: - roofs
+
+extension AnimeArt {
+    /// A nation's roof over a building of w x h tiles, painted (twice the pixel size): two slopes meeting at the
+    /// ridge, the far slope in light and the near one in a cel shadow, rows of slate, curved clay tiles or
+    /// thatch by nation (shingles for anyone else), a ridge cap, the eaves' shadow and an ink line round it.
+    public static func roof(nation: Int, w: Int, h: Int) -> Bitmap {
+        let pw = Double(w * 32), ph = Double(h * 32 + 12)
+        var c = Canvas(w * 32, h * 32 + 12)
+        let (base, line, ridge): (RGBA, RGBA, RGBA)
+        switch nation {
+        case 1: (base, line, ridge) = (RGBA(hex: "#6a80a8"), RGBA(hex: "#3e5076"), RGBA(hex: "#a8c0e0"))
+        case 2: (base, line, ridge) = (RGBA(hex: "#d0583e"), RGBA(hex: "#8a3024"), RGBA(hex: "#f29a74"))
+        case 3: (base, line, ridge) = (RGBA(hex: "#e0b860"), RGBA(hex: "#9a7430"), RGBA(hex: "#f6dc94"))
+        default: (base, line, ridge) = (RGBA(hex: "#946c46"), RGBA(hex: "#5e4128"), RGBA(hex: "#c09a6c"))
+        }
+        let mid = ph / 2
+        let near = shadowed(base, 0.18)
+        // the two slopes
+        c.rect(0, 0, pw, mid, base.lightened(0.04))
+        c.rect(0, mid, pw, ph - mid, near)
+        var r = RNG(seed: nation &* 131 &+ w &* 17 &+ h)
+        switch nation {
+        case 1:
+            // slate: offset rows of rectangular slates, a light edge on each
+            var y = 2.0, row = 0
+            while y < ph - 6 {
+                let slope = y < mid ? base.lightened(0.04) : near
+                var x = row % 2 == 0 ? 0.0 : -5
+                while x < pw { c.rect(x + 0.6, y, 9.4, 7, slope, radius: 1.2); c.rect(x + 0.6, y, 9.4, 1.2, slope.lightened(0.18)); x += 10 }
+                c.rect(0, y + 7, pw, 1, line)
+                y += 8; row += 1
+            }
+        case 2:
+            // clay: rows of half-round tiles, each with a highlight on its curve
+            var y = 3.0
+            while y < ph - 6 {
+                let slope = y < mid ? base : near
+                var x = 0.0
+                while x < pw {
+                    c.ellipse(x + 4.5, y + 4, 4.6, 4.2, slope, ink: 0.7)
+                    c.curve([(x + 1.8, y + 2.6), (x + 4.5, y + 1), (x + 7.2, y + 2.6)], 0.9, ridge)
+                    x += 9
+                }
+                y += 7
+            }
+        case 3:
+            // thatch: bundles of straw strokes, bound in bands
+            for _ in 0..<Int(pw * ph / 14) {
+                let x = r.range(0, pw), y = r.range(0, ph - 6), len = r.range(5, 10)
+                c.line(x, y, x + r.range(-1, 1), y + len, 0.9, r.unit() < 0.5 ? line.lightened(0.15) : ridge)
+            }
+            var y = 9.0
+            while y < ph - 6 { c.rect(0, y, pw, 1.6, line); y += 12 }
+        default:
+            // wooden shingles: staggered rows, grain lines
+            var y = 2.0, row = 0
+            while y < ph - 6 {
+                var x = row % 2 == 0 ? 0.0 : -4
+                while x < pw { c.rect(x + 0.5, y, 7.4, 6, y < mid ? base : near, radius: 1); c.line(x + 3, y + 1, x + 3, y + 5, 0.6, line); x += 8 }
+                c.rect(0, y + 6, pw, 1, line)
+                y += 7; row += 1
+            }
+        }
+        // the ridge cap with its glint, the eaves' shadow, the outline
+        c.rect(0, mid - 2.5, pw, 5, ridge, ink: 1.2, radius: 2)
+        c.rect(2, mid - 1.8, pw - 4, 1.2, RGBA(255, 255, 255, 120))
+        c.rect(0, ph - 6, pw, 6, shadowed(line, 0.25))
+        for (x, y, ww, hh) in [(0.0, 0.0, pw, 2.0), (0, ph - 2, pw, 2), (0, 0, 2, ph), (pw - 2, 0, 2, ph)] { c.rect(x, y, ww, hh, AnimeArt.ink) }
+        if nation == 2 {                                               // upturned eaves at the corners
+            c.poly([(0, mid - 3), (-0.5, mid - 10), (6, mid - 3)], ridge, ink: 1)
+            c.poly([(pw, mid - 3), (pw + 0.5, mid - 10), (pw - 6, mid - 3)], ridge, ink: 1)
+        }
+        return c.image()
     }
 }

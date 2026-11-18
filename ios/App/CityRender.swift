@@ -50,9 +50,11 @@ extension GameScene {
     }
 
     private func roofTexture(_ nation: Int, _ w: Int, _ h: Int) -> SKTexture {
-        let key = "roof\(nation)-\(w)x\(h)"
+        let key = "roof\(nation)-\(w)x\(h)" + (Bitmap.animeStyle ? "-anime" : "")
         if let t = animalTex[key] { return t }
-        let t = PixelArt.roof(nation: nation, w: w, h: h).texture
+        // the anime look paints its own roofs (the pixel roof through the filter came out as a dark slab)
+        let t = Bitmap.animeStyle ? (AnimeArt.roof(nation: nation, w: w, h: h).cgImage.map { Bitmap.skTexture($0) } ?? SKTexture())
+                                  : PixelArt.roof(nation: nation, w: w, h: h).texture
         animalTex[key] = t
         return t
     }

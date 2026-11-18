@@ -65,6 +65,23 @@ final class AnimeArtTests: XCTestCase {
         XCTAssertNotEqual(a1.px, PixelArt.character(l, dir: "down", frame: 1, held: "", child: false, female: true).anime().px)
     }
 
+    func testRoofsAreTwiceThePixelSizeOpaqueAndDifferByNation() {
+        for n in [1, 2, 3, 9] {
+            let a = AnimeArt.roof(nation: n, w: 6, h: 4), p = PixelArt.roof(nation: n, w: 6, h: 4)
+            XCTAssertEqual(a.w, p.w * 2); XCTAssertEqual(a.h, p.h * 2)
+            XCTAssertFalse(stride(from: 3, to: a.px.count, by: 4).contains { a.px[$0] < 255 }, "no holes in roof \(n)")
+        }
+        XCTAssertNotEqual(AnimeArt.roof(nation: 1, w: 4, h: 4).px, AnimeArt.roof(nation: 2, w: 4, h: 4).px)
+    }
+
+    func testEveryObjectIsPaintedNoneFallsBackToThePixelTile() {
+        // the fallback is the pixel tile through the filter: a painted object differs from it
+        for t in Content.shared.tiles.compactMap({ $0 }) where t.layer >= 2 && !t.artKind.isEmpty {
+            var px = Bitmap(PixelArt.cell, PixelArt.cell); PixelArt.drawTile(&px, 0, 0, t)
+            XCTAssertNotEqual(AnimeArt.tile(t).px, px.anime().px, "\(t.key) (\(t.artKind)) is painted")
+        }
+    }
+
     func testGroundIsSolidAndTwiceThePixelSize() {
         let s = makeSociety(7)
         let c = s.settlements[1]!.center
@@ -242,4 +259,14 @@ final class Anime3DPreviewTests: XCTestCase {
 extension Bitmap {
     /// The palette picture as `Palette3D.color(at:)` reads it (rows counted from the top), for `Tex`.
     func flippedForPalette() -> Bitmap { self }
+}
+
+final class RoofPreviewTests: XCTestCase {
+    func testRoofs() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MP_PREVIEW"] else { throw XCTSkip("set MP_PREVIEW") }
+        var sheet = Bitmap(4 * 7 * 32 + 60, 6 * 32 + 30, fill: RGBA(120, 170, 110))
+        for n in 0..<4 { let r = AnimeArt.roof(nation: n + 1 == 4 ? 7 : n + 1, w: 7, h: 5); sheet.blit(r, sx: 0, sy: 0, sw: r.w, sh: r.h, dx: 10 + n * (7 * 32 + 12), dy: 10, blend: true) }
+        var d = Data("\(sheet.w) \(sheet.h)\n".utf8); d.append(contentsOf: sheet.px)
+        try d.write(to: URL(fileURLWithPath: dir).appendingPathComponent("roofs.rgba"))
+    }
 }
