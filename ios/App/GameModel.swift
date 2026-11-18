@@ -130,6 +130,8 @@ final class GameModel: ObservableObject {
     @Published var wayPreview: WayPlan?
     /// A vehicle or stop the traveller is near (shows the travel button).
     @Published var nearTransport = false
+    /// What the transport demo built (for UI tests).
+    var demoNotes = ""
     /// "Storey 3 · 6.0 m" and, in a car, where it is going.
     @Published var heightLine = ""
     /// Yaw and pitch of the 3D view, for assistive technology and UI tests.
@@ -455,6 +457,7 @@ final class GameModel: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
                 guard let self = self, let s = self.society, let sc = self.scene else { return }
                 let d = s.transportDemo(near: sc.player.tile)
+                self.demoNotes = "demo near \(sc.player.tile.x),\(sc.player.tile.y): car \(d.car.map(String.init) ?? "-") bus \(d.bus.map(String.init) ?? "-") train \(d.train.map(String.init) ?? "-") plane \(d.plane.map(String.init) ?? "-") " + d.notes.joined(separator: "; ")
                 if let id = d.car, let v = s.net.vehicle(id) {
                     var b = Body(at: v.world(0, 1.2), z: 0, depth: 0); b.state = .standing
                     s.realm.player.body = b; s.realm.player.depth = 0

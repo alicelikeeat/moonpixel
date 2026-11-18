@@ -51,8 +51,8 @@ extension Society {
             let busStop = onWay(busStreet, .street, from: 6, towards: busStreet.count - 1) ?? busStreet[0]
             let busEnd = onWay(busStreet, .street, from: busStreet.count - 3, towards: 0) ?? busStreet[busStreet.count - 1]
             var road: [TilePos] = []
-            search: for r in 0..<40 {
-                for (dy, dx) in [(-4 - r, 0), (4 + r, 0), (-4 - r, 8), (-4 - r, -8)] {
+            search: for r in 0..<80 {
+                for (dy, dx) in [(-4 - r, 0), (4 + r, 0), (-4 - r, 10), (-4 - r, -10), (4 + r, 10), (4 + r, -10), (-4 - r, -24), (4 + r, -24)] {
                     let a = TilePos(o.x + dx, o.y + dy), b = TilePos(a.x + 24, a.y)
                     if busStreet.contains(where: { $0.y >= a.y - 1 && $0.y <= a.y + 1 && $0.x >= a.x - 1 && $0.x <= b.x + 1 }) { continue }
                     let plan = planStraightWay(.street, from: a, to: b)
@@ -62,8 +62,16 @@ extension Society {
                     break search
                 }
             }
-            if road.isEmpty { road = busStreet; out.notes.append("car: no straight row for its own street") }
-            let c = road[min(1, road.count - 2)], n = road[min(2, road.count - 1)]
+            var c: TilePos, n: TilePos
+            if road.count >= 3 {
+                c = road[1]; n = road[2]
+            } else {
+                // no straight row anywhere near: a tile that is really the street (not a deck or a tunnel), far from the bus
+                out.notes.append("car: no straight row for its own street")
+                let i = busStreet.indices.filter { k in k + 1 < busStreet.count && wayKind(at: busStreet[k]) == .street && wayKind(at: busStreet[k + 1]) == .street
+                    && bridge(at: busStreet[k]) == nil && tunnel(at: busStreet[k]) == nil && busStreet[k].distance2(busStop) > 36 }.first ?? 0
+                c = busStreet[i]; n = busStreet[min(i + 1, busStreet.count - 1)]
+            }
             out.car = buildVehicle(.car, at: c, heading: atan2(Double(n.y - c.y), Double(n.x - c.x)), payer: .district(d.id), nation: nation)?.id
             if let a = addStop(.busStop, at: busStop, name: "Demo Sq", nation: nation, district: d.id),
                let b = addStop(.busStop, at: busEnd, name: "Demo End", nation: nation, district: d.id),

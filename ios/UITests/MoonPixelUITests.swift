@@ -461,6 +461,7 @@ final class MoonPixelUITests: XCTestCase {
         sleep(2)
         let moving = speed.label
         print("UITEST drive: \(moving) | \(state.label)")
+        print("UITEST demo: \(state.label.components(separatedBy: " | ").last ?? "")")
         XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving) | \(state.label)")
         shot("41-driving")
         // the autopilot takes over (no destination: it holds), then back to the driver
