@@ -15,6 +15,8 @@ extension Society {
         commutersStep(dt)
         trafficT += dt
         if trafficT >= 1 { countTraffic(); trafficT = 0 }
+        errandT += dt
+        if errandT >= 5 { carErrands(); errandT = 0 }
         let day = Int(world.time / MP.daySeconds)
         if tr.day < 0 { tr.day = day } else if day > tr.day { tr.day = day; transportDay() }
     }

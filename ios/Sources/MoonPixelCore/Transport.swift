@@ -454,7 +454,7 @@ extension Society {
     /// The cheapest line to build a way of this kind from `a` to `b`: along existing ways where they
     /// serve, through clear land, felling trees, bridging water and tunnelling rock as needed. Buildings,
     /// walls and anything else someone built are never crossed (bridges go over ways, never through houses).
-    public func planWay(_ kind: WayKind, from a: TilePos, to b: TilePos, bridge bk: BridgeKind? = nil, allowBridges: Bool = true, allowTunnels: Bool = true, limit: Int = 200_000) -> WayPlan {
+    public func planWay(_ kind: WayKind, from a: TilePos, to b: TilePos, bridge bk: BridgeKind? = nil, allowBridges: Bool = true, allowTunnels: Bool = true, limit: Int = 200_000, join: Bool = true) -> WayPlan {
         var plan = WayPlan(); plan.kind = kind
         plan.bridgeKind = bk ?? (kind.mode == .rail ? .rail : (kind == .foot ? .foot : .road))
         func key(_ t: TilePos) -> Int64 { MP.chunkKey(t.x, t.y) }
@@ -465,6 +465,9 @@ extension Society {
                 if bridge(at: t) != nil { return nil }
                 return waterDepth(t) >= 8 ? 12 : 7
             }
+            // another way's bridge (a viaduct over land): its deck runs along its own axis and cannot be joined
+            // from the side, and its piers stand here: a new way goes round it
+            if bridge(at: t) != nil { return nil }
             let s = world.tile(1, t.x, t.y)
             if s != 0 && content.solid[Int(s)] { return allowTunnels && kind.mode != .air ? 9 : nil }        // a cliff: a tunnel
             let o = world.tile(2, t.x, t.y)
@@ -475,14 +478,22 @@ extension Society {
             }
             if content.tile(world.tile(0, t.x, t.y))?.built == true && wayKind(at: t) == nil { return nil }      // someone's floor
             if let w = wayKind(at: t) {
-                if w == kind { return 0.3 }
-                if w.mode == kind.mode && kind.mode != .foot { return 0.5 }                          // a junction
+                // `join: false`: a track of its own (sharing a single track both ways is where trains meet head on)
+                if w == kind { return join ? 0.3 : 4 }
+                if w.mode == kind.mode && kind.mode != .foot { return join ? 0.5 : 4 }                // a junction
                 // crossing another way: a level crossing for streets and paths, a viaduct otherwise
                 if (kind == .street || kind == .foot) && (w.mode == .rail || w.mode == .road) { return 2 }
                 if w.mode == .road || w.mode == .rail { return allowBridges ? 6 : nil }
                 return nil
             }
             return o != 0 ? 2.2 : 1
+        }
+        /// A tile the way will cross on a span (water, or another way it does not join at grade).
+        func spanned(_ t: TilePos) -> Bool {
+            if waterDepth(t) > 0 { return true }
+            guard let w = wayKind(at: t), w != kind else { return false }
+            if w.mode == kind.mode && kind.mode != .foot { return false }
+            return !((kind == .street || kind == .foot) && (w.mode == .rail || w.mode == .road))
         }
         var best: [Int64: Double] = [key(a): 0]
         var came: [Int64: TilePos] = [:]
@@ -500,6 +511,8 @@ extension Society {
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                 let m = TilePos(t.x + dx, t.y + dy)
                 guard let c = stepCost(m) else { continue }
+                // a bridge is straight, with its ramps in line at both ends: no turning on a span, nor onto or off one
+                if let p = came[key(t)], (spanned(t) || spanned(m)) && (t.x - p.x != dx || t.y - p.y != dy) { continue }
                 // a straight line costs less than a zigzag (fewer turns on rails and runways)
                 var turn = 0.0
                 if let p = came[key(t)], (p.x - t.x != -dx || p.y - t.y != -dy) { turn = kind.mode == .rail || kind.mode == .air ? 1.5 : 0.25 }

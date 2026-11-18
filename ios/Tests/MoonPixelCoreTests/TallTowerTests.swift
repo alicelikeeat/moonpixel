@@ -17,7 +17,7 @@ final class TallTowerTests: XCTestCase {
         let built0 = s.builtStoreys().count
         let top = s.storeyWorld(399)
         XCTAssertEqual(top.tile(0, o.x + 5, o.y + 5), s.content.tid("wood_floor"), "a floor on the 400th level")
-        XCTAssertEqual(top.tile(2, o.x, o.y), s.content.tid("wall_stone"), "walls round it")
+        XCTAssertEqual(top.tile(2, o.x, o.y), s.content.tid(Society.towerFacade(1).wall), "walls round it (the tower's own material)")
         XCTAssertFalse(top.blocked(o.x + 5, o.y + 5), "you can stand there")
         XCTAssertTrue(top.blocked(o.x - 3, o.y + 5), "beside the tower is open air")
         let down = Society.towerStair(s.realm.standing![0], level: 398)

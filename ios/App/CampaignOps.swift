@@ -106,7 +106,9 @@ extension GameModel {
     func switchLayer(to pos: Vec2) {
         guard let sc = scene else { return }
         sc.player = pos
-        sc.resetLayer()
+        // between the surface and its storeys the old picture stays until the new one is ready; underground it does not
+        let wasUnder = sc.chunkKeys.values.contains { $0.depth == 1 }
+        sc.resetLayer(keepChunks: depth != 1 && !wasUnder)
         following = false
         watch = .none
         if depth >= OpenWorld.storeyBase {

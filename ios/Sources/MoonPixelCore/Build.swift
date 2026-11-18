@@ -19,6 +19,8 @@ public struct Piece {
         p("floor_stone", "stone_floor", "Stone floor", "石地板", 0, [("stone", 1)], 0),
         p("wall_wood", "wall_wood", "Wood wall", "木墙", 2, [("wood", 2)], 0),
         p("wall_stone", "wall_stone", "Stone wall", "石墙", 2, [("stone", 2)], 0),
+        p("wall_concrete", "wall_concrete", "Concrete wall", "混凝土墙", 2, [("stone", 2), ("iron", 1)], 0),
+        p("wall_glass", "wall_glass", "Glass curtain wall", "玻璃幕墙", 2, [("stone", 1), ("iron", 1), ("parts", 1)], 0),
         p("gate", "gate", "City gate", "城门", 2, [("wood", 3), ("iron", 1)], 0),
         p("door", "door_wood", "Door", "木门", 2, [("wood", 2)], 0),
         p("fence", "fence", "Fence", "围栏", 2, [("wood", 1)], 0),
@@ -400,9 +402,16 @@ extension Society {
     /// floor inside, two beds, the stair down from below and (unless it is the top) the stair up. The same
     /// rooms raiseHouse builds, made from the tower when the chunk is first needed. Changing anything
     /// stores the chunk like any other, so what was changed stays changed.
+    /// Footprints of standing towers, by tower.
+    static let towerSizes: [(w: Int, d: Int)] = [(12, 10), (14, 12), (16, 12), (18, 14)]
+    /// What a standing tower's storeys are made of, by tower: stone, concrete or brick, with glass windows.
+    static func towerFacade(_ tower: Int) -> (wall: String, window: String) {
+        [("wall_stone", "wall_glass"), ("wall_concrete", "wall_glass"), ("wall_brick", "wall_glass")][tower % 3]
+    }
+
     func stampTowers(_ ch: Chunk, storey n: Int) {
         guard n >= 1, let list = realm.standing, !list.isEmpty else { return }
-        let wall = content.tid("wall_stone"), floor = content.tid("wood_floor"), bed = content.tid("bed")
+        let floor = content.tid("wood_floor"), bed = content.tid("bed")
         let up = content.tid("stairs_up"), down = content.tid("stairs_down")
         let bx = ch.cx * 32, by = ch.cy * 32
         for t in list where n < t.levels && t.x + t.w > bx && t.x < bx + 32 && t.y + t.d > by && t.y < by + 32 {
@@ -410,11 +419,16 @@ extension Society {
                 guard x >= bx, x < bx + 32, y >= by, y < by + 32 else { return }
                 ch.layers[l][OpenWorld.idx(x, y)] = id
             }
+            let face = Society.towerFacade(t.tower)
+            let wall = content.tid(face.wall), window = content.tid(face.window)
             for y in 0..<t.d { for x in 0..<t.w {
                 put(0, t.x + x, t.y + y, floor)
-                if x == 0 || y == 0 || x == t.w - 1 || y == t.d - 1 { put(2, t.x + x, t.y + y, wall) }
+                let corner = (x == 0 || x == t.w - 1) && (y == 0 || y == t.d - 1)
+                if x == 0 || y == 0 || x == t.w - 1 || y == t.d - 1 { put(2, t.x + x, t.y + y, !corner && (x + y) % 3 == 1 ? window : wall) }
             } }
-            put(2, t.x + 1, t.y + 1, bed); put(2, t.x + t.w - 2, t.y + 1, bed)
+            // flats along the north wall: a bed in every other tile, a wall between each pair of homes
+            for x in stride(from: 1, to: t.w - 1, by: 2) { put(2, t.x + x, t.y + 1, bed) }
+            for x in stride(from: 4, to: t.w - 2, by: 4) { put(2, t.x + x, t.y + 2, wall) }
             let from = Society.towerStair(t, level: n - 1)
             put(2, from.x, from.y, down)
             if n + 1 < t.levels { let st = Society.towerStair(t, level: n); put(2, st.x, st.y, up) }

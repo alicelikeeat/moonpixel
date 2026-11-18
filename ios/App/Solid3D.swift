@@ -208,10 +208,12 @@ final class SolidRenderer {
         view.environment.background = .color(sky)
         for e in chunks.values { e.entity.model?.materials = materials(for: e) }
         func paint(_ e: Entity) {
-            if let m = e as? ModelEntity, m.name != "chunk", m.name != "sprite", m.model != nil { m.model?.materials = [solidMaterial] }
+            // chunks and the other layers have a ground picture and a palette part each: they are redone below
+            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.model != nil { m.model?.materials = [solidMaterial] }
             for c in e.children { paint(c) }
         }
-        for c in root.children where c.name != "chunk" { paint(c) }
+        for c in root.children where c.name != "chunk" && c.name != "layer" { paint(c) }
+        for (lk, l) in layerChunks where l.entity.model != nil { l.entity.model?.materials = layerMaterials(lk, ground: l.ground, solid: l.solid) }
         for e in pool { e.model?.materials = [solidMaterial] }
     }
 
@@ -237,9 +239,15 @@ final class SolidRenderer {
         let t0 = CACurrentMediaTime()
         let world = model.activeWorld
         if shownStyle != model.styleEpoch { shownStyle = model.styleEpoch; makePalette(); shownWorld = -1 }
-        if shownWorld != model.epoch || shownEpoch != world.mapEpoch || shownDepth != model.depth {
+        if shownWorld != model.epoch || shownEpoch != world.mapEpoch {
             shownWorld = model.epoch; shownEpoch = world.mapEpoch; shownDepth = model.depth
             reset()
+        } else if shownDepth != model.depth {
+            // another layer of the same world (a block placed underfoot, stairs, a lift): what is on screen stays
+            // until each chunk of the new layer is ready, so the picture never goes blank
+            let fromUnder = shownDepth == 1 || model.depth == 1
+            shownDepth = model.depth
+            if fromUnder { reset() } else { layerChanged() }
         }
         // light and sky
         let under = model.depth == 1
@@ -332,10 +340,23 @@ final class SolidRenderer {
         target = SIMD3(0, -1000, 0)
     }
 
-    /// Top of the ground under a point: from the chunk on screen when there is one, else worked out.
+    /// Moving between the surface and its storeys: the chunks stay on screen (each is replaced, first in line,
+    /// as soon as its new mesh is made); the people, vehicles and roofs of the old layer go.
+    private func layerChanged() {
+        for d in [agents, soldiers, animals, standards] { for e in d.values { e.removeFromParent() } }
+        agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
+        for e in vehicleEntities.values { e.removeFromParent() }
+        vehicleEntities = [:]
+        for r in roofs.values { r.entity.removeFromParent() }
+        roofs = [:]
+        queue.dropAll()
+        host?.clearLabels()
+    }
+
+    /// Top of the ground under a point: from the chunk on screen when there is one (of this layer), else worked out.
     func groundY(_ world: OpenWorld, _ p: Vec2) -> Float {
         let t = p.tile
-        if let e = chunks[MP.chunkKey(t.x >> 5, t.y >> 5)] { return e.heights[(t.y & 31) * 32 + (t.x & 31)] }
+        if let e = chunks[MP.chunkKey(t.x >> 5, t.y >> 5)], e.key.depth == (model?.depth ?? e.key.depth) { return e.heights[(t.y & 31) * 32 + (t.x & 31)] }
         return Terrain3D.groundY(world: world, at: p)
     }
 
@@ -362,7 +383,8 @@ final class SolidRenderer {
             var now1 = false
             if let shown = chunks[k] {
                 let hash = Mesher3D.structureHash(world.chunk(cx, cy).layers)
-                now1 = hash != shown.structHash || forced.contains(k)
+                // a chunk still showing another layer is replaced first of all
+                now1 = hash != shown.structHash || forced.contains(k) || shown.key.depth != depth
                 if now1 { urgent.insert(k) } else if now - shown.builtAt < 2 { continue }
             }
             let dx = Float(cx * 32 + 16) - target.x, dz = Float(cy * 32 + 16) - target.z
@@ -455,7 +477,7 @@ final class SolidRenderer {
     // MARK: the other layers of the stack (storeys above, or the ground under the storey you are on)
 
     private struct LayerChunk: Hashable { let depth: Int, chunk: Int64 }
-    private var layerChunks: [LayerChunk: (entity: ModelEntity, revision: Int)] = [:]
+    private var layerChunks: [LayerChunk: (entity: ModelEntity, revision: Int, ground: TextureResource?, solid: Bool)] = [:]
     private var layerWaiting: Set<LayerChunk> = []
 
     /// Every built storey is drawn at its height, together with the ground, wherever you stand (not underground):
@@ -515,12 +537,17 @@ final class SolidRenderer {
         }()
         if parts.isEmpty { entity.model = nil }
         else if let res = try? MeshResource.generate(from: parts) {
-            var mats: [any RealityKit.Material] = []
-            if !mesh.ground.isEmpty, let t = tex { mats.append(lk.depth >= OpenWorld.storeyBase ? floorMaterial(t) : material(t)) }
-            if !mesh.solid.isEmpty { mats.append(solidMaterial) }
-            entity.model = ModelComponent(mesh: res, materials: mats)
+            entity.model = ModelComponent(mesh: res, materials: layerMaterials(lk, ground: mesh.ground.isEmpty ? nil : tex, solid: !mesh.solid.isEmpty))
         }
-        layerChunks[lk] = (entity, rev)
+        layerChunks[lk] = (entity, rev, mesh.ground.isEmpty ? nil : tex, !mesh.solid.isEmpty)
+    }
+
+    /// One material per part of a layer's mesh, in the same order (a part without its material is drawn magenta).
+    private func layerMaterials(_ lk: LayerChunk, ground: TextureResource?, solid: Bool) -> [any RealityKit.Material] {
+        var mats: [any RealityKit.Material] = []
+        if let t = ground { mats.append(lk.depth >= OpenWorld.storeyBase ? floorMaterial(t) : material(t)) }
+        if solid { mats.append(solidMaterial) }
+        return mats
     }
 
     private func resetLayers() {

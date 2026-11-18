@@ -74,10 +74,12 @@ extension Society {
         for t in c.towers(of: city.id) where t.real != true && k < 2 {
             let n = t.floors.filter { $0.stage == .inUse }.count
             guard n >= 2 else { continue }
-            let o = TilePos(s.center.x + 12 + k * 16, s.center.y - 16)
-            let st = StandingTower(tower: t.id, city: city.id, town: s.id, x: o.x, y: o.y, w: 12, d: 10, levels: n)
+            // four footprints, by the tower (12 x 10 up to 18 x 14), spaced so the biggest two never touch
+            let size = Society.towerSizes[t.id % Society.towerSizes.count]
+            let o = TilePos(s.center.x + 12 + k * 22, s.center.y - 18)
+            let st = StandingTower(tower: t.id, city: city.id, town: s.id, x: o.x, y: o.y, w: size.w, d: size.d, levels: n)
             realm.standing = (realm.standing ?? []) + [st]
-            raiseHouse(at: o, storeys: 2, w: 12, d: 10)
+            raiseHouse(at: o, storeys: 2, w: size.w, d: size.d)
             realm.storeyTop = max(realm.storeyTop ?? 0, n - 1)
             t.real = true
             k += 1

@@ -354,7 +354,7 @@ public final class Society {
     var congestion: [Int64: Int] = [:]
     var vehicleBuckets: [Int64: [Vehicle]] = [:]
     public var vehicleEvents: [VehicleEvent] = []
-    var trafficT = 0.0, workT = 0.0
+    var trafficT = 0.0, workT = 0.0, errandT = 0.0
     var techCtx = 0
     /// Start a world in a later era: the first `n` technologies are already known.
     public func grantTech(_ n: Int) {
@@ -577,6 +577,8 @@ public final class Society {
     public func tick(_ dt: Double) {
         if realm.liftBox != nil { liftsStep(dt) }
         if realm.transportBox != nil { transportTick(dt) }
+        let growDay = Int(world.time / MP.daySeconds)
+        if realm.growDay == nil { realm.growDay = growDay } else if growDay > realm.growDay! { realm.growDay = growDay; cityGrowthDay() }
         world.advance(dt)
         tickCount += 1
         // planning and resource scans are the heavy part of a town's work. When many fall due together
@@ -642,6 +644,8 @@ public final class Society {
             if content.tile(g)?.built == true || g == T["farmland"] { return false }
             let o = world.tile(2, xx, yy)
             if o != 0, content.tile(o)?.natural == false { return false }
+            // never on a street, railway or any other way, nor on land kept for one
+            if realm.transportBox != nil && (wayKind(at: TilePos(xx, yy)) != nil || isCorridor(TilePos(xx, yy))) { return false }
         } }
         return true
     }
@@ -1279,6 +1283,13 @@ public final class Society {
         if id != 0 && content.solid[Int(id)] && (occupied(t, except: a) || a.pos.tile == t) {
             b.retry.insert(task.cell, at: 0)
             s.wood += cell.wood; s.stone += cell.stone
+            return
+        }
+        // a way was laid across the site after it was planned: the wall leaves a gap for it (the way stays open)
+        if id != 0 && content.solid[Int(id)] && realm.transportBox != nil && wayKind(at: t) != nil {
+            s.wood += cell.wood; s.stone += cell.stone
+            b.placed += 1
+            if b.placed >= b.cells.count { b.done = true; stats.buildings += 1 }
             return
         }
         if id == 0 && cell.layer == 2 {

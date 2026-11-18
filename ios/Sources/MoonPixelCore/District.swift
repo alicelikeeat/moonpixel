@@ -59,6 +59,11 @@ public struct CityKind: Equatable {
         CityKind(key: "depot", en: "Refuse depot", zh: "垃圾站", use: .utility, w: 5, d: 5, storeys: 1, homesPerFloor: 0, jobsPerFloor: 10, service: "garbage", capacity: 3000, radius: 0, upkeep: 8, money: 600, goods: ["stone": 16, "planks": 6], inputs: [:], outputs: [:]),
         CityKind(key: "firehall", en: "Fire station", zh: "消防站", use: .utility, w: 5, d: 5, storeys: 2, homesPerFloor: 0, jobsPerFloor: 8, service: "fire", capacity: 0, radius: 40, upkeep: 8, money: 700, goods: ["stone": 16, "iron": 4], inputs: [:], outputs: [:]),
         CityKind(key: "clinic", en: "Hospital", zh: "医院", use: .utility, w: 6, d: 6, storeys: 3, homesPerFloor: 0, jobsPerFloor: 12, service: "health", capacity: 2000, radius: 0, upkeep: 14, money: 1200, goods: ["stone": 18, "iron": 4, "parts": 3], inputs: [:], outputs: [:]),
+        // bigger and taller kinds, chosen as a district grows (more people, more of everything)
+        CityKind(key: "terrace", en: "Terraced houses", zh: "联排住宅", use: .residential, w: 12, d: 6, storeys: 3, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 450, goods: ["stone": 16, "planks": 10], inputs: [:], outputs: [:]),
+        CityKind(key: "highrise", en: "High-rise flats", zh: "超高层住宅", use: .residential, w: 10, d: 10, storeys: 20, homesPerFloor: 20, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 9, money: 1400, goods: ["stone": 26, "iron": 6, "parts": 5], inputs: [:], outputs: [:]),
+        CityKind(key: "skyscraper", en: "Skyscraper", zh: "摩天大楼", use: .commercial, w: 12, d: 12, storeys: 30, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 14, money: 2500, goods: ["stone": 30, "iron": 8, "parts": 6], inputs: [:], outputs: [:]),
+        CityKind(key: "mall", en: "Shopping mall", zh: "购物中心", use: .commercial, w: 16, d: 12, storeys: 3, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 8, money: 1200, goods: ["stone": 30, "planks": 10, "iron": 4], inputs: ["wares": 0.6], outputs: [:]),
         CityKind(key: "school", en: "School", zh: "学校", use: .utility, w: 7, d: 6, storeys: 2, homesPerFloor: 0, jobsPerFloor: 10, service: "education", capacity: 1500, radius: 0, upkeep: 10, money: 900, goods: ["stone": 18, "planks": 8], inputs: [:], outputs: [:]),
     ]
     public static let byKey: [String: CityKind] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
@@ -144,6 +149,12 @@ public final class District: Codable {
     public var staffing: [Int: Double] = [:]
     /// Power drawn by electric trains of this district since the last day.
     public var trainDraw = 0.0
+    /// The town it grew out of (founded by that town's people), if any.
+    public var fromTown: Int?
+    /// Transport works it started, by purpose ("spine", "town", "rail:<other district>"): the work site id.
+    public var works: [String: Int]?
+    /// Transport it gave up on (no way could be planned), so it is not planned again every day.
+    public var tried: [String]?
     public init() {}
 
     public var population: Int { buildings.reduce(0) { $0 + $1.residents } }
@@ -153,7 +164,11 @@ public final class District: Codable {
     public func add(_ k: String, _ n: Double) { store[k] = max(0, (store[k] ?? 0) + n); if store[k] == 0 { store[k] = nil } }
     public var holding: Holding { Holding("district \(name)", free: { [unowned self] in self.store[$0] ?? 0 }, change: { [unowned self] k, v in self.add(k, v) }) }
     public func building(_ id: Int) -> CityBuilding? { buildings.first { $0.id == id } }
-    func note(_ s: String) { events.append("d\(day): " + s); if events.count > 60 { events.removeFirst(events.count - 60) } }
+    func note(_ s: String) {
+        // the same news again (a building still waiting) is not written again: the list keeps what changed
+        if let last = events.last, let r = last.range(of: ": "), last[r.upperBound...] == s { return }
+        events.append("d\(day): " + s); if events.count > 60 { events.removeFirst(events.count - 60) }
+    }
 }
 
 /// A resident who works in another district or town and goes there by the lines (one person, in one
@@ -272,8 +287,21 @@ extension Society {
     // MARK: building in the world
 
     /// Raise a building's walls, floors, door, furniture and stairs on the world's layers.
+    /// The walls a kind of building is made of: its body, and what its windows are.
+    static func facade(_ kind: String) -> (wall: String, window: String, floor: String) {
+        switch kind {
+        case "highrise", "skyscraper", "mall": return ("wall_concrete", "wall_glass", "stone_floor")
+        case "tower", "offices", "clinic", "power", "waterworks", "sewage", "refinery": return ("wall_concrete", "wall_glass", "stone_floor")
+        case "terrace", "school", "firehall": return ("wall_brick", "wall_glass", "wood_floor")
+        case "flats", "mixed", "shops": return ("wall_brick", "wall_glass", "brick_floor")
+        default: return ("wall_brick", "wall_brick", "stone_floor")
+        }
+    }
+
     func raiseCity(_ b: CityBuilding, _ d: District) {
-        let wall = content.tid("wall_brick"), floor = content.tid("stone_floor"), door = content.tid("door_wood")
+        let face = Society.facade(b.kind)
+        let wall = content.tid(face.wall), window = content.tid(face.window), floor = content.tid(face.floor), door = content.tid("door_wood")
+        let glassAll = b.kind == "skyscraper"
         let thing: UInt8
         switch b.def.use {
         case .residential, .mixed: thing = content.tid("bed")
@@ -298,12 +326,24 @@ extension Society {
                 lw.setTile(0, t.x, t.y, floor)
                 if level == 0 { lw.setTile(1, t.x, t.y, 0); lw.setTile(3, t.x, t.y, 0) }
                 let edge = x == 0 || y == 0 || x == b.w - 1 || y == b.d - 1
-                if edge { lw.setTile(2, t.x, t.y, level == 0 && t == b.entrance ? door : wall) }
+                let corner = (x == 0 || x == b.w - 1) && (y == 0 || y == b.d - 1)
+                // windows: every third tile of a wall (a glass tower is glass all round but its corners)
+                let glazed = !corner && (glassAll || (x + y) % 3 == 1)
+                if edge { lw.setTile(2, t.x, t.y, level == 0 && t == b.entrance ? door : (glazed ? window : wall)) }
                 else if lw.tile(2, t.x, t.y) != content.tid("stairs_down") { lw.setTile(2, t.x, t.y, 0) }
             } }
             if b.def.use == .agricultural { break }
             if b.w > 3 && b.d > 3 { lw.setTile(2, b.x + 1, b.y + 1, thing) }
             if b.w > 4 && b.d > 3 { lw.setTile(2, b.x + b.w - 2, b.y + 1, thing) }
+            // a big floor is split into rooms: a wall down the middle of the north half (the rooms open onto the
+            // hall in the south half, where the door and the stairs are), and fittings in rows in every room
+            if b.w >= 10 && b.d >= 8 {
+                let mid = b.x + b.w / 2, half = b.y + b.d / 2
+                for y in (b.y + 1)..<(half - 1) { lw.setTile(2, mid, y, wall) }
+                for y in stride(from: b.y + 1, to: half - 1, by: 2) { for x in stride(from: b.x + 2, to: b.x + b.w - 2, by: 2) where x != mid && lw.tile(2, x, y) == 0 {
+                    lw.setTile(2, x, y, thing)
+                } }
+            }
             if level + 1 < b.floors.count && b.w > 4 && b.d > 3 {
                 let st = TilePos(b.x + (level % 2 == 0 ? 2 : b.w - 3), b.y + b.d - 2)
                 lw.setTile(2, st.x, st.y, content.tid("stairs_up"))
@@ -368,7 +408,7 @@ extension Society {
         b.state = .open; b.since = world.time; b.byPlayer = byPlayer
         d.buildings.append(b)
         raiseCity(b, d)
-        if n >= 3 && def.homesPerFloor > 0 { liftFor(d.buildings.count - 1, d) }
+        if n >= 3 { liftFor(d.buildings.count - 1, d) }
         refreshServices(d)
         d.note("built: \(def.en) \(b.id) (\(n) floors)")
         return b.id
@@ -419,6 +459,9 @@ extension Society {
         let commutersIn = net.commuters.filter { $0.work == d.id && ($0.state == .atWork || $0.lastArrive > world.time - MP.daySeconds) }
         var staffing: [Int: Double] = [:]
         var pool = Double(workers)
+        // a district grown out of a town: most of the town's grown-ups (eighty at most) work there too, until it
+        // has people of its own to staff it (the power station and the waterworks come before the first homes)
+        if let tid = d.fromTown, let town = settlements[tid], !town.abandoned { pool += min(80, Double(town.members.count) * 0.8) }
         for b in d.buildings.sorted(by: { ($0.def.service != nil ? 0 : 1, $0.id) < ($1.def.service != nil ? 0 : 1, $1.id) }) where b.state == .open && b.jobs > 0 {
             let inc = Double(commutersIn.filter { $0.workB == b.id }.count)
             let fill = min(Double(b.jobs), pool + inc)
@@ -604,7 +647,12 @@ extension Society {
         guard jobsFree > 0, foodDays >= 3 || d.population == 0 && (d.store["food"] ?? 0) > 30,
               d.services["power"]!.ratio >= 0.95, d.services["water"]!.ratio >= 0.95 else { return }
         let want = min(free, jobsFree, max(5, d.population / 50))
-        guard want > 0, let c = realm.civBox else { return }
+        guard want > 0 else { return }
+        guard let c = realm.civBox else {
+            // a world without the regional layer: a district grown from a town takes settlers from beyond the map
+            if d.fromTown != nil { let placed = settle(d, want, source: "outside"); if placed > 0 { d.note("\(placed) settlers arrived") } }
+            return
+        }
         for city in c.cities.values.filter({ $0.nation == d.nation }).sorted(by: { $0.id < $1.id }) {
             let can = min(want, max(0, city.people.band(1) - 20))
             guard can > 0 else { continue }
@@ -633,6 +681,9 @@ extension Society {
     /// services can carry it, build it (paid), then let people in. A service is built first when the
     /// next building would overload one.
     func planDistrict(_ d: District) {
+        // a district that grew out of a town lays its main street before anything else (sites need a street)
+        if d.fromTown != nil, let id = d.works?["spine"], realm.transport.sites.first(where: { $0.id == id })?.finished == nil { return }
+        if d.fromTown != nil && d.works?["spine"] == nil && !(d.tried ?? []).contains("spine") { return }
         // finish what is under way
         if let bi = d.buildings.firstIndex(where: { [.planned, .clearing, .road, .waiting, .building].contains($0.state) }) {
             advanceProject(d, bi)
@@ -643,6 +694,10 @@ extension Society {
         var key: String?
         for s in ["power", "water", "sewage", "garbage", "health", "fire", "education"] {
             let st = d.services[s]!
+            // short because its building lacks staff, not capacity: another building would lack staff too
+            if d.buildings.contains(where: { $0.state == .open && $0.def.service == s && staffShare($0, d) < 0.9 }) { continue }
+            // a young town that grew out of a village: power and water first, the rest when it has 150 people
+            if d.fromTown != nil && pop < 150 && s != "power" && s != "water" { continue }
             if s == "fire" { if st.capacity < 1 && d.buildings.count >= 4 { key = "firehall"; break }; continue }
             if s == "education" && pop < 400 { continue }
             if s == "health" && pop < 300 { continue }
@@ -655,8 +710,11 @@ extension Society {
             let occupancy = d.homes > 0 ? pop / Double(d.homes) : 1
             let jobs = Double(d.jobs)
             if (d.store["food"] ?? 0) < pop * 4 && d.buildings.filter({ $0.kind == "farm" }).count < Int(pop / 300) + 1 { key = "farm" }
-            else if occupancy > 0.85 { key = d.buildings.filter({ $0.kind == "tower" }).count * 3 < d.buildings.filter({ $0.kind == "flats" }).count ? "tower" : "flats" }
-            else if jobs < pop * 0.6 { key = d.buildings.filter({ $0.kind == "shops" }).count <= d.buildings.filter({ $0.kind == "factory" }).count ? "shops" : "factory" }
+            else if occupancy > 0.85 { key = nextKind(d, ["flats", "terrace", "tower", "highrise"], pop) }
+            else if jobs < pop * 0.6 {
+                key = d.buildings.filter({ ["shops", "mall"].contains($0.kind) }).count <= d.buildings.filter({ $0.kind == "factory" }).count
+                    ? nextKind(d, ["shops", "offices", "mall", "skyscraper"], pop) : "factory"
+            }
         }
         guard let k = key, let def = CityKind.byKey[k] else { return }
         guard let site = findSite(d, w: def.w, h: def.d) else { d.note("no room for a \(def.en)"); return }
@@ -668,6 +726,19 @@ extension Society {
         b.state = .planned; b.since = world.time
         d.buildings.append(b)
         d.note("planned: \(def.en) at \(b.x),\(b.y)")
+    }
+
+    /// The next kind of a group: the ones the district is big enough for (a small one builds low, a city of
+    /// thousands builds towers), taking the one it has fewest of, so streets do not repeat one building.
+    func nextKind(_ d: District, _ group: [String], _ pop: Double) -> String {
+        // what each kind needs: people already living in the district
+        let needs: [String: Double] = ["flats": 0, "terrace": 0, "shops": 0, "offices": 300, "tower": 400, "mall": 800, "highrise": 900, "skyscraper": 1500]
+        let open = group.filter { pop >= needs[$0] ?? 0 }
+        let pool = open.isEmpty ? [group[0]] : open
+        return pool.min { a, b in
+            let na = d.buildings.filter { $0.kind == a }.count, nb = d.buildings.filter { $0.kind == b }.count
+            return na != nb ? na < nb : (group.firstIndex(of: a)! > group.firstIndex(of: b)!)
+        }!
     }
 
     func advanceProject(_ d: District, _ bi: Int) {
@@ -723,7 +794,7 @@ extension Society {
             d.buildings[bi].state = .open
             d.buildings[bi].since = world.time
             raiseCity(d.buildings[bi], d)
-            if def.storeys >= 3 && def.homesPerFloor > 0 { liftFor(bi, d) }
+            if def.storeys >= 3 { liftFor(bi, d) }
             d.note("opened: \(def.en) \(b.id)")
         case .open, .burnt: break
         }

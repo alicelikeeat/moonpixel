@@ -74,7 +74,7 @@ extension Society {
             // a bed the player (or anyone) put on a proper floor outside the villagers' own houses is housing too
             if o == bed && floors.contains(world.tile(0, x, y)) && !built.contains(t) { beds.append(t) }
             if key == "gate" || key == "gate_open" { gates.append(t) }
-            if (key == "wall_stone" || key == "wall_wood" || key == "wall_brick") && !built.contains(t) { walls.append(t) }
+            if (key == "wall_stone" || key == "wall_wood" || key == "wall_brick" || key == "wall_concrete" || key == "wall_glass") && !built.contains(t) { walls.append(t) }
         } }
         s.fixtures = f
         s.freeBeds = beds
@@ -83,7 +83,7 @@ extension Society {
         s.cityT = world.time + 60
     }
     static let counted: Set<String> = ["workbench", "furnace", "anvil", "kitchen", "chest", "crate", "bed", "stairs_down", "tower", "ballista", "throne", "market_stall",
-                                       "mill", "gate", "gate_open", "wall_stone", "wall_wood", "wall_brick", "barrel", "bookshelf", "machine", "server", "well", "fence"]
+                                       "mill", "gate", "gate_open", "wall_stone", "wall_wood", "wall_brick", "wall_concrete", "wall_glass", "barrel", "bookshelf", "machine", "server", "well", "fence"]
 
     func buildingTiles(_ s: Settlement) -> Set<TilePos> {
         var out = Set<TilePos>()

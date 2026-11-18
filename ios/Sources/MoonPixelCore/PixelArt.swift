@@ -238,6 +238,17 @@ public enum PixelArt {
             img.rect(bx, by - 6, 16, 22, c2); img.rect(bx, by - 6, 16, 8, c1.lightened(0.12))
             for y in [4, 9, 14] { img.rect(bx, by + y, 16, 1, c2.darkened(0.25)) }
             img.rect(bx, by + 15, 16, 1, c2.darkened(0.4))
+            if t.key == "wall_glass" {
+                // a curtain wall: panes and mullions, a sky glint
+                img.rect(bx, by - 6, 16, 22, c2); img.rect(bx, by - 6, 16, 8, c1.lightened(0.1))
+                for x in [0, 5, 10, 15] { img.rect(bx + x, by + 2, 1, 14, c3) }
+                for y in [2, 9, 15] { img.rect(bx, by + y, 16, 1, c3) }
+                img.rect(bx + 2, by + 4, 2, 4, c1.lightened(0.35))
+            } else if t.key == "wall_concrete" {
+                img.rect(bx, by - 6, 16, 22, c2); img.rect(bx, by - 6, 16, 8, c1)
+                img.rect(bx + 3, by + 5, 10, 6, c3); img.rect(bx + 3, by + 5, 10, 1, c3.darkened(0.3)); img.rect(bx + 8, by + 5, 1, 6, c2)
+                img.rect(bx, by + 15, 16, 1, c2.darkened(0.4))
+            }
         case "door":
             img.rect(bx + 2, by - 4, 12, 20, c2); img.rect(bx + 3, by - 3, 10, 19, c1)
             img.rect(bx + 11, by + 6, 2, 2, RGBA(hex: "#e8c84a"))

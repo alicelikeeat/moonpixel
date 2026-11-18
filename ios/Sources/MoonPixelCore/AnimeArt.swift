@@ -502,6 +502,16 @@ public enum AnimeArt {
             c.rect(bx, by - 12, 32, 15, c1.lightened(0.12), ink: 1.2, radius: 1.5)
             for y in [by + 9, by + 19] { c.rect(bx + 1, y, 30, 1, shadowed(c2, 0.3)) }
             c.rect(bx + 1, by + 5, 30, 1.6, RGBA(255, 255, 255, 60))
+            if t.key == "wall_glass" {
+                c.rect(bx, by - 12, 32, 44, c2, ink: 1.5, radius: 1.5, shade: Shade(shadow: 0.2))
+                c.rect(bx, by - 12, 32, 15, c1.lightened(0.15), ink: 1.2, radius: 1.5)
+                for x in [0.0, 10.5, 21] { c.rect(bx + x + 1, by + 4, 9, 26, c1.lightened(0.05), ink: 0.8, radius: 1) }
+                c.poly([(bx + 3, by + 26), (bx + 8, by + 6), (bx + 11, by + 6), (bx + 6, by + 26)], RGBA(255, 255, 255, 110))
+            } else if t.key == "wall_concrete" {
+                c.rect(bx + 6, by + 8, 20, 13, c3, ink: 1.1, radius: 1, shade: Shade(shadow: 0.25))
+                c.rect(bx + 15.4, by + 8, 1.2, 13, c2)
+                c.rect(bx + 8, by + 10, 4, 2, RGBA(255, 255, 255, 120))
+            }
         case "door":
             c.rect(bx + 4, by - 8, 24, 40, c2, ink: 1.5, radius: 3)
             c.rect(bx + 6, by - 6, 20, 37, c1, radius: 2, shade: Shade(shadow: 0.15))

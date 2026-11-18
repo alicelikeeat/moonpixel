@@ -495,3 +495,47 @@ extension Society {
         return out
     }
 }
+
+extension Society {
+    /// Auto-fitted lifts serve at most this many levels (a taller tower keeps its stairs above; every level a
+    /// lift serves gets a landing door, so a lift up a 400-floor tower would stamp 400 storeys).
+    public static let autoLiftLevels = 16
+
+    /// Every building of three levels or more that has no lift gets one, up its outside wall, once a day at most
+    /// one per town: a standing tower's own shaft (its floor plans have one, built with its floors) gets its car;
+    /// a town's tall house is fitted from the town's store, when it has the iron, parts and planks.
+    public func fitLifts() {
+        func served(_ x: Int, _ y: Int, _ w: Int, _ d: Int) -> Bool {
+            realm.lifts.contains { $0.x + $0.w >= x - 4 && $0.x <= x + w + 3 && $0.y + $0.d >= y - 4 && $0.y <= y + d + 3 }
+        }
+        func sides(_ x: Int, _ y: Int, _ w: Int, _ d: Int) -> [(TilePos, Int, Int)] {
+            [(TilePos(-1, 0), x + w + 1, y + d / 2 - 1), (TilePos(1, 0), x - 3, y + d / 2 - 1), (TilePos(0, -1), x + w / 2 - 1, y + d + 1), (TilePos(0, 1), x + w / 2 - 1, y - 3)]
+        }
+        var fitted = Set<Int>()
+        for t in realm.standing ?? [] where t.levels >= 3 && !fitted.contains(t.town) && !served(t.x, t.y, t.w, t.d) {
+            let levels = Array(0..<min(t.levels, Society.autoLiftLevels))
+            for (side, x, y) in sides(t.x, t.y, t.w, t.d) {
+                let plan = planLift(x: x, y: y, levels: levels, landingSide: side)
+                guard plan.ok else { continue }
+                _ = makeLift(plan, x: x, y: y, w: 2, d: 2, town: t.town, tower: t.tower)
+                fitted.insert(t.town)
+                break
+            }
+        }
+        for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned && !fitted.contains(s.id) {
+            for b in s.buildings.sorted(by: { $0.id < $1.id }) where b.done && (b.levels ?? 1) >= 3 && !served(b.x, b.y, b.w, b.h) {
+                let levels = Array(0..<min(b.levels ?? 1, Society.autoLiftLevels))
+                var done = false
+                for (side, x, y) in sides(b.x, b.y, b.w, b.h) {
+                    let plan = planLift(x: x, y: y, levels: levels, landingSide: side)
+                    guard plan.ok, Goods.take(plan.cost, from: s.holding) == nil else { continue }
+                    record(plan.cost.map { ($0.key, $0.value) }, from: s.holding.name, to: "elevator works", note: "lift for house \(b.id)")
+                    _ = makeLift(plan, x: x, y: y, w: 2, d: 2, town: s.id, tower: nil)
+                    done = true
+                    break
+                }
+                if done { fitted.insert(s.id); break }
+            }
+        }
+    }
+}

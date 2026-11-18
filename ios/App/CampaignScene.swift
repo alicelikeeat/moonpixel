@@ -29,9 +29,13 @@ extension GameScene {
     func clearPreview() { for n in previewNodes { n.removeFromParent() }; previewNodes = []; previewCells = [] }
 
     /// Drop every drawn chunk (and anyone drawn on them) when moving between the surface and the underground.
-    func resetLayer() {
-        for n in chunkNodes.values { n.removeFromParent() }
-        chunkNodes = [:]
+    /// Another layer: what was drawn of the old one goes. Between the surface and its storeys (`keepChunks`) the
+    /// chunk pictures stay on screen until each one of the new layer is baked, so the picture never goes blank.
+    func resetLayer(keepChunks: Bool = false) {
+        if !keepChunks {
+            for n in chunkNodes.values { n.removeFromParent() }
+            chunkNodes = [:]
+        }
         chunkKeys = [:]
         bakes.dropAll()
         for n in agentNodes.values { n.removeFromParent() }

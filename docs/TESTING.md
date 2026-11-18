@@ -390,6 +390,22 @@ CI 第 56 次运行（提交 `d0391c5`，GitHub 托管的 macOS 26 / iPhone 17 P
 
 见 [TRANSPORT.md 第 10 节](TRANSPORT.md#10-性能实测linux-x86_64-发布构建v27benchtests不是手机)。真机未测。
 
+## v2.8：城市自己长大、自己修交通
+
+本地 Linux x86_64 发布构建：**293 个测试，7 个跳过，0 失败**。新增 `CityGrowthTests`（5 个）：
+
+| 测试 | 内容 |
+|---|---|
+| `testTownsFoundDistrictsThatBuildTheirOwnTransportAndRunIt` | 种子 7 跑 80 天：至少两个城镇自己建了新城区，都在城镇范围之外、有居民；每个都修了主街和通往母镇的街，开了带车的公交线和带车的铁路线，居民有车；3 层以上的建筑都有电梯；每条线路的两站之间有路；每座桥都是直的。之后真实运行 3000 秒：每条线路都完成了班次，每辆私家车都开了 30 格以上，没有车卡在“无路可走” |
+| `testBiggerKindsAreChosenAsADistrictGrowsAndEachStreetVaries` | 小城区只建低层、按最少的种类轮换；1200 人建超高层、2000 人建摩天大楼 |
+| `testASkyscraperHasGlassWallsRoomsStairsAndALift` | 30 层；玻璃幕墙、混凝土转角、隔墙分房、每层楼梯、电梯停 30 层 |
+| `testStandingTowersAndTallHousesGetLiftsAndWindows` | 40 层塔楼自动装电梯（16 个停靠层），不重复安装；楼层外墙有窗 |
+| `testTownsNeverBuildOnAWayAndWaysCrossBridgesStraight` | 城镇不在街道上盖房 |
+
+`TallTowerTests` 的一处断言改为“塔楼自己的外墙材质”（塔楼现在有三种外墙）。`CityGrowthProbe` 默认跳过，设 `MP_PROBE=1` 打印每 10 天的城区状态和车辆行驶距离。
+
+**没有测过的**：洋红色和换层不再整屏重载的修复只在 App 里（不在核心测试里），要等 CI 的界面测试和真机确认；城区经济的长期平衡（几百天以上）没有跑过；新城区的私家车只在本城区的路上兜圈，不会开去别的城市；电梯在真实存档里的效果没在真机上看过。
+
 ## 未验证事项
 
 - **真机**：没有在任何真实 iPhone 上运行过。任务书要求的真机验收（连续运行、帧时间、内存、发热、卡顿、触摸手感）全部待做，不能标为通过。建议记录：机型与系统版本、运行时长、“更多 → 性能”面板的读数、是否发热降频、是否闪退。

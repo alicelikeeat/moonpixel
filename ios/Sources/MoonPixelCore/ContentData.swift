@@ -144,6 +144,8 @@ enum ContentData {
         TileDef(id: 161, key: "bridge_rail", layer: 1, solid: false, water: false, bridge: true, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "bridge", c1: "#7c7a76", c2: "#5a5650", c3: "", stage: 0, nameEn: "Rail bridge", nameZh: "铁路桥"),
         TileDef(id: 162, key: "bridge_lift", layer: 1, solid: false, water: false, bridge: true, natural: false, big: false, built: true, walk: 1.2, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "bridge", c1: "#b04a3a", c2: "#7a3428", c3: "", stage: 0, nameEn: "Opening bridge", nameZh: "开启桥"),
         TileDef(id: 163, key: "bridge_foot", layer: 1, solid: false, water: false, bridge: true, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "bridge", c1: "#b49a6a", c2: "#8a7048", c3: "", stage: 0, nameEn: "Footbridge", nameZh: "人行桥"),
+        TileDef(id: 164, key: "wall_concrete", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wall", c1: "#c8c6c0", c2: "#a4a29c", c3: "#6a7a8c", stage: 0, nameEn: "Concrete Wall", nameZh: "混凝土墙"),
+        TileDef(id: 165, key: "wall_glass", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wall", c1: "#a8d0e8", c2: "#5a8cb0", c3: "#e8eef2", stage: 0, nameEn: "Glass Curtain Wall", nameZh: "玻璃幕墙"),
     ]
 
     static let biomes: [BiomeDef] = [
