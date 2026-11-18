@@ -515,6 +515,13 @@ extension Society {
         while let c = came[key(k)] { cells.append(c); k = c }
         cells.reverse()
         plan.cells = cells
+        return finishPlan(plan)
+    }
+
+    /// The spans, tunnels, felling and cost of a plan whose tiles are chosen.
+    func finishPlan(_ p: WayPlan) -> WayPlan {
+        var plan = p
+        let kind = plan.kind, cells = plan.cells
         // spans: runs of water, and runs crossing another way (a viaduct), and rock (a tunnel)
         var run: [TilePos] = [], runKind = 0             // 1 water, 2 over a way, 3 rock
         func flush() {
@@ -554,6 +561,30 @@ extension Society {
         plan.cost = cost.filter { $0.value > 0 }
         plan.ok = true
         return plan
+    }
+
+    /// A straight way along one axis from `a` to `b`, or a refusal saying where it cannot go: every tile must
+    /// be dry land with nothing built on it (trees and rocks are felled, an existing way of the same kind is kept).
+    public func planStraightWay(_ kind: WayKind, from a: TilePos, to b: TilePos) -> WayPlan {
+        var plan = WayPlan(); plan.kind = kind
+        plan.bridgeKind = kind.mode == .rail ? .rail : (kind == .foot ? .foot : .road)
+        guard a.x == b.x || a.y == b.y else { plan.reason = "not straight"; return plan }
+        let n = max(abs(b.x - a.x), abs(b.y - a.y))
+        let dx = (b.x - a.x).signum(), dy = (b.y - a.y).signum()
+        var cells: [TilePos] = []
+        for k in 0...n {
+            let t = TilePos(a.x + dx * k, a.y + dy * k)
+            if waterDepth(t) > 0 { plan.reason = "water at \(t.x),\(t.y)"; return plan }
+            let s1 = world.tile(1, t.x, t.y)
+            if s1 != 0 && content.solid[Int(s1)] { plan.reason = "rock at \(t.x),\(t.y)"; return plan }
+            if let w = wayKind(at: t), w != kind { plan.reason = "another way at \(t.x),\(t.y)"; return plan }
+            if bridge(at: t) != nil { plan.reason = "a bridge at \(t.x),\(t.y)"; return plan }
+            if let o = content.tile(world.tile(2, t.x, t.y)), !o.natural { plan.reason = "something built at \(t.x),\(t.y)"; return plan }
+            if content.tile(world.tile(0, t.x, t.y))?.built == true && wayKind(at: t) == nil { plan.reason = "a floor at \(t.x),\(t.y)"; return plan }
+            cells.append(t)
+        }
+        plan.cells = cells
+        return finishPlan(plan)
     }
 
     public func bridgeCost(_ k: BridgeKind, deck: WayKind, tiles n: Int) -> [String: Double] {

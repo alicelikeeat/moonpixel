@@ -390,6 +390,26 @@ final class TransportDemoTests: XCTestCase {
         let r0 = car8.pos
         for _ in 0..<60 { s8.steer(c8); s8.tick(1.0 / 30) }
         XCTAssertGreaterThan(car8.speed * 7.2, 10); XCTAssertGreaterThan(car8.pos.distance(to: r0) / 16, 2)
+        // and wherever the demo is laid: several worlds, several starting places, each car drives off at once
+        for seed in [3, 7, 11] {
+            let sw = makeSociety(seed, villages: 4, per: 10)
+            for (k, town) in sw.settlements.values.sorted(by: { $0.id < $1.id }).prefix(3).enumerated() {
+                let at = sw.world.findFree(near: town.center + TilePos(k * 7, 4), maxR: 8)
+                sw.realm.player.body = Body(at: at.center, z: 0, depth: 0)
+                let dd = sw.transportDemo(near: at)
+                guard let cid = dd.car, let cv = sw.net.vehicle(cid) else { XCTFail("seed \(seed) place \(k): no car \(dd.notes)"); continue }
+                XCTAssertEqual(sw.wayKind(at: cv.tile), .street, "seed \(seed) place \(k): the car stands on its street")
+                sw.realm.player.body = Body(at: cv.world(0, 1.2), z: 0, depth: 0)
+                XCTAssertNil(sw.board(cv.id, drive: true))
+                let p0 = cv.pos
+                var cc = Controls(); cc.throttle = 1
+                for _ in 0..<60 { sw.steer(cc); sw.transportTick(1.0 / 30); sw.world.time += 1.0 / 30 }
+                XCTAssertGreaterThan(cv.speed * 7.2, 10, "seed \(seed) place \(k): \(cv.halted ?? "-") at \(cv.tile)")
+                XCTAssertGreaterThan(cv.pos.distance(to: p0) / 16, 2, "seed \(seed) place \(k)")
+                _ = sw.leaveVehicle()
+                for v in sw.net.vehicles where v.id == cv.id { v.speed = 0 }
+            }
+        }
         // the 3D models have the vehicles' own size
         for k in VehicleKind.allCases { XCTAssertFalse(Figure3D.vehicle(k).isEmpty, "\(k)") }
     }

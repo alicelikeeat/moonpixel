@@ -45,23 +45,25 @@ extension Society {
         // a street with a car and a bus
         let s0 = TilePos(o.x, o.y + 2), s1 = TilePos(o.x + 40, o.y + 2)
         if lay(.street, s0, s1) {
-            // the car on a street of its own (the bus line has the first one), at the start of its longest
-            // straight run, facing along it, and clear of the bus stop
+            // the car on a straight street of its own (the bus line has the first one), clear of everything:
+            // the first row near the demo where 24 tiles can be laid in a straight line
             let busStreet = laid
             let busStop = onWay(busStreet, .street, from: 6, towards: busStreet.count - 1) ?? busStreet[0]
             let busEnd = onWay(busStreet, .street, from: busStreet.count - 3, towards: 0) ?? busStreet[busStreet.count - 1]
-            let road = lay(.street, TilePos(o.x, o.y - 4), TilePos(o.x + 30, o.y - 4)) ? laid : busStreet
-            var best = (start: min(road == busStreet ? 12 : 1, road.count - 2), run: 0)
-            var i = road == busStreet ? min(8, road.count - 2) : 0
-            while i < road.count - 1 {
-                let dx = road[i + 1].x - road[i].x, dy = road[i + 1].y - road[i].y
-                var j = i + 1
-                while j < road.count - 1 && road[j + 1].x - road[j].x == dx && road[j + 1].y - road[j].y == dy { j += 1 }
-                let clear = !(i...j).contains { road[$0].distance2(busStop) <= 16 }
-                if clear && j - i > best.run { best = (i, j - i) }
-                i = j
+            var road: [TilePos] = []
+            search: for r in 0..<40 {
+                for (dy, dx) in [(-4 - r, 0), (4 + r, 0), (-4 - r, 8), (-4 - r, -8)] {
+                    let a = TilePos(o.x + dx, o.y + dy), b = TilePos(a.x + 24, a.y)
+                    if busStreet.contains(where: { $0.y >= a.y - 1 && $0.y <= a.y + 1 && $0.x >= a.x - 1 && $0.x <= b.x + 1 }) { continue }
+                    let plan = planStraightWay(.street, from: a, to: b)
+                    guard plan.ok, let id = startWay(plan, payer: .district(d.id), nation: nation, by: "district:\(d.id)") else { continue }
+                    finishSite(id)
+                    road = plan.cells
+                    break search
+                }
             }
-            let c = road[best.start], n = road[best.start + 1]
+            if road.isEmpty { road = busStreet; out.notes.append("car: no straight row for its own street") }
+            let c = road[min(1, road.count - 2)], n = road[min(2, road.count - 1)]
             out.car = buildVehicle(.car, at: c, heading: atan2(Double(n.y - c.y), Double(n.x - c.x)), payer: .district(d.id), nation: nation)?.id
             if let a = addStop(.busStop, at: busStop, name: "Demo Sq", nation: nation, district: d.id),
                let b = addStop(.busStop, at: busEnd, name: "Demo End", nation: nation, district: d.id),
