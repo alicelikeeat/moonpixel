@@ -373,7 +373,18 @@ CI 第 56 次运行（提交 `d0391c5`，GitHub 托管的 macOS 26 / iPhone 17 P
 
 ### 界面测试
 
-新增 `testDrivingACarFromTheTravelPanel`：从“出行”上车驾驶、看速度、自动驾驶切换、刹停、下车。结果见 CI（本节在 CI 结果出来后更新）。
+新增两个界面测试（iPhone 17 Pro 模拟器，Debug 构建；CI 第 66、67 次运行）：
+
+| 测试 | 结果 | 实测记录 |
+|---|---|---|
+| `testDrivingACarFromTheTravelPanel` | 通过（两次运行都通过） | 从“出行”上车，手动加油门开出 41 格，最高 46–59 km/h；切到自动驾驶再切回手动不跳变；刹停到 0 km/h；下车 |
+| `testBlocksUnderFeetMaterialsTimeOfDayAndAnimeStyle` | 通过（两次运行都通过） | 一键物资；脚下搭方块从地面（2.5 m）升到第 2 层（10.5 m）；跳到午夜显示 `☾ 00:00`、跳到正午显示 `☀︎`；切到动漫风格、再切回像素，游戏仍在运行 |
+
+其余 9 个界面测试在第 67 次运行全部通过，但有两个是**重试后才通过**：
+- `testMenuWorldsAndHUDButtons`：第一次失败，“清理”的提示在 1 秒内被世界消息（“Reedmere finished a house”）覆盖。这是真实的界面问题，已修复（`e560c0b`）：玩家自己操作的提示保留 4 秒，期间世界消息不覆盖（仍进入通知和纪事）。
+- `testFailedSaveBlocksLeavingAndRetryLeaves`：第一次失败、重试通过；这是 v2.5 起就有的偶发问题，本轮没有修改相关代码，原因未查明。
+
+动漫风格在模拟器上只截了图（`ui-52-anime.png`、`ui-53-anime-day.png`），**帧率没有测**；CI 用的是 Debug 构建，手绘画法在 Debug 下明显更慢。
 
 ### 性能
 
