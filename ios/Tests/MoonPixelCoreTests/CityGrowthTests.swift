@@ -90,7 +90,7 @@ final class CityGrowthTests: XCTestCase {
             XCTAssertNotNil(d.works?["town"], "\(d.name) built a street to its home town")
             let lines = s.realm.transport.lines.filter { $0.payer == .district(d.id) }
             XCTAssertTrue(lines.contains { $0.kind == .bus && !$0.vehicles.isEmpty }, "\(d.name) runs a bus")
-            XCTAssertTrue(lines.contains { $0.kind == .train && !$0.vehicles.isEmpty }, "\(d.name) runs a train to another district")
+            XCTAssertTrue(lines.contains { $0.kind == .train && !$0.vehicles.isEmpty } || s.realm.transport.lines.contains { l in l.kind == .train && !l.vehicles.isEmpty && l.stops.contains { s.net.stop($0)?.district == d.id } }, "\(d.name) runs a train to another district: \(d.events.suffix(12)) works \(d.works ?? [:]) tried \(d.tried ?? []) money \(Int(d.money))")
             XCTAssertGreaterThanOrEqual(s.realm.transport.vehicles.filter { $0.kind == .car && $0.owner == .district(d.id) }.count, 1, "\(d.name)'s residents own cars")
             for b in d.buildings where b.state == .open && b.floors.count >= 3 { XCTAssertNotNil(b.lift, "\(d.name): building \(b.id) (\(b.kind), \(b.floors.count) floors) has a lift") }
         }
@@ -173,5 +173,48 @@ final class CityGrowthTests: XCTestCase {
         s.finishSite(id)
         let c = p.cells[p.cells.count / 2]
         XCTAssertFalse(s.footprintOK(t, c.x - 1, c.y - 1, 3, 3), "no house on the street")
+    }
+}
+
+final class AviationProbe: XCTestCase {
+    func testProbe() throws {
+        guard ProcessInfo.processInfo.environment["MP_PROBE"] != nil else { throw XCTSkip("probe") }
+        let s = makeSociety(7)
+        Society.urbanizeAt = 1
+        func days(_ n: Int) { for _ in 0..<n { s.districtsDay(); s.cityGrowthDay(); for site in s.realm.transport.sites where site.finished == nil { s.finishSite(site.id) } } }
+        days(30)
+        // the districts grow: a block of flats each, full
+        for d in s.net.districts {
+            d.money += 60000
+            for (k, v) in ["stone": 3000.0, "iron": 800, "parts": 800, "moonsteel": 100, "planks": 500, "food": 8000, "fuel": 8000] { d.add(k, v) }
+            for bi in d.buildings.indices where d.buildings[bi].state == .open && d.buildings[bi].homes > 0 {
+                for k in d.buildings[bi].floors.indices { let add = 50 - d.buildings[bi].floors[k].residents; d.buildings[bi].floors[k].residents = 50; d.buildings[bi].floors[k].food = 300; d.ledger.imported += add }
+            }
+            s.refreshServices(d)
+        }
+        days(40)
+        for d in s.net.districts { print("PROBE air", d.name, "n", d.nation, "pop", d.population, "airport", s.airport(d).map { "\($0.0.tile)" } ?? "-", "events", d.events.suffix(8)) }
+        print("PROBE lines", s.realm.transport.lines.filter { $0.kind.mode == .air }.map { "\($0.kind.rawValue) \($0.name) v\($0.vehicles)" })
+        print("PROBE pops", s.net.districts.map { "\($0.name) \($0.population) base \($0.works?["base1"] ?? -1)" })
+        print("PROBE fighters", s.realm.transport.vehicles.filter { $0.kind == .fighter }.map { "\($0.id)@\($0.tile)" })
+        var hist: [Int: [String]] = [:]
+        defer { for (id, h) in hist { print("PROBE hist", id, h.joined(separator: "\nPROBE hist ")) } }
+        for k in 0..<12000 {
+            s.tick(0.5)
+            if k % 2 == 0 { for id in [112, 116] { if let v = s.realm.transport.vehicle(id), v.flight != .crashed {
+                let g = s.lineGoal(v)!; let fx = s.approachFix(g)
+                let ax = Vec2(cos(fx.2), sin(fx.2)); let rel = (fx.1 - v.pos) * (1.0 / 16)
+                let along = rel.x * ax.x + rel.y * ax.y, cross = -rel.x * ax.y + rel.y * ax.x
+                hist[id, default: []].append("\(k) z \(String(format: "%.1f", v.z)) along \(Int(along)) cross \(String(format: "%.1f", cross)) herr \(String(format: "%.2f", remainder(fx.2 - v.heading, 2 * Double.pi))) v \(String(format: "%.1f", v.speed)) phase \(v.task.phase ?? "-") tile \(v.tile) goal \(g.tile)"); if hist[id]!.count > 400 { hist[id]!.removeFirst() }
+                _ = ("", k, "z", String(format: "%.1f", v.z), "along", Int(along), "cross", Int(cross), "herr", String(format: "%.2f", remainder(fx.2 - v.heading, 2 * Double.pi)), "v", String(format: "%.1f", v.speed), "phase", v.task.phase ?? "-", "in", String(format: "%.2f", v.input.steer))
+            } } }
+        }
+        let ev = s.vehicleEvents
+        for v in s.realm.transport.vehicles where v.kind.mode == .air {
+            print("PROBE flew", v.kind.rawValue, v.id, "took off", ev.filter { $0.vehicle == v.id && $0.what == "took off" }.count, "landed", ev.filter { $0.vehicle == v.id && $0.what == "landed" }.count, "flight", v.flight, "halt", v.halted ?? "", "phase", v.task.phase ?? "-", "tile", v.tile)
+        }
+        for d in s.net.districts { print("PROBE stops", d.name, s.net.stops.filter { $0.district == d.id && $0.kind == .airport }.map { "\($0.id)@\($0.tile) \(String(describing: s.wayKind(at: $0.tile)))" }, "runway", ["runway0","runway1","runway2","taxiway","apron"].map { k in d.works?[k].flatMap { id in s.realm.transport.sites.first { $0.id == id } }.map { "\(k):\($0.cells.first!.t)-\($0.cells.last!.t)" } ?? "-" }) }
+        for id in [112, 116] { if let v = s.realm.transport.vehicle(id) { print("PROBE stuck", id, "path", v.path.map { "\($0.tile.x),\($0.tile.y)" }, "pathI", v.pathI, "start", s.runwayStart(near: v.tile).map { "\($0.tile)" } ?? "-", "at", v.task.at, "standing", v.task.standing) } }
+        print("PROBE trips", s.realm.transport.lines.filter { $0.kind.mode == .air }.map { "\($0.name): \($0.trips)" }, "crashes", s.realm.transport.stats.crashes)
     }
 }

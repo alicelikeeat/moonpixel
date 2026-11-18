@@ -39,7 +39,8 @@ extension GameScene {
                 nose.fillColor = UIColor(white: 1, alpha: 0.8); nose.strokeColor = .clear; nose.position = CGPoint(x: s.length * 8 - 3, y: 0)
                 body.addChild(nose)
                 if v.kind.mode == .air {
-                    let wing = SKShapeNode(rectOf: CGSize(width: 18, height: 80)); wing.fillColor = UIColor(white: 0.85, alpha: 1); wing.strokeColor = .clear
+                    let span: CGFloat = v.kind == .widebody ? 116 : (v.kind == .fighter ? 42 : (v.kind == .turboprop ? 64 : 80))
+                    let wing = SKShapeNode(rectOf: CGSize(width: v.kind == .fighter ? 26 : 18, height: span)); wing.fillColor = v.kind == .fighter ? UIColor(white: 0.55, alpha: 1) : UIColor(white: 0.85, alpha: 1); wing.strokeColor = .clear
                     body.addChild(wing)
                 }
                 let shadow = SKShapeNode(rectOf: CGSize(width: s.length * 16, height: max(8, (s.deckW + 0.2) * 16)), cornerRadius: 3)
@@ -68,7 +69,8 @@ extension GameScene {
         case .truck: return UIColor(red: 0.45, green: 0.5, blue: 0.6, alpha: 1)
         case .train: return UIColor(red: 0.3, green: 0.45, blue: 0.75, alpha: 1)
         case .hsr: return UIColor(white: 0.94, alpha: 1)
-        case .airliner, .cargoPlane: return UIColor(white: 0.9, alpha: 1)
+        case .airliner, .cargoPlane, .turboprop, .regionalJet, .widebody: return UIColor(white: 0.9, alpha: 1)
+        case .fighter: return UIColor(red: 0.46, green: 0.5, blue: 0.55, alpha: 1)
         case .ferry, .liner: return UIColor(white: 0.97, alpha: 1)
         case .freighter: return UIColor(red: 0.25, green: 0.3, blue: 0.4, alpha: 1)
         }

@@ -15,19 +15,25 @@ import Foundation
 
 public enum VehicleKind: String, Codable, CaseIterable {
     case car, bus, truck, train, hsr, airliner, cargoPlane, ferry, liner, freighter
+    /// Civil aircraft from small to large (the airliner is the narrow-body), and the military fighter.
+    case turboprop, regionalJet, widebody, fighter
+
+    /// The passenger aircraft, smallest first.
+    public static let civilAircraft: [VehicleKind] = [.turboprop, .regionalJet, .airliner, .widebody]
 
     public var mode: TravelMode {
         switch self {
         case .car, .bus, .truck: return .road
         case .train, .hsr: return .rail
-        case .airliner, .cargoPlane: return .air
+        case .airliner, .cargoPlane, .turboprop, .regionalJet, .widebody, .fighter: return .air
         case .ferry, .liner, .freighter: return .water
         }
     }
     public var spec: VehicleSpec { VehicleSpec.table[self]! }
     public func name(zh: Bool) -> String {
         let n: [VehicleKind: (String, String)] = [.car: ("Car", "汽车"), .bus: ("Bus", "公交车"), .truck: ("Lorry", "货车"), .train: ("Train", "列车"), .hsr: ("High-speed train", "高铁"),
-            .airliner: ("Airliner", "客机"), .cargoPlane: ("Cargo plane", "货机"), .ferry: ("Ferry", "渡轮"), .liner: ("Liner", "客轮"), .freighter: ("Freighter", "货轮")]
+            .airliner: ("Narrow-body airliner", "窄体客机"), .cargoPlane: ("Cargo plane", "货机"),
+            .turboprop: ("Turboprop", "涡桨支线客机"), .regionalJet: ("Regional jet", "支线喷气客机"), .widebody: ("Wide-body airliner", "宽体客机"), .fighter: ("Fighter", "战斗机"), .ferry: ("Ferry", "渡轮"), .liner: ("Liner", "客轮"), .freighter: ("Freighter", "货轮")]
         return zh ? n[self]!.1 : n[self]!.0
     }
 }
@@ -75,6 +81,18 @@ public struct VehicleSpec: Equatable {
         case .cargoPlane: return VehicleSpec(maxSpeed: 50, reverseMax: 1, accel: 9, brake: 10, emergency: 12, wheelbase: 1.5, maxSteer: 0.6, radius: 1.2, length: 5,
                                              seats: 4, cargo: 600, energy: .jet, tank: 3200, burn: 0.09, draft: 0, airDraft: 4, vr: 23, stall: 19, cruise: 38, deckW: 1, deckL: 4.5, deckZ: 1,
                                              build: ["iron": 60, "parts": 60, "moonsteel": 8], wearPerTile: 0.000005)
+        case .turboprop: return VehicleSpec(maxSpeed: 36, reverseMax: 1, accel: 7, brake: 9, emergency: 11, wheelbase: 1.0, maxSteer: 0.7, radius: 0.9, length: 3.5,
+                                            seats: 70, cargo: 20, energy: .jet, tank: 1200, burn: 0.04, draft: 0, airDraft: 3, vr: 15, stall: 12, cruise: 28, deckW: 0.8, deckL: 3,
+                                            deckZ: 0.8, build: ["iron": 30, "parts": 30], wearPerTile: 0.000006)
+        case .regionalJet: return VehicleSpec(maxSpeed: 48, reverseMax: 1, accel: 9, brake: 10, emergency: 12, wheelbase: 1.2, maxSteer: 0.6, radius: 1.0, length: 4,
+                                              seats: 100, cargo: 30, energy: .jet, tank: 2000, burn: 0.06, draft: 0, airDraft: 3.5, vr: 19, stall: 15, cruise: 36, deckW: 0.9, deckL: 3.5,
+                                              deckZ: 0.9, build: ["iron": 45, "parts": 45, "moonsteel": 4], wearPerTile: 0.000005)
+        case .widebody: return VehicleSpec(maxSpeed: 60, reverseMax: 1, accel: 8, brake: 10, emergency: 12, wheelbase: 2.0, maxSteer: 0.5, radius: 1.6, length: 7,
+                                           seats: 350, cargo: 150, energy: .jet, tank: 6000, burn: 0.14, draft: 0, airDraft: 5, vr: 24, stall: 19, cruise: 46, deckW: 1.4, deckL: 6.5,
+                                           deckZ: 1.2, build: ["iron": 100, "parts": 100, "moonsteel": 16], wearPerTile: 0.000004)
+        case .fighter: return VehicleSpec(maxSpeed: 80, reverseMax: 1, accel: 18, brake: 12, emergency: 14, wheelbase: 0.8, maxSteer: 0.7, radius: 0.6, length: 2.5,
+                                          seats: 1, cargo: 0, energy: .jet, tank: 1500, burn: 0.12, draft: 0, airDraft: 2, vr: 24, stall: 16, cruise: 60, deckW: 0.4, deckL: 1,
+                                          deckZ: 0.6, build: ["iron": 40, "parts": 60, "moonsteel": 10], wearPerTile: 0.000008)
         case .ferry: return VehicleSpec(maxSpeed: 5, reverseMax: 2, accel: 0.25, brake: 0.35, emergency: 0.5, wheelbase: 0, maxSteer: 1, radius: 0.6, length: 3,
                                         seats: 120, cargo: 150, energy: .bunker, tank: 600, burn: 0.03, draft: 1.5, airDraft: 2.5, vr: 0, stall: 0, cruise: 0, deckW: 1.4, deckL: 2.8, deckZ: 0.6,
                                         build: ["iron": 20, "planks": 30, "parts": 10], wearPerTile: 0.00001)
@@ -754,10 +772,12 @@ extension Society {
                 let axis = takeoffAxis(v)
                 let err = remainder(axis - v.heading, 2 * Double.pi)
                 if v.task.phase != "roll" && abs(err) > 0.12 {
-                    // line up: turn on the nose wheel at walking pace
+                    // line up: far round, stop and pivot on the main wheels where it stands (at the end of the
+                    // runway there is no room to roll round); nearly round, creep and steer the rest
                     v.task.phase = "lineup"
                     c.steer = err > 0 ? 1 : -1
-                    if v.speed < 1.2 { c.throttle = 0.3 } else { c.brake = 0.5 }
+                    if abs(err) > 0.5 { if abs(v.speed) > 0.3 { c.brake = 1 } }
+                    else if v.speed < 1.2 { c.throttle = 0.3 } else { c.brake = 0.5 }
                 } else {
                     v.task.phase = "roll"
                     c.throttle = 1; c.steer = alignSteer(v)
@@ -773,22 +793,44 @@ extension Society {
         let along = rel.x * ax.x + rel.y * ax.y               // tiles before the threshold (negative: over the runway)
         let cross = -rel.x * ax.y + rel.y * ax.x
         let headingErr = abs(remainder(axis - v.heading, 2 * Double.pi))
-        if v.task.phase != "final" && along > 6 && along < Society.approachTiles + 40 && abs(cross) < 8 && headingErr < 0.6 { v.task.phase = "final" }
-        if v.task.phase == "final" && (along < -60 || (along > 0 && abs(cross) > 14)) { v.task.phase = "air" }       // go round
+        if v.task.phase != "final" && along > 12 && along < Society.approachTiles + 40 && abs(cross) < 4 && headingErr < 0.35 { v.task.phase = "final" }
+        // go round: off the centre line on short final (it would come down beside the runway), or overshot
+        if v.task.phase == "final" && (along < -60 || (along > 0 && abs(cross) > 14) || (along < 8 && along > -2 && abs(cross) > 0.9 && v.z > 0.4)) {
+            v.task.phase = "air"; event(v, "went round")
+        }
         var aim: Vec2, targetZ: Double, targetV: Double
+        var fixed = false                                    // aiming at a fixed point (not along the line)
         if v.task.phase == "final" {
             aim = threshold - ax * (max(along - 8, -80) * 16)       // a point on the centre line ahead
             targetZ = max(0, (along + 3) * 0.08)                     // aiming at a touchdown point three tiles in
             targetV = s.stall + 4
         } else {
-            let fix = threshold - ax * (Society.approachTiles * 16)
-            let toFix = (fix - v.pos).length / 16
-            aim = toFix < 6 ? threshold : fix
-            targetZ = max(4, min(40, toFix * 0.08))
-            targetV = toFix < 40 ? s.stall + 8 : s.cruise
+            // out on the approach side (beyond the start of the approach, within reach of the line): follow the
+            // extended centre line, aiming at a point on it a little more than a turning circle nearer the
+            // runway, which brings it onto the line and along it; anywhere else: fly to the outer fix first
+            let near = (threshold - v.pos).length / 16 < 320
+            let slow = s.stall + 8
+            let lookahead = max(10, 1.3 * max(slow, v.speed) / 0.6)
+            let outer = Society.approachTiles + 2 * lookahead + 40
+            // following the line only inbound (heading within a right angle of the runway's): outbound or
+            // across it, it goes out to the outer fix first and comes round there
+            if along > Society.approachTiles * 0.8 && abs(cross) < outer && headingErr < Double.pi / 2 {
+                aim = threshold - ax * (max(along - lookahead, 6) * 16)
+                targetZ = max(3, min(40, along * 0.08))
+            } else {
+                aim = threshold - ax * (outer * 16)
+                targetZ = max(4, min(40, (aim - v.pos).length / 16 * 0.08))
+                fixed = true
+            }
+            targetV = near ? slow : s.cruise
         }
         let ang = atan2(aim.y - v.y, aim.x - v.x)
-        c.steer = max(-1, min(1, remainder(ang - v.heading, 2 * Double.pi) * 2))
+        let bearing = remainder(ang - v.heading, 2 * Double.pi)
+        c.steer = max(-1, min(1, bearing * 2))
+        // a point behind it and inside two turning circles cannot be reached by turning towards it (it would
+        // circle it for ever): fly on straight until there is room to come round
+        let radius = max(1, v.speed) / 0.6
+        if fixed && abs(bearing) > Double.pi / 2 && (aim - v.pos).length / 16 < 2.2 * radius { c.steer = 0 }
         var wantVz = max(-4, min(2.5, (targetZ - v.z) * 2.0))
         if v.task.phase == "final" && v.z < 0.6 { wantVz = max(wantVz, -1.2) }     // the flare
         if v.task.phase == "final" && along < 2 { wantVz = min(max(wantVz, -1.2), -0.9) }   // over the runway: down onto it, firmly
@@ -810,10 +852,13 @@ extension Society {
     }
 
     /// The direction along the runway with the most runway ahead of the plane.
-    func takeoffAxis(_ v: Vehicle) -> Double {
+    func takeoffAxis(_ v: Vehicle) -> Double { runwayAxis(at: v.tile) }
+
+    /// The direction along the runway with the most runway ahead of a tile.
+    public func runwayAxis(at tile: TilePos) -> Double {
         var best = (0, 0.0)
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            var n = 0, t = v.tile
+            var n = 0, t = tile
             while wayKind(at: TilePos(t.x + dx, t.y + dy)) == .runway && n < 600 { t = TilePos(t.x + dx, t.y + dy); n += 1 }
             if n > best.0 { best = (n, atan2(Double(dy), Double(dx))) }
         }
@@ -840,7 +885,13 @@ extension Society {
             while wayKind(at: TilePos(e.x + dx, e.y + dy)) == .runway && n < 400 { e = TilePos(e.x + dx, e.y + dy); n += 1 }
             if n > far.distance2(t).squareRootInt { far = e; axis = atan2(Double(dy), Double(dx)) }
         }
-        let thr = t.center
+        // the threshold is where the runway begins on the way in (behind the goal, if the goal is part way along):
+        // the whole runway is there to land on, and the plane taxis back to its stand after
+        var start = t
+        let dx = Int(cos(axis).rounded()), dy = Int(sin(axis).rounded())
+        var n = 0
+        while wayKind(at: TilePos(start.x - dx, start.y - dy)) == .runway && n < 400 { start = TilePos(start.x - dx, start.y - dy); n += 1 }
+        let thr = start.center
         let app = thr - Vec2(cos(axis), sin(axis)) * (Society.approachTiles * 16)
         return (app, thr, axis)
     }
@@ -903,11 +954,13 @@ extension Society {
 
     func farStep(_ v: Vehicle, _ dt: Double) {
         if v.replan || (v.path.isEmpty && (v.task.goal != nil || v.task.line != nil)) { plan(v) }
-        guard v.pathI < v.path.count, v.halted != "broken down" else { v.speed = 0; return }
         if v.kind.mode == .air {
-            // far planes are moved by the same physics, but in bigger steps (they have the whole sky)
-            physics(v, dt); return
+            // far planes are flown by the same autopilot and physics (lining up, the roll and the whole flight
+            // need no ground path, so they are never held for want of one)
+            if v.halted != "broken down" && (v.task.goal != nil || v.task.line != nil || v.flight == .air) { physics(v, dt) } else { v.speed = 0 }
+            return
         }
+        guard v.pathI < v.path.count, v.halted != "broken down" else { v.speed = 0; return }
         if v.kind.mode == .rail, let d = signalAhead(v), d < 1 { v.speed = 0; v.halted = "red signal"; return }
         // the speed it would hold here: the way's limit, slowed by traffic on the tile
         let n = v.path[v.pathI]

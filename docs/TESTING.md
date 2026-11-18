@@ -390,6 +390,23 @@ CI 第 56 次运行（提交 `d0391c5`，GitHub 托管的 macOS 26 / iPhone 17 P
 
 见 [TRANSPORT.md 第 10 节](TRANSPORT.md#10-性能实测linux-x86_64-发布构建v27benchtests不是手机)。真机未测。
 
+## v2.9：AI 自建机场与空军，和平合作
+
+本地 Linux 发布构建：**300 个测试，8 个跳过，0 失败**。新增 `AviationDiplomacyTests`（6 个）：
+
+| 测试 | 内容 |
+|---|---|
+| `testDistrictsBuildAirportsAndFlyRoutesAtHomeAndAbroad` | 种子 7：每个新城区都建了机场，停机位在跑道两端；至少两条客运航线、至少一条国际航线；之后真实运行 6000 秒：每条航线至少 3 个往返、每条航线都有飞机、**没有一架飞机坠毁** |
+| `testTheAircraftFitTheRoute` | 机型按距离和人口选择；座位和起飞速度随机型递增；战斗机最快 |
+| `testTheBiggestDistrictBuildsAnAirbaseAndItsFightersPatrol` | 本国人口最多的城区建军用机场（不设民航站）、至少 2 架战斗机、不跑航线；4000 秒内每架都起飞并降落、无坠毁 |
+| `testNationsOfLikeStrengthKeepThePeaceAndCooperate` | 种子 7 跑 6 年：没有战争，签了合作协定 |
+| `testWarOnlyAgainstAFarWeakerNation` | 实力相当不能宣战；3 倍以上可以；弱国不能向强国宣战 |
+| `testCooperatingNationsFeedEachOthersHungryTowns` | 粮食从合作国送到缺粮城镇，总量不变，送出方留够自己的 |
+
+**改了期望的旧测试**（它们测的是“战争循环”这套机制本身，现在显式用旧规则跑）：`RealmTests.testThreeKingdomsCycleAndHysteresis`、`CityWarTests.testCitiesGrowLandmarksKindsAndOneCapitalEach` 设 `warGap = 0`；`CivTests.testLongRunsKeepTheBooksAndMakeHistory` 设 `warGap = 1.3, peaceWarmth = 0`。`CityGrowthTests` 的“通火车”改为“有火车线路停靠本城区的车站”（两城区之间的铁路是一条线，由其中一个修建）。
+
+**没有测过的**：新机型的 3D 外形只在 CI 编译、没在真机上看过；战斗机只做起降巡逻，不参与战斗；航线票价和货运对城区经济的长期影响没有跑过；在真实存档里国家多年和平后的人口和经济走势没有验证。
+
 ## v2.8：城市自己长大、自己修交通
 
 本地 Linux x86_64 发布构建：**293 个测试，7 个跳过，0 失败**。新增 `CityGrowthTests`（5 个）：

@@ -7,6 +7,7 @@ final class CityWarTests: XCTestCase {
 
     func testCitiesGrowLandmarksKindsAndOneCapitalEach() {
         let s = makeSociety(7)
+        s.realm.cfg.warGap = 0                  // strongholds come of wars: the old rule, wars between equals
         s.grantTech(3)
         runYears(s, 7)
         var kinds: [String: Int] = [:], marks: [String: Int] = [:]

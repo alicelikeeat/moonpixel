@@ -196,6 +196,13 @@ extension Society {
                 if v.spec.energy.good != nil && v.fuel < v.spec.tank * 0.5 { refuel(v) }
             }
             guard let ns = tr.stop(l.stops[next]), borderOpen(v.nation, ns.nation) else { v.halted = "border closed"; continue }
+            // an aircraft leaves only with fuel for twice the flight and a reserve (a holding pattern is long)
+            if v.kind.mode == .air {
+                let need = Double(abs(st.x - ns.x) + abs(st.y - ns.y)) * v.spec.burn * 2 + v.spec.tank * 0.25
+                if v.fuel < need { refuel(v) }
+                if v.fuel < need { v.halted = "waiting for fuel"; continue }
+                if v.halted == "waiting for fuel" { v.halted = nil }
+            }
             if v.halted?.hasPrefix("line suspended") == true || v.halted == "border closed" { v.halted = nil }
             v.task.standing = false
             v.task.at = next; v.task.dir = dir

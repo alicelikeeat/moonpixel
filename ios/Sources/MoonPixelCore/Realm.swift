@@ -61,6 +61,11 @@ public struct RealmConfig: Codable, Equatable {
     // --- balance of power
     public var dominance = 0.5, dominanceRelease = 0.42
     public var pactWar = 2.0               // allies declare on the strong nation this much more readily
+    /// A nation starts a war only against one this many times weaker (by people and soldiers): otherwise it
+    /// keeps the peace, whatever its pressure or grudges. Nations at peace warm to each other (`coopRate` a
+    /// year); from `coopTrust` on they cooperate: open trade, and food for each other's hungry towns.
+    public var warGap = 3.0
+    public var coopRate = 0.2, coopTrust = 0.5
     public var ambition = 0.5              // yearly chance that a dominant nation presses on, whatever its pressure
     public var governFood = 0.6            // food per occupied resident per year
     public var strongUnrest = 1.5, strongSupply = 0.85
@@ -307,6 +312,7 @@ extension Society {
         "unified": ("%@ united the land. An age of unity begins", "%@ 统一了天下，统一时代开始"),
         "split": ("The united realm broke apart: %@ stand again", "统一王朝分裂：%@ 各自独立"),
         "revived": ("%@ rose again at %@", "%@ 在 %@ 复国"), "submitted": ("%@ submitted to %@", "%@ 归附于 %@"),
+        "cooperation": ("%@ and %@ signed a cooperation agreement: open trade and mutual aid", "%@ 与 %@ 签署合作协定：开放贸易、互相援助"), "aid": ("%@ sent food to hungry %@", "%@ 向缺粮的 %@ 运送粮食援助"),
         "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
         "harvest_good": ("Bumper harvest in %@", "%@ 喜获丰收"), "harvest_bad": ("Poor harvest in %@", "%@ 遭遇歉收"),
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
@@ -729,10 +735,42 @@ extension Society {
         muster(a, against: b)
     }
 
+    /// Nations at peace grow closer; once they trust each other they sign a cooperation agreement (trade and
+    /// mutual aid), and a hungry town is sent food by its friend's best-fed town (moved, not made: the giver
+    /// has as much less). War, grudges and claims still pull relations down as before.
+    func cooperate(_ dty: Double) {
+        let cfg = realm.cfg, now = world.time
+        for r in realm.relations.indices where realm.relations[r].state == 0 {
+            let was = realm.relations[r].value
+            realm.relations[r].value = min(1, was + cfg.coopRate * dty)
+            if was < cfg.coopTrust && realm.relations[r].value >= cfg.coopTrust, let a = realm.nation(realm.relations[r].a), let b = realm.nation(realm.relations[r].b) {
+                emit("cooperation", [a.name(zh: zh), b.name(zh: zh)], towns(of: a.id).first?.center.center ?? .zero, nations: [a.id, b.id], cause: "peace", result: "cooperation")
+            }
+        }
+        for r in realm.relations where r.state == 0 && r.value >= cfg.coopTrust {
+            for (x, y) in [(r.a, r.b), (r.b, r.a)] {
+                func perHead(_ s: Settlement) -> Double { s.food / Double(max(1, s.members.count)) }
+                guard let hungry = towns(of: x).filter({ perHead($0) < 2 }).min(by: { perHead($0) != perHead($1) ? perHead($0) < perHead($1) : $0.id < $1.id }),
+                      let giver = towns(of: y).max(by: { perHead($0) != perHead($1) ? perHead($0) < perHead($1) : $0.id > $1.id }),
+                      perHead(giver) > 10 else { continue }
+                let need = Double(hungry.members.count) * 4 - hungry.food
+                let n = min(need, (giver.food - Double(giver.members.count) * 10) * 0.2) * min(1, dty * 24)
+                guard n >= 1 else { continue }
+                giver.food -= n; hungry.food += n
+                if now >= (realm.cool["aid-\(x)"] ?? 0) {
+                    realm.cool["aid-\(x)"] = now + MP.year / 4
+                    emit("aid", [giver.name(zh: zh), hungry.name(zh: zh)], hungry.center.center)
+                }
+            }
+        }
+    }
+
     func canDeclare(_ a: Int, on b: Int) -> Bool {
         let cfg = realm.cfg
         guard let r = realm.relation(a, b), r.state == 0, world.time - r.since >= cfg.peaceCooldown * MP.year,
               let na = realm.nation(a), let nb = realm.nation(b), na.exileSince == nil, nb.exileSince == nil else { return false }
+        // only on a nation far weaker: between nations of like strength there is no war, only cooperation
+        guard power(na) >= cfg.warGap * max(1, power(nb)) else { return false }
         return na.fatigue < cfg.fatigueDeclareMax && na.soldiers >= cfg.minAttack + 1
     }
 
@@ -754,6 +792,7 @@ extension Society {
         let landed = realm.nations.filter { $0.exileSince == nil && ($0.status ?? 0) != 2 }
         // nations with towns side by side have met
         for a in landed { for b in landed where b.id > a.id { realm.meet(a.id, b.id, at: now) } }
+        cooperate(dty)
         if landed.count >= 3, let strong = landed.max(by: { power($0) < power($1) }) {
             let share = powerShare(strong.id)
             // the two strongest of the rest lean on each other (however many nations there are)
@@ -1264,6 +1303,9 @@ extension RealmConfig {
         warPressure = try c.decodeIfPresent(Double.self, forKey: .warPressure) ?? warPressure
         warPressureFull = try c.decodeIfPresent(Double.self, forKey: .warPressureFull) ?? warPressureFull
         warChance = try c.decodeIfPresent(Double.self, forKey: .warChance) ?? warChance
+        warGap = try c.decodeIfPresent(Double.self, forKey: .warGap) ?? warGap
+        coopRate = try c.decodeIfPresent(Double.self, forKey: .coopRate) ?? coopRate
+        coopTrust = try c.decodeIfPresent(Double.self, forKey: .coopTrust) ?? coopTrust
         minWar = try c.decodeIfPresent(Double.self, forKey: .minWar) ?? minWar
         minTruce = try c.decodeIfPresent(Double.self, forKey: .minTruce) ?? minTruce
         peaceCooldown = try c.decodeIfPresent(Double.self, forKey: .peaceCooldown) ?? peaceCooldown

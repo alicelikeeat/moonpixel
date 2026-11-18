@@ -782,14 +782,41 @@ public enum Figure3D {
             m.box(-hl + 0.1, 0.95, -hw - 0.01, hl - 1, 1.25, hw + 0.01, glass, faces: .all)
             m.box(-hl, 0.25, -hw - 0.02, hl - 1, 0.4, hw + 0.02, livery, faces: .all)        // the stripe
             m.box(-hl, 0, -hw + 0.1, hl, 0.25, hw - 0.1, dark, faces: .all)
-        case .airliner, .cargoPlane:
-            m.box(-hl, 0.6, -0.45, hl - 0.6, 1.5, 0.45, k == .airliner ? white : steel, faces: .all)
-            m.box(hl - 0.6, 0.7, -0.35, hl, 1.35, 0.35, k == .airliner ? white : steel, faces: .all)
-            m.box(hl - 0.55, 1.15, -0.3, hl - 0.2, 1.35, 0.3, glass, faces: .all)
-            m.box(-0.6, 0.85, -2.5, 0.6, 1.0, 2.5, steel, faces: .all)                      // the wings
-            m.box(-hl, 1.5, -0.08, -hl + 0.7, 2.6, 0.08, livery, faces: .all)              // the fin
-            m.box(-hl, 1.3, -0.9, -hl + 0.5, 1.4, 0.9, steel, faces: .all)
-            for z in [Float(-1.2), 1.2] { m.box(-0.2, 0.55, z - 0.2, 0.6, 0.85, z + 0.2, dark, faces: .all) }   // engines
+        case .fighter:
+            // a grey dart: a slim fuselage, a delta wing, two fins, the canopy, one engine at the tail
+            let grey = RGBA(118, 126, 136)
+            m.box(-hl, 0.5, -0.22, hl - 0.4, 0.9, 0.22, grey, faces: .all)
+            m.box(hl - 0.4, 0.55, -0.14, hl, 0.8, 0.14, grey, faces: .all)
+            m.box(hl - 1.0, 0.85, -0.13, hl - 0.45, 1.05, 0.13, glass, faces: .all)
+            m.box(-hl + 0.3, 0.62, -1.3, 0.2, 0.72, 1.3, grey, faces: .all)                  // the wing
+            m.box(-hl + 0.2, 0.62, -0.6, -hl + 0.7, 0.68, 0.6, grey, faces: .all)            // tailplane
+            for z in [Float(-0.3), 0.3] { m.box(-hl, 0.9, z - 0.04, -hl + 0.5, 1.6, z + 0.04, livery, faces: .all) }
+            m.box(-hl - 0.15, 0.55, -0.16, -hl, 0.85, 0.16, dark, faces: .all)
+            m.box(hl - 0.6, 0, -0.05, hl - 0.45, 0.5, 0.05, dark, faces: .all); for z in [Float(-0.35), 0.35] { m.box(-0.4, 0, z - 0.05, -0.2, 0.5, z + 0.05, dark, faces: .all) }
+        case .airliner, .cargoPlane, .turboprop, .regionalJet, .widebody:
+            // one shape, sized by the type: span and fuselage from its length; a wide-body has four engines,
+            // a turboprop propellers on a high wing, a regional jet its engines at the tail
+            let span: Float = k == .widebody ? 3.6 : (k == .turboprop ? 2.0 : (k == .regionalJet ? 2.1 : 2.5))
+            let fh: Float = k == .widebody ? 1.2 : (k == .turboprop ? 0.7 : 0.9), fw: Float = k == .widebody ? 0.65 : (k == .turboprop ? 0.35 : 0.45)
+            let body = k == .cargoPlane ? steel : white
+            m.box(-hl, 0.6, -fw, hl - 0.6, 0.6 + fh, fw, body, faces: .all)
+            m.box(hl - 0.6, 0.7, -fw * 0.75, hl, 0.6 + fh * 0.85, fw * 0.75, body, faces: .all)
+            m.box(hl - 0.55, 0.6 + fh * 0.6, -fw * 0.65, hl - 0.2, 0.6 + fh * 0.85, fw * 0.65, glass, faces: .all)
+            let wingY: Float = k == .turboprop ? 0.6 + fh : 0.85
+            m.box(-0.6, wingY, -span, 0.6, wingY + 0.15, span, steel, faces: .all)                  // the wings
+            m.box(-hl, 0.6 + fh, -0.08, -hl + 0.7, 1.7 + fh, 0.08, livery, faces: .all)              // the fin
+            m.box(-hl, 0.4 + fh, -0.9, -hl + 0.5, 0.5 + fh, 0.9, steel, faces: .all)
+            m.box(-hl + 0.2, 0.62, -fw - 0.01, hl - 0.8, 0.75, fw + 0.01, livery, faces: .all)       // the cheat line
+            switch k {
+            case .turboprop:
+                for z in [Float(-1.0), 1.0] { m.box(0.2, wingY - 0.2, z - 0.15, 0.8, wingY + 0.05, z + 0.15, dark, faces: .all); m.box(0.8, wingY - 0.45, z - 0.04, 0.85, wingY + 0.3, z + 0.04, dark, faces: .all) }
+            case .regionalJet:
+                for z in [Float(-0.55), 0.55] { m.box(-hl + 0.5, 0.6 + fh * 0.6, z - 0.15, -hl + 1.2, 0.6 + fh * 0.95, z + 0.15, dark, faces: .all) }
+            case .widebody:
+                for z in [Float(-1.2), -2.4, 1.2, 2.4] { m.box(-0.2, 0.5, z - 0.25, 0.7, 0.85, z + 0.25, dark, faces: .all) }
+            default:
+                for z in [Float(-1.2), 1.2] { m.box(-0.2, 0.55, z - 0.2, 0.6, 0.85, z + 0.2, dark, faces: .all) }
+            }
             m.box(hl - 0.8, 0, -0.08, hl - 0.6, 0.6, 0.08, dark, faces: .all); m.box(-0.3, 0, -0.5, 0, 0.6, -0.3, dark, faces: .all); m.box(-0.3, 0, 0.3, 0, 0.6, 0.5, dark, faces: .all)
         case .ferry, .liner, .freighter:
             m.box(-hl, -0.5, -hw, hl - 0.4, 0.6, hw, k == .freighter ? RGBA(60, 70, 90) : white, faces: .all)

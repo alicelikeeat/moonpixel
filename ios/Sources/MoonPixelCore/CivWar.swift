@@ -636,7 +636,12 @@ extension Civ {
             guard let q = polities[o], q.status == .active else { continue }
             // an old quarrel or deep resentment can start a war without hunger, if it looks winnable
             let grudge = r.value < -0.5 || (r.claim && r.value < -0.3)
-            if r.state == 0 && (pressed || grudge) && r.value < -0.1 && p.power > q.power * 1.3 && p.treasury > 0 && p.fatigue < 0.5 && p.power > 5 {
+            // peace warms: a tenth a year, up to a firm friendship (a war or an old claim cools it again)
+            if r.state == 0 && !r.claim, let k = relations.keys.first(where: { relations[$0]!.a == r.a && relations[$0]!.b == r.b }) {
+                relations[k]!.value = min(0.8, relations[k]!.value + (cfg.peaceWarmth ?? 0.1) / yearDays)
+            }
+            // only against a far weaker polity (three times by default): between equals, no war
+            if r.state == 0 && (pressed || grudge) && r.value < -0.1 && p.power > q.power * (cfg.warGap ?? 3) && p.treasury > 0 && p.fatigue < 0.5 && p.power > 5 {
                 if rng.unit() < cfg.warChance / yearDays { declare(id, on: o) }
             }
             if r.state == 1 && (p.fatigue > 0.8 || p.power < q.power * 0.5) && (time - r.since) / MP.daySeconds > 4 { makePeace(id, o) }

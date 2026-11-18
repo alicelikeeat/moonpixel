@@ -58,6 +58,7 @@ final class RealmTests: XCTestCase {
         let dt = 2.0
         for seed in [7, 3, 6, 11] {
             s = makeSociety(seed)
+            s.realm.cfg.warGap = 0              // the old rule: wars between nations of any strength (this test is about the war cycle)
             changes = [[], [], []]; sawUnity = false; keys = []
             var last = s.realm.relations.map { $0.state }
             s.onEvent = { k, _, _ in keys.insert(k) }

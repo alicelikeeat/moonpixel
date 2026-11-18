@@ -311,6 +311,7 @@ final class CivTests: XCTestCase {
         var events: [String: Int] = [:]
         for seed in [3, 8, 21] {
             let c = Civ(seed: seed)
+            c.cfg.warGap = 1.3; c.cfg.peaceWarmth = 0     // the old rules: war on a neighbour a third weaker, no warming at peace
             c.discover(around: TilePos(0, 0), radius: 8, gen: Generator(seed: seed))
             for d in 1...400 {
                 c.advance(to: Double(d) * day)

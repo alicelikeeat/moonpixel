@@ -782,6 +782,12 @@ extension Society {
             }
             d.buildings[bi].state = .building
         case .building:
+            // a way laid across the site since it was planned: the building is given up (never raised over it)
+            if (b.y..<(b.y + b.d)).contains(where: { y in (b.x..<(b.x + b.w)).contains { x in wayKind(at: TilePos(x, y)) != nil } }) {
+                d.buildings.remove(at: bi)
+                d.note("gave up building \(b.id): a way runs across its site")
+                return
+            }
             var cost = def.goods.mapValues { $0 * Double(def.storeys) }
             cost = cost.filter { $0.value > 0 }
             guard d.money >= def.money else { d.note("not enough money for building \(b.id)"); return }

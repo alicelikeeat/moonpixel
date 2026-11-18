@@ -50,6 +50,10 @@ public struct CivConfig: Codable, Equatable {
     public var federateRelation = 0.85, federateYears = 3.0
     public var submitFatigue = 0.7
     public var warPressure = 0.35, warChance = 0.25           // per year at full pressure, after weighing what war costs
+    /// War only on a polity this many times weaker (nil in older saves: 3). Relations at peace warm a little each year.
+    public var warGap: Double? = nil
+    /// How much relations at peace warm in a year (nil in older saves: 0.1).
+    public var peaceWarmth: Double? = nil
     public var policyDelayDays = 1.0
     // --- research and industry
     public var researchPerResearcher = 0.12, diffusion = 0.4, capturedKnowledge = 0.3, capturedCap = 0.6
