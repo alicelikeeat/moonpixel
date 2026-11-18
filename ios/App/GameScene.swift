@@ -359,7 +359,9 @@ final class GameScene: SKScene {
                 ? ([0] + Array(max(1, world.storey - 3)..<world.storey)).map { model.society.layer($0 == 0 ? 0 : OpenWorld.storeyBase + $0).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)).layers } : nil
             bakeWork.async { [weak self] in
                 let t0 = CACurrentMediaTime()
-                let cg = (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).styledCG
+                let cg = Bitmap.animeStyle
+                    ? (below.map { AnimeArt.bakeStorey(layers: snap.layers, below: $0) } ?? AnimeArt.bakeChunk(layers: snap.layers)).cgImage
+                    : (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).cgImage
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.baked(key, cg, took) }
             }
@@ -418,7 +420,10 @@ final class GameScene: SKScene {
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
         let key = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(dir)\(frame)\(held)\(child)\(female)"
         if let t = texCache[key] { return t }
-        let t = PixelArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).texture
+        // the anime look is drawn by hand in code (twice the pixels), not converted from the pixel sprite
+        let t = Bitmap.animeStyle
+            ? (AnimeArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).cgImage.map { Bitmap.skTexture($0) } ?? SKTexture())
+            : PixelArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).texture
         texCache[key] = t
         return t
     }

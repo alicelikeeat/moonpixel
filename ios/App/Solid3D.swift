@@ -389,7 +389,7 @@ final class SolidRenderer {
                 // the ground picture only depends on the two flat layers: when they are the same, the old texture stays
                 var hash: UInt64 = 1469598103934665603
                 for l in 0..<2 { for v in input.layers[l] { hash = (hash ^ UInt64(v)) &* 1099511628211 } }
-                let cg = hash == oldHash ? nil : PixelArt.bakeGround(layers: input.layers).styledCG
+                let cg = hash == oldHash ? nil : (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers) : PixelArt.bakeGround(layers: input.layers)).cgImage
                 let sh = Mesher3D.structureHash(input.layers), eh = Mesher3D.edgeHash(input.layers)
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.built(key, mesh, cg, hash, took, structHash: sh, edgeHash: eh) }
@@ -491,7 +491,7 @@ final class SolidRenderer {
                 let gen = w.gen
                 work.async { [weak self] in
                     let mesh = Mesher3D.build(input, gen: gen)
-                    let cg = PixelArt.bakeGround(layers: input.layers).styledCG
+                    let cg = (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers) : PixelArt.bakeGround(layers: input.layers)).cgImage
                     DispatchQueue.main.async { self?.layerBuilt(lk, mesh, cg, rev) }
                 }
             } }
