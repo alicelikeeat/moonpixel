@@ -14,6 +14,8 @@ public struct Mesh3D {
     public var normals: [SIMD3<Float>] = []
     public var uvs: [SIMD2<Float>] = []
     public var indices: [UInt32] = []
+    /// Anime look: two flat tones (lit tops, shadowed sides) instead of six graded ones, like 2D cel shading.
+    public var cel = false
     public init() {}
     public var isEmpty: Bool { indices.isEmpty }
     public var triangles: Int { indices.count / 3 }
@@ -43,7 +45,7 @@ public struct Mesh3D {
     }
 
     mutating func flat(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>, _ color: RGBA, shade: Double) {
-        let t = Palette3D.uv(color.darkened(shade))
+        let t = Palette3D.uv(cel ? Mesh3D.celColor(color, shade: shade) : color.darkened(shade))
         quad(a, b, c, d, normal: n, uv: (t, t, t, t))
     }
 
@@ -61,6 +63,45 @@ public struct Mesh3D {
     mutating func px(_ o: SIMD3<Float>, _ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA, scale: Float = 1, faces: Faces = .noBottom) {
         let k = scale / 16
         box(o.x + x * k, o.y + y * k, o.z + z * k, o.x + (x + w) * k, o.y + (y + h) * k, o.z + (z + d) * k, c, faces: faces)
+    }
+
+    /// A face colour in the anime look: lit faces a touch brighter, faces turned from the sun one shadow
+    /// tone (the far sides a deeper one), the shadow cooled towards blue as a cel painter does.
+    public static func celColor(_ c: RGBA, shade: Double) -> RGBA {
+        if shade <= 0.001 { return c.lightened(0.06) }
+        let k = shade < 0.3 ? 0.16 : 0.3
+        let d = c.darkened(k)
+        return RGBA(UInt8(Double(d.r) * 0.92), UInt8(Double(d.g) * 0.95), UInt8(min(255, Double(d.b) * 1.04 + 6)), c.a)
+    }
+
+    /// The ink colour of outlines (the same dark plum the 2D anime art draws its lines in).
+    public static let ink = RGBA(46, 34, 52)
+
+    /// Ink outlines by the inverted hull: every quad gets a shell a hair outside it, a little larger and facing
+    /// inwards, in ink. With back faces culled, only the shells behind an object show, round its silhouette
+    /// and along its edges: a drawn line about `width` tiles wide. (Every quad of the mesh is four vertices.)
+    public func inked(width: Float = 0.035) -> Mesh3D {
+        var out = self
+        let uv = Palette3D.uv(Mesh3D.ink)
+        var q = 0
+        while q + 3 < positions.count {
+            let p = [positions[q], positions[q + 1], positions[q + 2], positions[q + 3]]
+            let n = normals[q]
+            let centre = (p[0] + p[1] + p[2] + p[3]) * 0.25
+            var shell: [SIMD3<Float>] = []
+            for v in p {
+                // out along the normal, and out from the face's centre within its plane
+                var r = v - centre
+                r -= n * ((r * n).sum())
+                let len = ((r * r).sum()).squareRoot()
+                let grow = len > 1e-6 ? r / len * width * 1.4 : SIMD3<Float>(0, 0, 0)
+                shell.append(v + n * width + grow)
+            }
+            // wound the other way round, facing in
+            out.quad(shell[3], shell[2], shell[1], shell[0], normal: -n, uv: (uv, uv, uv, uv))
+            q += 4
+        }
+        return out
     }
 
     /// Lowest and highest corner (zero when empty).
@@ -209,6 +250,9 @@ public struct ChunkMesh3D {
     public var ground = Mesh3D()
     /// Everything that stands up: terrain steps, walls, trees, furniture. Coloured through `Palette3D`.
     public var solid = Mesh3D()
+    /// Anime look: plants, rocks and the like as the 2D anime pictures, on two crossed upright quads each
+    /// (paper cut-outs seen from any side), textured from `AnimeArt.atlas` (transparent where nothing is drawn).
+    public var sprites = Mesh3D()
     /// Top of the ground of every tile of the chunk (32 x 32).
     public var heights = [Float](repeating: 0, count: MP.chunkArea)
 }
@@ -255,8 +299,42 @@ public enum Mesher3D {
     /// Height marking air on a storey (no floor there).
     public static let air: Float = -1000
 
-    public static func build(_ input: ChunkInput3D, gen: Generator) -> ChunkMesh3D {
+    /// What becomes a cut-out picture in the anime look (the rest keeps its solid shape, cel-shaded and inked).
+    public static let spriteKinds: Set<String> = ["tree", "pine", "deadtree", "cactus", "bush", "berrybush", "sapling", "crop", "flower",
+                                                   "tuft", "mushroom", "rock", "ore", "scarecrow", "leaves"]
+
+    /// Two crossed quads standing on `o` showing atlas cell `id` (the picture's foot on the ground, its cell
+    /// two tiles wide and tall like the anime atlas draws a standing thing), turned a little by `salt`.
+    /// How much bigger than its atlas cell (two tiles) a cut-out stands: trees tower over people as in 3D.
+    public static func spriteScale(_ kind: String) -> Float {
+        switch kind {
+        case "tree", "pine", "deadtree": return 1.8
+        case "bush", "berrybush", "cactus", "scarecrow": return 1.25
+        default: return 1
+        }
+    }
+
+    static func addSprite(_ m: inout Mesh3D, id: Int, at o: SIMD3<Float>, salt: Int, scale k: Float = 1) {
+        let cells = 16.0 as Float
+        let u0 = Float(id % 16) / cells, u1 = Float(id % 16 + 1) / cells
+        let r0 = Float(id / 16) / cells, r1 = Float(id / 16 + 1) / cells
+        func v(_ r: Float) -> Float { flipV ? 1 - r : r }
+        let c = SIMD3<Float>(o.x + 0.5, o.y, o.z + 0.5)
+        let a = Float(salt % 8) * .pi / 32 + .pi / 4
+        for side in 0..<2 {
+            let ang = a + Float(side) * .pi / 2
+            let d = SIMD3<Float>(cos(ang), 0, sin(ang)) * k      // half width k tiles: the cell is 2 tiles wide
+            let n = SIMD3<Float>(-sin(ang), 0, cos(ang))
+            let bl = c - d, br = c + d, tl = bl + SIMD3<Float>(0, 2 * k, 0), tr = br + SIMD3<Float>(0, 2 * k, 0)
+            // both sides are drawn (a cut-out is seen from behind too)
+            m.quad(bl, br, tr, tl, normal: n, uv: ([u0, v(r1)], [u1, v(r1)], [u1, v(r0)], [u0, v(r0)]))
+            m.quad(br, bl, tl, tr, normal: -n, uv: ([u1, v(r1)], [u0, v(r1)], [u0, v(r0)], [u1, v(r0)]))
+        }
+    }
+
+    public static func build(_ input: ChunkInput3D, gen: Generator, anime: Bool = false) -> ChunkMesh3D {
         var out = ChunkMesh3D()
+        out.solid.cel = anime
         let g = input.layers[0], st = input.layers[1], ob = input.layers[2], de = input.layers[3]
         let storey = input.depth >= OpenWorld.storeyBase ? input.depth - OpenWorld.storeyBase : 0
         let bx = input.cx * 32, by = input.cy * 32
@@ -358,10 +436,15 @@ public enum Mesher3D {
             }
             for id in [de[i], ob[i]] where id != 0 && blockHeight[Int(id)] == 0 {
                 guard let t = Content.shared.tiles[Int(id)] else { continue }
+                if anime && spriteKinds.contains(t.artKind) {
+                    addSprite(&out.sprites, id: Int(id), at: o, salt: Int(MP.h2(7, bx + tx, by + ty) & 0xff), scale: spriteScale(t.artKind))
+                    continue
+                }
                 let n = family(tx, ty - 1), s = family(tx, ty + 1), e = family(tx + 1, ty), w = family(tx - 1, ty)
                 TileShapes.add(t, to: &out.solid, at: o, colors: colors[Int(id)], joins: (n, s, e, w), salt: Int(MP.h2(7, bx + tx, by + ty) & 0xff))
             }
         } }
+        if anime { out.solid = out.solid.inked() }
         return out
     }
 }

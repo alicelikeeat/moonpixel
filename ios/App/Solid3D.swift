@@ -72,6 +72,13 @@ final class SolidRenderer {
     // materials: everything but the ground tops shares one palette texture
     private var palette: TextureResource?
     private var solidMaterial = UnlitMaterial()
+    /// The anime look: plants and rocks as the 2D pictures (the anime atlas), cut out where nothing is drawn.
+    private var spriteMaterial = UnlitMaterial()
+    private var atlasTexture: TextureResource?
+    /// Characters as cards with their 2D anime drawing: textures and models by drawing (and light).
+    private var cardTextures: [String: TextureResource] = [:]
+    private var cardModels: [String: ModelComponent] = [:]
+    private var cardMeshes: [Bool: MeshResource] = [:]
     private var light: Float = -1
     private var lightColor = UIColor.white
 
@@ -95,6 +102,9 @@ final class SolidRenderer {
         if let cg = Palette3D.bitmap.gradedCG {
             palette = try? TextureResource.generate(from: cg, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none))
         }
+        // the anime atlas (the same pictures the 2D view draws), only in the anime look
+        atlasTexture = Bitmap.animeStyle ? AnimeArt.atlas.cgImage.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)) } : nil
+        cardTextures = [:]; cardModels = [:]
         light = -1
     }
 
@@ -173,9 +183,12 @@ final class SolidRenderer {
     }
 
     /// A cached model of a flat-coloured mesh (figures, roofs, markers).
-    private func model3D(key: String, _ make: () -> Mesh3D) -> ModelComponent? {
+    private func model3D(key k: String, _ make: () -> Mesh3D) -> ModelComponent? {
+        // the anime look draws every model with an ink outline (cached apart from the plain one)
+        let anime = Bitmap.animeStyle
+        let key = anime ? "ink:" + k : k
         if let r = meshes.get(key) { return ModelComponent(mesh: r, materials: [solidMaterial]) }
-        let m = make()
+        let m = anime ? make().inked(width: 0.025) : make()
         guard let r = resource(m) else { return nil }
         meshes.put(key, r, bytes: m.positions.count * 32 + m.indices.count * 4 + 256)
         return ModelComponent(mesh: r, materials: [solidMaterial])
@@ -189,6 +202,16 @@ final class SolidRenderer {
             return MaterialParameters.Texture(t, sampler: MaterialParameters.Texture.Sampler(d))
         }
         return MaterialParameters.Texture(t)
+    }
+
+    /// A picture cut out along its drawing (transparent pixels are not drawn at all), smoothly sampled,
+    /// tinted by the light like everything else.
+    private func cutout(_ t: TextureResource?) -> UnlitMaterial {
+        var m = UnlitMaterial()
+        if let t = t { m.color = UnlitMaterial.BaseColor(tint: lightColor, texture: MaterialParameters.Texture(t)) } else { m.color = UnlitMaterial.BaseColor(tint: .clear) }
+        m.blending = .transparent(opacity: .init(scale: 1))
+        m.opacityThreshold = 0.5
+        return m
     }
 
     private func material(_ t: TextureResource?) -> UnlitMaterial {
@@ -205,22 +228,25 @@ final class SolidRenderer {
         let c = night + (SIMD3<Float>(1, 1, 1) - night) * l
         lightColor = UIColor(red: CGFloat(c.x), green: CGFloat(c.y), blue: CGFloat(c.z), alpha: 1)
         solidMaterial = material(palette)
+        spriteMaterial = cutout(atlasTexture)
+        cardModels = [:]                                         // their tint follows the light
         view.environment.background = .color(sky)
         for e in chunks.values { e.entity.model?.materials = materials(for: e) }
         func paint(_ e: Entity) {
             // chunks and the other layers have a ground picture and a palette part each: they are redone below
-            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.model != nil { m.model?.materials = [solidMaterial] }
+            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.name != "card", m.model != nil { m.model?.materials = [solidMaterial] }
             for c in e.children { paint(c) }
         }
         for c in root.children where c.name != "chunk" && c.name != "layer" { paint(c) }
-        for (lk, l) in layerChunks where l.entity.model != nil { l.entity.model?.materials = layerMaterials(lk, ground: l.ground, solid: l.solid) }
-        for e in pool { e.model?.materials = [solidMaterial] }
+        for (lk, l) in layerChunks where l.entity.model != nil { l.entity.model?.materials = layerMaterials(lk, ground: l.ground, sprites: l.sprites) }
+        for e in pool where e.name != "card" { e.model?.materials = [solidMaterial] }
     }
 
     private func materials(for e: ChunkEntry) -> [any RealityKit.Material] {
         // the floor you stand on, when it is a storey, is see-through too: what is below shows
         let ground = (model?.depth ?? 0) >= OpenWorld.storeyBase ? floorMaterial(e.ground) : material(e.ground)
-        return (e.entity.model?.materials.count ?? 2) > 1 ? [ground, solidMaterial] : [ground]
+        let n = e.entity.model?.materials.count ?? 2
+        return n >= 3 ? [ground, solidMaterial, spriteMaterial] : (n > 1 ? [ground, solidMaterial] : [ground])
     }
 
     /// A storey's floor: see-through by the setting (its sides and its edges stay solid, so it reads as a slab).
@@ -405,9 +431,10 @@ final class SolidRenderer {
             let input = ChunkInput3D(world: world, cx: MP.keyCX(key.chunk), cy: MP.keyCY(key.chunk))
             let gen = world.gen
             let oldHash = had?.groundHash
+            let anime = Bitmap.animeStyle
             work.async { [weak self] in
                 let t0 = CACurrentMediaTime()
-                let mesh = Mesher3D.build(input, gen: gen)
+                let mesh = Mesher3D.build(input, gen: gen, anime: anime)
                 // the ground picture only depends on the two flat layers: when they are the same, the old texture stays
                 var hash: UInt64 = 1469598103934665603
                 for l in 0..<2 { for v in input.layers[l] { hash = (hash ^ UInt64(v)) &* 1099511628211 } }
@@ -444,6 +471,7 @@ final class SolidRenderer {
         guard let tex = made ?? (old?.groundHash == groundHash ? old?.ground : nil) else { return }
         var parts = [descriptor(mesh.ground, material: 0)]
         if !mesh.solid.isEmpty { parts.append(descriptor(mesh.solid, material: 1)) }
+        if !mesh.sprites.isEmpty { parts.append(descriptor(mesh.sprites, material: 2)) }
         guard let res = try? MeshResource.generate(from: parts) else { return }
         let entity = old?.entity ?? {
             let e = ModelEntity()
@@ -462,7 +490,8 @@ final class SolidRenderer {
         if let old = old, old.edgeHash != edgeHash {
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { let n = MP.chunkKey(cx + dx, cy + dy); if chunks[n] != nil { forced.insert(n) } }
         }
-        entity.model = ModelComponent(mesh: res, materials: mesh.solid.isEmpty ? [material(tex)] : [material(tex), solidMaterial])
+        entity.model = ModelComponent(mesh: res, materials: !mesh.sprites.isEmpty ? [material(tex), solidMaterial, spriteMaterial]
+                                      : (mesh.solid.isEmpty ? [material(tex)] : [material(tex), solidMaterial]))
         // imported pictures placed in the world stand upright and turn to the camera
         for p in world.chunk(cx, cy).props {
             guard let t = model.assets[String(p.key.dropFirst(6))], let e = sprite(t) else { continue }
@@ -477,7 +506,7 @@ final class SolidRenderer {
     // MARK: the other layers of the stack (storeys above, or the ground under the storey you are on)
 
     private struct LayerChunk: Hashable { let depth: Int, chunk: Int64 }
-    private var layerChunks: [LayerChunk: (entity: ModelEntity, revision: Int, ground: TextureResource?, solid: Bool)] = [:]
+    private var layerChunks: [LayerChunk: (entity: ModelEntity, revision: Int, ground: TextureResource?, sprites: Bool)] = [:]
     private var layerWaiting: Set<LayerChunk> = []
 
     /// Every built storey is drawn at its height, together with the ground, wherever you stand (not underground):
@@ -511,8 +540,9 @@ final class SolidRenderer {
                 layerWaiting.insert(lk)
                 let input = ChunkInput3D(world: w, cx: cx, cy: cy)
                 let gen = w.gen
+                let anime = Bitmap.animeStyle
                 work.async { [weak self] in
-                    let mesh = Mesher3D.build(input, gen: gen)
+                    let mesh = Mesher3D.build(input, gen: gen, anime: anime)
                     let cg = (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers) : PixelArt.bakeGround(layers: input.layers)).cgImage
                     DispatchQueue.main.async { self?.layerBuilt(lk, mesh, cg, rev) }
                 }
@@ -525,9 +555,11 @@ final class SolidRenderer {
         layerWaiting.remove(lk)
         guard let model = model, model.render3D, model.depth != 1 else { return }
         let tex = cg.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)) }
+        // parts at fixed places: the ground picture 0, the palette 1, the cut-outs 2 (a missing one's place is held)
         var parts: [MeshDescriptor] = []
         if !mesh.ground.isEmpty && tex != nil { parts.append(descriptor(mesh.ground, material: 0)) }
-        if !mesh.solid.isEmpty { parts.append(descriptor(mesh.solid, material: parts.isEmpty ? 0 : 1)) }
+        if !mesh.solid.isEmpty { parts.append(descriptor(mesh.solid, material: 1)) }
+        if !mesh.sprites.isEmpty { parts.append(descriptor(mesh.sprites, material: 2)) }
         let entity = layerChunks[lk]?.entity ?? {
             let e = ModelEntity()
             e.name = "layer"
@@ -537,16 +569,17 @@ final class SolidRenderer {
         }()
         if parts.isEmpty { entity.model = nil }
         else if let res = try? MeshResource.generate(from: parts) {
-            entity.model = ModelComponent(mesh: res, materials: layerMaterials(lk, ground: mesh.ground.isEmpty ? nil : tex, solid: !mesh.solid.isEmpty))
+            entity.model = ModelComponent(mesh: res, materials: layerMaterials(lk, ground: mesh.ground.isEmpty ? nil : tex, sprites: !mesh.sprites.isEmpty))
         }
-        layerChunks[lk] = (entity, rev, mesh.ground.isEmpty ? nil : tex, !mesh.solid.isEmpty)
+        layerChunks[lk] = (entity, rev, mesh.ground.isEmpty ? nil : tex, !mesh.sprites.isEmpty)
     }
 
     /// One material per part of a layer's mesh, in the same order (a part without its material is drawn magenta).
-    private func layerMaterials(_ lk: LayerChunk, ground: TextureResource?, solid: Bool) -> [any RealityKit.Material] {
+    private func layerMaterials(_ lk: LayerChunk, ground: TextureResource?, sprites: Bool) -> [any RealityKit.Material] {
         var mats: [any RealityKit.Material] = []
-        if let t = ground { mats.append(lk.depth >= OpenWorld.storeyBase ? floorMaterial(t) : material(t)) }
-        if solid { mats.append(solidMaterial) }
+        if let t = ground { mats.append(lk.depth >= OpenWorld.storeyBase ? floorMaterial(t) : material(t)) } else { mats.append(solidMaterial) }
+        mats.append(solidMaterial)
+        if sprites { mats.append(spriteMaterial) }
         return mats
     }
 
@@ -576,6 +609,7 @@ final class SolidRenderer {
 
     private func take() -> ModelEntity {
         let e = pool.popLast() ?? ModelEntity()
+        e.name = ""
         e.isEnabled = true
         e.scale = [1, 1, 1]
         e.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])      // a pooled entity may have been a turned figure
@@ -593,6 +627,44 @@ final class SolidRenderer {
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
         let key = "h\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(frame)\(held)\(child)\(female)"
         return model3D(key: key) { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }
+    }
+
+    /// A person in the current look: a cel-shaded figure, or (anime) the 2D anime drawing on a card turned to
+    /// the camera, the drawing the camera would see (face, back or side, mirrored to the left).
+    private func dress(_ e: ModelEntity, _ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int, facing f: Vec2, lying: Bool = false) {
+        guard Bitmap.animeStyle else {
+            e.name = ""
+            e.model = human(look, moving: moving, acting: acting, held: held, child: child, female: female, phase: phase)
+            turn(e, facing: f, lying: lying)
+            return
+        }
+        let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
+        let view = AnimeArt.cardView(facing: f, toward: Vec2(Double(-sin(yaw)), Double(-cos(yaw))), right: Vec2(Double(cos(yaw)), Double(-sin(yaw))))
+        let drawing = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(view.dir)\(frame)\(held)\(child)\(female)"
+        let key = drawing + (view.mirrored ? "m" : "") + "\(Int(light * 20))"
+        if cardModels[key] == nil {
+            if cardTextures[drawing] == nil {
+                if cardTextures.count > 600 { cardTextures = [:]; cardModels = [:] }
+                let pic = AnimeArt.character(look, dir: view.dir, frame: frame, held: held, child: child, female: female)
+                cardTextures[drawing] = pic.cgImage.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)) }
+            }
+            let mesh = cardMeshes[view.mirrored] ?? {
+                let r = try? MeshResource.generate(from: [descriptor(AnimeArt.cardMesh(height: child ? 1.4 : 1.9, mirrored: view.mirrored), material: 0)])
+                if let r = r, !child { cardMeshes[view.mirrored] = r }
+                return r
+            }()
+            if let m = mesh, let t = cardTextures[drawing] { cardModels[key] = ModelComponent(mesh: m, materials: [cutout(t)]) }
+        }
+        e.name = "card"
+        e.model = cardModels[key]
+        let q = simd_quatf(angle: yaw, axis: [0, 1, 0])
+        e.orientation = lying ? q * simd_quatf(angle: -.pi / 2, axis: [1, 0, 0]) : q
+    }
+
+    /// A rider drawn on a card turns to the camera; the horse under it keeps to the way it goes.
+    private func keepHorseHeading(_ e: ModelEntity, facing f: Vec2) {
+        guard let h = e.children.first(where: { $0.name == "horse" }) else { return }
+        h.orientation = e.name == "card" ? e.orientation.inverse * simd_quatf(angle: Float(atan2(f.x, f.y)), axis: [0, 1, 0]) : simd_quatf(angle: 0, axis: [0, 1, 0])
     }
 
     private func turn(_ e: Entity, facing f: Vec2, lying: Bool = false) {
@@ -633,10 +705,10 @@ final class SolidRenderer {
             var held = st == "elder" ? "cane" : (GameScene.jobTool[a.job] ?? "")
             if working && a.task?.act == "build" { held = "hammer" }
             if a.legion != nil { held = ["sword", "bow", "sword", "hammer", "basket"][min(4, a.unit ?? 0)] }
-            e.model = human(look, moving: a.moving && !a.sleeping, acting: working, held: held, child: st == "child", female: a.female, phase: phase + a.id)
+            dress(e, look, moving: a.moving && !a.sleeping, acting: working, held: held, child: st == "child", female: a.female, phase: phase + a.id, facing: a.facing, lying: a.sleeping)
             let rides = a.legion != nil && a.unit == MoonPixelCore.Unit.cavalry
             mount(e, rides: rides, phase: phase + a.id, moving: a.moving)
-            turn(e, facing: a.facing, lying: a.sleeping)
+            keepHorseHeading(e, facing: a.facing)
             settle(e, at: place(upstairs.at[a.id] ?? a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
         }
         for (id, e) in agents where !seen.contains(id) { give(e); agents[id] = nil }
@@ -644,8 +716,7 @@ final class SolidRenderer {
 
         // the traveller
         let held = GameModel.weapons[model.weaponIndex]
-        player.model = human(model.playerLook, moving: scene.moving, acting: scene.striking, held: held, child: false, female: false, phase: phase)
-        turn(player, facing: scene.facing)
+        dress(player, model.playerLook, moving: scene.moving, acting: scene.striking, held: held, child: false, female: false, phase: phase, facing: scene.facing)
         let feetAt = place(scene.player, world)
         let bodyZ = society.realm.player.body.map { Float($0.z) } ?? feetAt.y
         settle(player, at: SIMD3(feetAt.x, bodyZ, feetAt.z), dt: dt, fresh: abs(player.position.x - Float(scene.player.x / 16)) > 6 || abs(player.position.y - bodyZ) > 1.5)
@@ -676,10 +747,10 @@ final class SolidRenderer {
                     else if lg.state == 2, (lg.phase ?? 0) >= 1, let t = society.settlements[lg.target] { fighting = a.pos.distance(to: t.center.center) < 220 }
                 }
                 let held = ["sword", "bow", "sword", "hammer", "basket"][min(4, a.unit ?? 0)]
-                e.model = human(a.look, moving: a.moving, acting: fighting, held: held, child: false, female: a.female, phase: phase + a.id)
+                dress(e, a.look, moving: a.moving, acting: fighting, held: held, child: false, female: a.female, phase: phase + a.id, facing: a.facing)
                 let rides = detail == .near && a.unit == MoonPixelCore.Unit.cavalry
                 mount(e, rides: rides, phase: phase + a.id, moving: a.moving)
-                turn(e, facing: a.facing)
+                keepHorseHeading(e, facing: a.facing)
                 settle(e, at: place(a.pos, world, lift: rides ? Figure3D.saddleHeight : 0), dt: dt, fresh: fresh)
             }
         }

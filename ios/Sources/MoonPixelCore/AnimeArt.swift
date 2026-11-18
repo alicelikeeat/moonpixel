@@ -653,3 +653,35 @@ public enum AnimeArt {
         return img
     }
 }
+
+// MARK: - the anime look in 3D
+
+extension AnimeArt {
+    /// Which drawing of a character a camera sees, and whether it is mirrored: `facing` is where the person
+    /// looks on the ground (x east, y south), `toward` the camera's forward direction on the ground and `right`
+    /// the screen's right on the ground. Facing the camera: the front ("down"); away: the back ("up"); across
+    /// the screen: the side drawing (drawn facing right), mirrored when walking to the left.
+    public static func cardView(facing f: Vec2, toward fwd: Vec2, right: Vec2) -> (dir: String, mirrored: Bool) {
+        let fl = max(1e-9, (f.x * f.x + f.y * f.y).squareRoot())
+        let fx = f.x / fl, fy = f.y / fl
+        let towardCamera = -(fx * fwd.x + fy * fwd.y)            // 1: looking straight at the camera
+        let across = fx * right.x + fy * right.y                   // 1: walking to the screen's right
+        if towardCamera > 0.707 { return ("down", false) }
+        if towardCamera < -0.707 { return ("up", false) }
+        return ("side", across < 0)
+    }
+
+    /// The upright card a character is drawn on in 3D: `height` tiles tall, as wide as the picture's proportion,
+    /// its foot at the origin, facing +z (the renderer turns it to the camera). Mirrored: u runs right to left.
+    public static func cardMesh(height: Float = 1.9, mirrored: Bool = false) -> Mesh3D {
+        var m = Mesh3D()
+        let w = height * Float(charW) / Float(charH), hw = w / 2
+        // the drawing's feet are a few pixels above its bottom edge: the card sinks by as much
+        let sink = height * 2 / Float(charH)
+        let (u0, u1): (Float, Float) = mirrored ? (1, 0) : (0, 1)
+        let vb: Float = Mesher3D.flipV ? 0 : 1, vt: Float = Mesher3D.flipV ? 1 : 0
+        m.quad([-hw, -sink, 0], [hw, -sink, 0], [hw, height - sink, 0], [-hw, height - sink, 0], normal: [0, 0, 1],
+               uv: ([u0, vb], [u1, vb], [u1, vt], [u0, vt]))
+        return m
+    }
+}
