@@ -103,6 +103,11 @@ struct DriveHUD: View {
                      icon: "arrow.uturn.backward", id: "drive-reverse") { model.driveInput.reverse.toggle() }
             }
             VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    step("minus", L("减油门", "Less throttle"), id: "drive-throttle-down") { model.driveInput.throttle = max(0, model.driveInput.throttle - 0.25) }
+                    Text(String(format: "%.0f%%", model.driveInput.throttle * 100)).font(.system(size: 11, weight: .bold, design: .rounded)).monospacedDigit().frame(width: 40)
+                    step("plus", L("加油门", "More throttle"), id: "drive-throttle-up") { model.driveInput.throttle = min(1, model.driveInput.throttle + 0.25); model.driveInput.brake = 0 }
+                }
                 Text(d.kind.mode == .rail ? L("牵引", "Traction") : L("油门", "Throttle")).font(.system(size: 10, design: .rounded))
                 Slider(value: Binding(get: { model.driveInput.throttle }, set: { model.driveInput.throttle = $0; if $0 > 0 { model.driveInput.brake = 0 } }), in: 0...1)
                     .frame(width: 150).accessibilityIdentifier("drive-throttle")
@@ -121,6 +126,12 @@ struct DriveHUD: View {
             .gesture(DragGesture(minimumDistance: 0).onChanged { _ in set(true) }.onEnded { _ in set(false) })
             .accessibilityElement().accessibilityIdentifier(id).accessibilityLabel(label).accessibilityAddTraits(.isButton)
             .accessibilityAction { set(true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { set(false) } }
+    }
+
+    private func step(_ icon: String, _ label: String, id: String, _ act: @escaping () -> Void) -> some View {
+        Button(action: act) { Image(systemName: icon).font(.system(size: 16, weight: .bold)).frame(width: 38, height: 34) }
+            .buttonStyle(PressStyle()).glass(Capsule())
+            .accessibilityIdentifier(id).accessibilityLabel(label)
     }
 
     private func pill(_ title: String, icon: String, id: String, _ act: @escaping () -> Void) -> some View {

@@ -447,26 +447,36 @@ final class MoonPixelUITests: XCTestCase {
         drive.tap(); sleep(1)
         let speed = app.staticTexts["drive-speed"]
         guard speed.waitForExistence(timeout: 5) else { return XCTFail("no driving display") }
-        let slider = app.sliders["drive-throttle"]
-        XCTAssertTrue(slider.exists, "the throttle")
-        slider.adjust(toNormalizedSliderPosition: 0.9)
+        let state = app.staticTexts["drive-state"]
+        /// Wait until the vehicle itself reports `want` (its controls arrive on the next frames).
+        func until(_ want: String, _ seconds: Double = 6) -> Bool {
+            let end = Date().addingTimeInterval(seconds)
+            while Date() < end { if state.label.contains(want) { return true }; usleep(200_000) }
+            return false
+        }
+        XCTAssertTrue(app.sliders["drive-throttle"].exists, "the throttle")
+        guard app.buttons["drive-throttle-up"].waitForExistence(timeout: 5) else { return XCTFail("no throttle buttons") }
+        for _ in 0..<4 { app.buttons["drive-throttle-up"].tap() }
+        XCTAssertTrue(until("in 1.00/0.00"), "the throttle reached the car: \(state.label)")
         sleep(2)
         let moving = speed.label
-        print("UITEST drive: \(moving) | \(app.staticTexts["drive-state"].label) | toast \(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "-")")
-        XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving)")
+        print("UITEST drive: \(moving) | \(state.label)")
+        XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving) | \(state.label)")
         shot("41-driving")
         // the autopilot takes over (no destination: it holds), then back to the driver
-        app.buttons["drive-auto"].tap(); sleep(3)
-        print("UITEST drive auto: \(app.staticTexts["drive-state"].label)")
+        app.buttons["drive-auto"].tap()
+        XCTAssertTrue(until("ctl auto"), "the autopilot has it: \(state.label)")
+        print("UITEST drive auto: \(state.label)")
         shot("42-autopilot")
-        app.buttons["drive-auto"].tap(); sleep(2)
-        print("UITEST drive manual again: \(app.staticTexts["drive-state"].label)")
-        XCTAssertTrue(slider.waitForExistence(timeout: 5), "the controls are back once the driver has them again")
-        if slider.exists { slider.adjust(toNormalizedSliderPosition: 0) }
+        app.buttons["drive-auto"].tap()
+        XCTAssertTrue(until("ctl manual"), "back to the driver: \(state.label)")
+        print("UITEST drive manual again: \(state.label)")
+        guard app.buttons["drive-throttle-down"].waitForExistence(timeout: 5) else { return XCTFail("the controls did not come back") }
+        for _ in 0..<4 { app.buttons["drive-throttle-down"].tap() }
         app.descendants(matching: .any)["drive-brake"].firstMatch.press(forDuration: 4)
-        sleep(1)
-        print("UITEST drive stopped: \(speed.label)")
-        XCTAssertEqual(speed.label, "0 km/h", "it stopped")
+        let stopped = until(" v 0.00 ", 8)
+        print("UITEST drive stopped: \(speed.label) | \(state.label)")
+        XCTAssertTrue(stopped, "it stopped: \(state.label)")
         guard app.buttons["drive-exit"].waitForExistence(timeout: 5) else { return XCTFail("no way out when stopped") }
         app.buttons["drive-exit"].tap(); sleep(1)
         XCTAssertFalse(app.staticTexts["drive-speed"].exists, "out of the car, the driving display is gone")

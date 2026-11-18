@@ -114,7 +114,7 @@ final class GameModel: ObservableObject {
     /// What the driving or passenger display shows (nil when not in a vehicle).
     @Published var drive: DriveState?
     /// The controls the traveller holds (sent to the vehicle every frame while driving).
-    var driveInput = Controls()
+    @Published var driveInput = Controls()
     /// From the driver's seat (first person) or from behind (third person).
     @Published var cockpit = true
     @Published var showTravel = false { didSet { if showTravel { inputReset += 1; refreshTravel() } } }
