@@ -143,6 +143,15 @@ final class GameModel: ObservableObject {
             scene?.restyle()
         }
     }
+    /// How people are drawn in the anime look (soft moe figures, or hero proportions); kept between sessions.
+    @Published var figureStyle: AnimeArt.Figure = AnimeArt.Figure(rawValue: UserDefaults.standard.string(forKey: "figureStyle") ?? "") ?? .moe {
+        didSet {
+            UserDefaults.standard.set(figureStyle.rawValue, forKey: "figureStyle")
+            AnimeArt.figure = figureStyle
+            styleEpoch += 1
+            scene?.restyle()
+        }
+    }
     /// Bumped when the art style changes (the 3D view rebuilds its textures).
     var styleEpoch = 0
     /// "☀ 14:05" / "☾ 23:40": the time of day, shown on the HUD.
@@ -317,6 +326,7 @@ final class GameModel: ObservableObject {
         // the saved art style applies before anything is drawn (--anime / --pixel choose it for this run)
         // (--anime / --pixel choose it for this run only, without changing the saved setting; UI tests start in pixel art)
         Bitmap.animeStyle = args.contains("--anime") || (!(args.contains("--pixel") || args.contains("--autostart")) && artStyle == .anime)
+        AnimeArt.figure = args.contains("--hero") ? .hero : figureStyle
         if args.contains("--3d") { render3D = true } else if args.contains("--2d") || args.contains("--autostart") { render3D = false }
         if args.contains("--autostart") && !args.contains("--first-person") { viewMode = .third }
         if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)); swarmFixed = true }

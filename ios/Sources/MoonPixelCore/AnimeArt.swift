@@ -13,6 +13,8 @@ import Foundation
 /// A small painting surface: shapes are filled at three times the resolution and averaged down, so every
 /// edge is smooth. Coordinates are in output pixels (floating point).
 public struct Canvas {
+    /// The colour of ink lines (nil: the dark plum ink). Soft styles ink each part in a deeper tone of its own colour.
+    public var inkColor: RGBA?
     public let w: Int, h: Int
     static let ss = 3
     var sub: [UInt32]                 // RGBA8 per sub-pixel, 0 = empty
@@ -50,7 +52,7 @@ public struct Canvas {
     public mutating func ellipse(_ cx: Double, _ cy: Double, _ rx: Double, _ ry: Double, _ c: RGBA, ink: Double = 0, shade: Shade? = nil) {
         if ink > 0 {
             let ex = rx + ink, ey = ry + ink
-            paint(cx - ex, cy - ey, cx + ex, cy + ey, inside: { x, y in let u = (x - cx) / ex, v = (y - cy) / ey; return u * u + v * v <= 1 }, color: { _, _ in AnimeArt.ink })
+            paint(cx - ex, cy - ey, cx + ex, cy + ey, inside: { x, y in let u = (x - cx) / ex, v = (y - cy) / ey; return u * u + v * v <= 1 }, color: { [ic = inkColor ?? AnimeArt.ink] _, _ in ic })
         }
         paint(cx - rx, cy - ry, cx + rx, cy + ry, inside: { x, y in let u = (x - cx) / rx, v = (y - cy) / ry; return u * u + v * v <= 1 },
               color: { x, y in shade.map { $0.color(c, x: (x - cx) / rx, y: (y - cy) / ry) } ?? c })
@@ -64,7 +66,7 @@ public struct Canvas {
             let qx = px < x0 + r ? x0 + r : (px > x1 - r ? x1 - r : px), qy = py < y0 + r ? y0 + r : (py > y1 - r ? y1 - r : py)
             return (px - qx) * (px - qx) + (py - qy) * (py - qy) <= r * r
         }
-        if ink > 0 { paint(x - ink, y - ink, x + rw + ink, y + rh + ink, inside: { inRound($0, $1, ink) }, color: { _, _ in AnimeArt.ink }) }
+        if ink > 0 { paint(x - ink, y - ink, x + rw + ink, y + rh + ink, inside: { inRound($0, $1, ink) }, color: { [ic = inkColor ?? AnimeArt.ink] _, _ in ic }) }
         paint(x, y, x + rw, y + rh, inside: { inRound($0, $1, 0) }, color: { px, py in shade.map { $0.color(c, x: (px - x) / rw * 2 - 1, y: (py - y) / rh * 2 - 1) } ?? c })
     }
 
@@ -88,7 +90,7 @@ public struct Canvas {
                 return (p.0 + dx / l * ink, p.1 + dy / l * ink)
             }
             let b = bounds(grown)
-            paint(b.0, b.1, b.2, b.3, inside: { inside(grown, $0, $1) }, color: { _, _ in AnimeArt.ink })
+            paint(b.0, b.1, b.2, b.3, inside: { inside(grown, $0, $1) }, color: { [ic = inkColor ?? AnimeArt.ink] _, _ in ic })
         }
         let b = bounds(pts), sw = max(1e-6, b.2 - b.0), sh = max(1e-6, b.3 - b.1)
         paint(b.0, b.1, b.2, b.3, inside: { inside(pts, $0, $1) }, color: { x, y in shade.map { $0.color(c, x: (x - b.0) / sw * 2 - 1, y: (y - b.1) / sh * 2 - 1) } ?? c })
@@ -104,7 +106,7 @@ public struct Canvas {
         }
         let r = width / 2, e = r + ink
         let bx0 = min(x0, x1) - e, by0 = min(y0, y1) - e, bx1 = max(x0, x1) + e, by1 = max(y0, y1) + e
-        if ink > 0 { paint(bx0, by0, bx1, by1, inside: { dist($0, $1) <= e }, color: { _, _ in AnimeArt.ink }) }
+        if ink > 0 { paint(bx0, by0, bx1, by1, inside: { dist($0, $1) <= e }, color: { [ic = inkColor ?? AnimeArt.ink] _, _ in ic }) }
         paint(bx0, by0, bx1, by1, inside: { dist($0, $1) <= r }, color: { _, _ in c })
     }
 
@@ -180,8 +182,9 @@ public enum AnimeArt {
     /// An anime chibi figure on a 64 x 80 canvas (feet at y 76): the same look, directions and frames as the
     /// pixel figure (dir "down" | "up" | "side"; frame 0 stand, 1 and 2 walk, 3 acting), painted.
     public static func character(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
-        // the anime look draws people in the hero proportions (the chibi figure stays available as `chibi`)
-        hero(look, dir: dir, frame: frame, held: held, child: child, female: female)
+        // by the setting: the soft moe figure or the hero figure (the first chibi figure stays as `chibi`)
+        figure == .hero ? hero(look, dir: dir, frame: frame, held: held, child: child, female: female)
+                        : moe(look, dir: dir, frame: frame, held: held, child: child, female: female)
     }
 
     /// The round-headed chibi figure (the first anime look).
@@ -1132,5 +1135,229 @@ extension AnimeArt {
         default:
             heldItem(&c, kind, x, y, k * 0.85)
         }
+    }
+}
+
+// MARK: - the moe look (soft, glossy, coloured line art)
+
+extension AnimeArt {
+    /// How people are drawn in the anime look: the soft moe figure (large glossy eyes, flowing hair, frills and
+    /// ornaments, coloured line art) or the hero figure (modern JRPG proportions). A setting of the game.
+    public enum Figure: String, Codable, CaseIterable { case moe, hero }
+    nonisolated(unsafe) public static var figure: Figure = .moe
+
+    /// The soft moe figure on the 64 x 80 canvas (feet at y 76): a large head; big glossy eyes with a gradient
+    /// iris, a ring of light, three catchlights and a sparkle, double lashes and blush lines; hair in many fine
+    /// locks with strand lines, a broken ring of gloss, long side locks and an ahoge; by the person's style a
+    /// frilled flower headband, twin tails with ribbons, small horns or a flower clip; puffed sleeves, a bow or
+    /// a choker, a frilled hem, long gloves; soft gradient light; every line in a deeper tone of its own colour.
+    public static func moe(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
+        var c = Canvas(charW, charH)
+        let skin = pastel(RGBA(hex: look.skin)).lightened(0.04), hair = pastel(RGBA(hex: look.hair)).lightened(0.06)
+        let cloth = pastel(RGBA(hex: look.shirt)), pants = pastel(RGBA(hex: look.pants)), shoes = pastel(RGBA(hex: look.shoes))
+        let white = RGBA(250, 250, 255), frill = RGBA(244, 246, 255)
+        let hairInk = shadowed(hair, 0.5).darkened(0.15), skinInk = RGBA(176, 112, 104), clothInk = shadowed(cloth, 0.55)
+        let iris = irisColor(hair).lightened(0.05)
+        let style = look.style % 4
+        let walk = frame == 1 ? 1.0 : (frame == 2 ? -1.0 : 0)
+        let bob = frame == 1 || frame == 2 ? -1.2 : 0
+        let act = frame == 3
+        let k: Double = child ? 0.84 : 1
+        let cx = 32.0, foot = 76.0
+        func X(_ v: Double) -> Double { cx + v * k }
+        func Y(_ v: Double) -> Double { foot - (76 - v) * k + (v < 62 ? bob : 0) }
+        let side = dir == "side", back = dir == "up"
+        let long = female || style == 2
+        c.ellipse(X(0), foot - 1, 12 * k, 2.8 * k, RGBA(0, 0, 0, 55))
+
+        // the hair behind: long and flowing, curling at the ends
+        c.inkColor = hairInk
+        if long {
+            if side {
+                soft(&c, [(X(-14), Y(22)), (X(-4), Y(20)), (X(-6), Y(56)), (X(-10), Y(62)), (X(-16), Y(54))], shadowed(hair, 0.12), ink: 1.1, rim: false)
+            } else {
+                soft(&c, [(X(-15), Y(20)), (X(15), Y(20)), (X(17), Y(50)), (X(12), Y(back ? 64 : 58)), (X(0), Y(back ? 62 : 56)), (X(-12), Y(back ? 64 : 58)), (X(-17), Y(50))], shadowed(hair, 0.12), ink: 1.1, rim: false)
+            }
+        }
+        if style == 1 && !side {                     // twin tails, each with a ribbon
+            for s in [-1.0, 1.0] {
+                soft(&c, [(X(s * 13), Y(14)), (X(s * 24), Y(20)), (X(s * 27), Y(40)), (X(s * 22), Y(56)), (X(s * 18), Y(44)), (X(s * 15), Y(26))], hair, ink: 1.1, rim: s > 0)
+                for t in [0.3, 0.6] { c.curve([(X(s * (15 + 8 * t)), Y(20 + 30 * t)), (X(s * (19 + 5 * t)), Y(30 + 26 * t))], 0.8, hairInk) }
+            }
+        }
+
+        // legs: stockings and little shoes
+        c.inkColor = shadowed(pants, 0.5)
+        if side {
+            c.line(X(-2 - walk * 3), Y(62), X(-2 - walk * 4), Y(72), 4.6 * k, shadowed(pants, 0.12), ink: 1.0)
+            c.line(X(2 + walk * 3), Y(62), X(2 + walk * 4), Y(72), 4.6 * k, pants, ink: 1.0)
+        } else {
+            let l = frame == 1 ? 1.6 : 0, r = frame == 2 ? 1.6 : 0
+            c.line(X(-4), Y(62), X(-4), Y(72 - l), 4.6 * k, pants, ink: 1.0)
+            c.line(X(4), Y(62), X(4), Y(72 - r), 4.6 * k, shadowed(pants, 0.1), ink: 1.0)
+        }
+        c.inkColor = shadowed(shoes, 0.5)
+        for (x, lift) in side ? [(-1 - walk * 4, 0.0), (4 + walk * 4, 0.0)] : [(-4.5, frame == 1 ? 1.6 : 0), (4.5, frame == 2 ? 1.6 : 0)] {
+            c.ellipse(X(x), Y(73.5 - lift), 4 * k, 2.6 * k, shoes, ink: 1.0, shade: Shade(shadow: 0.15, light: 0.25))
+            c.ellipse(X(x - 1), Y(72.6 - lift), 1.2 * k, 0.7 * k, RGBA(255, 255, 255, 170))
+        }
+
+        // the dress: a soft bell with a frilled hem; the bodice; a bow or a choker
+        c.inkColor = clothInk
+        let hem: Double = female ? 63 : 60
+        if female {
+            soft(&c, side ? [(X(-6), Y(48)), (X(6), Y(48)), (X(11), Y(hem)), (X(-9), Y(hem))] : [(X(-8), Y(48)), (X(8), Y(48)), (X(13), Y(hem)), (X(-13), Y(hem))], cloth, ink: 1.1)
+            let w = side ? 10.0 : 13.0
+            var x = -w
+            while x < w { c.ellipse(X(x + 1.4), Y(hem + 0.6), 1.6 * k, 1.3 * k, frill, ink: 0.6); x += 2.8 }
+        } else {
+            soft(&c, side ? [(X(-6), Y(48)), (X(6), Y(48)), (X(7), Y(hem)), (X(-6.5), Y(hem))] : [(X(-9), Y(48)), (X(9), Y(48)), (X(10), Y(hem)), (X(-10), Y(hem))], cloth, ink: 1.1)
+        }
+        soft(&c, side ? [(X(-5), Y(43)), (X(5.5), Y(43)), (X(6), Y(50)), (X(-5.5), Y(50))] : [(X(-8.5), Y(43)), (X(8.5), Y(43)), (X(8), Y(51)), (X(-8), Y(51))], cloth.lightened(0.05), ink: 1.1)
+        if !back && !side {
+            c.poly([(X(-6), Y(43)), (X(6), Y(43)), (X(0), Y(48))], white, ink: 0.7)                      // the collar
+            if female {
+                let bow = RGBA(255, 112, 150)
+                c.poly([(X(0), Y(46)), (X(-4.5), Y(43.5)), (X(-4.5), Y(48.5))], bow, ink: 0.8, shade: Shade(shadow: 0.2))
+                c.poly([(X(0), Y(46)), (X(4.5), Y(43.5)), (X(4.5), Y(48.5))], bow, ink: 0.8, shade: Shade(shadow: 0.2))
+                c.ellipse(X(0), Y(46), 1.3 * k, 1.3 * k, bow.lightened(0.2), ink: 0.6)
+            } else {
+                c.rect(X(-1), Y(44), 2 * k, 6 * k, shadowed(cloth, 0.35))                                // a tie
+            }
+        }
+
+        // arms: puffed sleeves, long white gloves
+        func arm(_ s: Double, swing: Double, raised: Bool) {
+            let sx = side ? X(s * 1) : X(s * 8.5), sy = Y(45)
+            c.inkColor = clothInk
+            c.ellipse(sx, sy, 3.8 * k, 3.2 * k, cloth.lightened(0.08), ink: 1.0, shade: Shade(shadow: 0.18, light: 0.2))
+            let hx = raised ? X(s * 15) : X(s * (side ? 2 : 11) + swing * 2.5), hy = raised ? Y(34) : Y(56 - abs(swing))
+            c.inkColor = RGBA(180, 184, 206)
+            c.line(sx + s * 1.5, sy + 2, hx, hy, 3.4 * k, female ? white : skin, ink: 0.9)
+            c.ellipse(hx, hy + 0.5, 2.2 * k, 2.2 * k, female ? white : skin, ink: 0.8)
+        }
+        if side { arm(1, swing: act ? 0 : walk * 2, raised: act) }
+        else { arm(-1, swing: walk, raised: false); arm(1, swing: -walk, raised: act) }
+
+        // the head: large and soft, a small chin
+        let hy = Y(26)
+        c.inkColor = skinInk
+        if !back && !side && female { c.rect(X(-5), Y(39.5), 10 * k, 1.8 * k, RGBA(70, 90, 170), ink: 0.5) }          // a choker
+        c.ellipse(X(side ? 1 : 0), hy, 15 * k, 14.2 * k, skin, ink: 1.2, shade: Shade(shadow: 0.1, light: 0.05, cut: 0.5, glint: -0.9))
+        if !back {
+            if side {
+                moeEye(&c, X(8), hy + 4 * k, k, iris, hairInk, side: true)
+                c.ellipse(X(8.5), hy + 8.5 * k, 2.8 * k, 1.3 * k, RGBA(255, 130, 160, 120))
+                c.line(X(11.5), hy + 10.5 * k, X(12.8), hy + 10.3 * k, 0.9, RGBA(200, 100, 110))
+            } else {
+                moeEye(&c, X(-6.2), hy + 4 * k, k, iris, hairInk, side: false)
+                moeEye(&c, X(6.2), hy + 4 * k, k, iris, hairInk, side: false)
+                for s in [-1.0, 1.0] {
+                    c.ellipse(X(s * 9.8), hy + 9 * k, 3.2 * k, 1.6 * k, RGBA(255, 130, 160, 110))
+                    for i in 0..<3 { let x = X(s * 9.8) + (Double(i) - 1) * 1.6 * k; c.line(x - 0.5, hy + 9.6 * k, x + 0.5, hy + 8.4 * k, 0.5, RGBA(245, 130, 160, 150)) }
+                }
+                if act { c.ellipse(X(0), hy + 10.6 * k, 1.5 * k, 1.3 * k, RGBA(200, 90, 100), ink: 0.5) }
+                else { c.curve([(X(-1.1), hy + 10.6 * k), (X(0), hy + 11.2 * k), (X(1.1), hy + 10.6 * k)], 0.8, RGBA(200, 100, 110)) }
+            }
+        }
+
+        // the hair in front: fine locks with strand lines and a broken ring of gloss
+        c.inkColor = hairInk
+        let gloss = hair.lightened(0.42)
+        if back {
+            soft(&c, [(X(-15.5), hy + 4), (X(-13), hy - 10 * k), (X(0), hy - 16 * k), (X(13), hy - 10 * k), (X(15.5), hy + 4), (X(13), hy + 13 * k), (X(-13), hy + 13 * k)], hair, ink: 1.1)
+            for i in -3...3 { let x = Double(i) * 3.6; c.curve([(X(x * 0.6), hy - 14 * k), (X(x), hy - 2 * k), (X(x * 1.1), hy + 12 * k)], 0.7, hairInk) }
+            c.curve([(X(-8), hy - 8 * k), (X(0), hy - 11 * k), (X(8), hy - 8 * k)], 1.6, gloss)
+        } else {
+            let cap: [(Double, Double)] = side
+                ? [(X(-15.5), hy + 8 * k), (X(-15), hy - 8 * k), (X(-5), hy - 15.5 * k), (X(7), hy - 14.5 * k), (X(14.5), hy - 7 * k), (X(9), hy - 5 * k), (X(1), hy - 5.5 * k), (X(-3), hy + 1 * k), (X(-6), hy + 9 * k)]
+                : [(X(-15.5), hy + 2 * k), (X(-15), hy - 8 * k), (X(-6), hy - 15.5 * k), (X(6), hy - 15.5 * k), (X(15), hy - 8 * k), (X(15.5), hy + 2 * k), (X(12), hy - 7.5 * k), (X(-12), hy - 7.5 * k)]
+            soft(&c, cap, hair, ink: 1.1)
+            // the fringe: many thin pointed locks, with a strand line down each
+            // (they end above the brows: the eyes are never covered)
+            let tips: [(Double, Double)] = side ? [(-3, 6), (0.5, 7.5), (4, 6)] : [(-12, 7.5), (-8.5, 6), (-5, 7), (-2, 5.5), (1.5, 7), (5, 5.5), (8.5, 6.5), (11.5, 7.5)]
+            for (x, len) in tips {
+                let top = hy - 8 * k
+                soft(&c, [(X(x - 2.6), top), (X(x + 2.6), top), (X(x + 0.5), top + len * k)], hair, ink: 0.8, light: 0.2, shadow: 0.22)
+                c.line(X(x + 0.2), top + 1.5, X(x + 0.4), top + len * k * 0.7, 0.5, hairInk)
+            }
+            // long side locks to the chest
+            if !side {
+                let sl: Double = long ? 26 : 12
+                for s in [-1.0, 1.0] {
+                    soft(&c, [(X(s * 15.5), hy - 4 * k), (X(s * 12), hy - 2 * k), (X(s * 12.5), hy + sl * k), (X(s * 14.5), hy + (sl + 3) * k), (X(s * 16.5), hy + (sl - 4) * k)], hair, ink: 0.9, rim: s > 0)
+                    c.curve([(X(s * 13.5), hy), (X(s * 13.8), hy + sl * 0.6 * k), (X(s * 14.2), hy + sl * k)], 0.5, hairInk)
+                }
+            }
+            // the gloss: a ring of light broken by the locks
+            for (a0, a1) in [(-9.5, -6.0), (-4.0, -0.5), (1.5, 5.0), (7.0, 10.0)] where !side || a0 > -5 {
+                c.curve([(X(a0), hy - 10.5 * k + abs(a0) * 0.25), (X((a0 + a1) / 2), hy - 11.6 * k + abs((a0 + a1) / 2) * 0.25), (X(a1), hy - 10.5 * k + abs(a1) * 0.25)], 1.5, gloss)
+            }
+            // the ahoge
+            c.curve([(X(1), hy - 15 * k), (X(3), hy - 21 * k), (X(7), hy - 22 * k), (X(5.5), hy - 18 * k)], 1.6, hair)
+        }
+
+        // ornaments by style
+        c.inkColor = RGBA(150, 150, 180)
+        switch style {
+        case 0 where female && !back:                    // a frilled headband with small flowers
+            for i in 0..<9 { let a = Double.pi * (1.1 + Double(i) * 0.1); c.ellipse(X(cos(a) * 14.5), hy + sin(a) * 14 * k + 1, 2 * k, 1.6 * k, frill, ink: 0.6) }
+            for x in [-8.0, 0, 8] { c.ellipse(X(x), hy - 14.2 * k + abs(x) * 0.35, 1.7 * k, 1.7 * k, white, ink: 0.6); c.ellipse(X(x), hy - 14.2 * k + abs(x) * 0.35, 0.6 * k, 0.6 * k, RGBA(255, 214, 90)) }
+        case 1 where !side:                              // ribbons where the twin tails are tied
+            let rb = RGBA(80, 120, 220)
+            for s in [-1.0, 1.0] {
+                c.poly([(X(s * 14), hy - 9 * k), (X(s * 18.5), hy - 12 * k), (X(s * 18.5), hy - 6 * k)], rb, ink: 0.7, shade: Shade(shadow: 0.2))
+                c.poly([(X(s * 14), hy - 9 * k), (X(s * 10), hy - 12.5 * k), (X(s * 10.5), hy - 6 * k)], rb, ink: 0.7, shade: Shade(shadow: 0.2))
+            }
+        case 2:                                          // small curved horns
+            c.inkColor = RGBA(30, 28, 40)
+            for s in [-1.0, 1.0] where !side || s > 0 {
+                let horn = [(X(s * 8.5), hy - 12.5 * k), (X(s * 12.5), hy - 13.5 * k), (X(s * 15.5), hy - 20 * k), (X(s * 13.5), hy - 25 * k), (X(s * 12), hy - 19 * k), (X(s * 9.5), hy - 15.5 * k)]
+                soft(&c, horn, RGBA(70, 66, 82), ink: 0.9, light: 0.35, shadow: 0.35, rim: false)
+                for t in [0.35, 0.6] { c.line(X(s * (10 + 4 * t)), hy - (14 + 7 * t) * k, X(s * (12.5 + 2.5 * t)), hy - (14.5 + 7.5 * t) * k, 0.5, RGBA(150, 146, 170)) }
+            }
+        case 3 where !back:                              // a flower clip
+            let fx = side ? X(6) : X(9), fy = hy - 10 * k
+            for i in 0..<5 { let a = Double(i) * 2 * .pi / 5; c.ellipse(fx + cos(a) * 1.9 * k, fy + sin(a) * 1.9 * k, 1.5 * k, 1.5 * k, RGBA(255, 180, 210), ink: 0.5) }
+            c.ellipse(fx, fy, 1.1 * k, 1.1 * k, RGBA(255, 226, 120))
+        default: break
+        }
+
+        c.inkColor = nil
+        if !held.isEmpty {
+            let hx = act ? X(15) : (side ? X(2 + walk * 2.5) : X(11))
+            heldItem(&c, held, hx, act ? Y(34) : Y(56), k * 0.9)
+        }
+        return c.image()
+    }
+
+    /// A big glossy eye: a pale sclera, the iris dark above and bright below with a ring of light, a tall
+    /// pupil, three catchlights and a little star, a heavy upper lash with two flicks, a coloured lower lash and
+    /// the crease of the lid above.
+    static func moeEye(_ c: inout Canvas, _ x: Double, _ y: Double, _ k: Double, _ iris: RGBA, _ lash: RGBA, side: Bool) {
+        let w = (side ? 3.8 : 4.6) * k, h = 6.2 * k
+        c.inkColor = nil
+        c.ellipse(x, y, w, h, RGBA(250, 252, 255))
+        // the iris: vertical gradient, a lighter ring near the bottom
+        c.paint(x - w, y - h, x + w, y + h, inside: { px, py in let u = (px - x) / (w * 0.84), v = (py - y - 0.4 * k) / (h * 0.9); return u * u + v * v <= 1 },
+                color: { px, py in
+                    let t = (py - (y - h)) / (2 * h)
+                    var col = t < 0.5 ? mix(shadowed(iris, 0.55), iris, t * 2) : mix(iris, iris.lightened(0.45), (t - 0.5) * 2)
+                    let u = (px - x) / (w * 0.84), v = (py - y - 0.4 * k) / (h * 0.9), r = (u * u + v * v).squareRoot()
+                    if r > 0.78 && t > 0.45 { col = mix(col, iris.lightened(0.6), 0.5) }
+                    return col
+                })
+        c.ellipse(x, y + 0.8 * k, w * 0.32, h * 0.42, shadowed(iris, 0.75))                          // the pupil
+        c.ellipse(x - w * 0.36, y - h * 0.32, w * 0.34, w * 0.3, .white)                               // catchlights
+        c.ellipse(x + w * 0.34, y + h * 0.3, w * 0.17, w * 0.17, RGBA(255, 255, 255, 230))
+        c.ellipse(x + w * 0.05, y + h * 0.55, w * 0.1, w * 0.1, RGBA(255, 255, 255, 200))
+        let sx = x + w * 0.4, sy = y - h * 0.15                                                      // a small star
+        c.line(sx - 0.9 * k, sy, sx + 0.9 * k, sy, 0.45, .white); c.line(sx, sy - 0.9 * k, sx, sy + 0.9 * k, 0.45, .white)
+        // lashes and lids
+        c.curve([(x - w - 0.7, y - h * 0.3), (x - w * 0.5, y - h - 0.6), (x + w * 0.5, y - h - 0.6), (x + w + 0.7, y - h * 0.35)], 1.7 * k, lash.darkened(0.25))
+        c.line(x + w + 0.5, y - h * 0.35, x + w + 2.2 * k, y - h * 0.62, 1.0 * k, lash.darkened(0.25))
+        c.line(x + w + 0.2, y - h * 0.1, x + w + 1.7 * k, y - h * 0.15, 0.8 * k, lash.darkened(0.25))
+        c.curve([(x - w * 0.6, y - h - 2.0 * k), (x, y - h - 2.6 * k), (x + w * 0.6, y - h - 2.0 * k)], 0.6, lash)          // the crease
+        c.curve([(x - w * 0.55, y + h + 0.3), (x, y + h + 0.8), (x + w * 0.55, y + h + 0.3)], 0.7, lash.lightened(0.15))   // the lower lash
     }
 }

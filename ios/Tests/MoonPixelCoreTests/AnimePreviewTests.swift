@@ -65,6 +65,24 @@ final class AnimeArtTests: XCTestCase {
         XCTAssertNotEqual(a1.px, PixelArt.character(l, dir: "down", frame: 1, held: "", child: false, female: true).anime().px)
     }
 
+    func testBothFigureStylesDrawEveryPoseAndDiffer() {
+        var l = Look(); l.hair = "#a8c8f0"; l.style = 2
+        defer { AnimeArt.figure = .moe }
+        for f in AnimeArt.Figure.allCases {
+            AnimeArt.figure = f
+            for dir in ["down", "side", "up"] {
+                let a = AnimeArt.character(l, dir: dir, frame: 0, held: "", child: false, female: true)
+                XCTAssertEqual(a.w, AnimeArt.charW)
+                XCTAssertGreaterThan(stride(from: 3, to: a.px.count, by: 4).filter { a.px[$0] > 200 }.count, a.w * a.h / 10, "\(f) \(dir)")
+            }
+        }
+        AnimeArt.figure = .moe
+        let m = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: false, female: true)
+        AnimeArt.figure = .hero
+        let h = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: false, female: true)
+        XCTAssertNotEqual(m.px, h.px)
+    }
+
     func testRoofsAreTwiceThePixelSizeOpaqueAndDifferByNation() {
         for n in [1, 2, 3, 9] {
             let a = AnimeArt.roof(nation: n, w: 6, h: 4), p = PixelArt.roof(nation: n, w: 6, h: 4)
