@@ -46,14 +46,14 @@ extension Society {
         let s0 = TilePos(o.x, o.y + 2), s1 = TilePos(o.x + 40, o.y + 2)
         if lay(.street, s0, s1) {
             // the car on a straight street of its own (the bus line has the first one), clear of everything:
-            // the first row near the demo where 24 tiles can be laid in a straight line
+            // the first row near the demo where 41 tiles can be laid in a straight line
             let busStreet = laid
             let busStop = onWay(busStreet, .street, from: 6, towards: busStreet.count - 1) ?? busStreet[0]
             let busEnd = onWay(busStreet, .street, from: busStreet.count - 3, towards: 0) ?? busStreet[busStreet.count - 1]
             var road: [TilePos] = []
             search: for r in 0..<80 {
                 for (dy, dx) in [(-4 - r, 0), (4 + r, 0), (-4 - r, 10), (-4 - r, -10), (4 + r, 10), (4 + r, -10), (-4 - r, -24), (4 + r, -24)] {
-                    let a = TilePos(o.x + dx, o.y + dy), b = TilePos(a.x + 24, a.y)
+                    let a = TilePos(o.x + dx, o.y + dy), b = TilePos(a.x + 40, a.y)
                     if busStreet.contains(where: { $0.y >= a.y - 1 && $0.y <= a.y + 1 && $0.x >= a.x - 1 && $0.x <= b.x + 1 }) { continue }
                     let plan = planStraightWay(.street, from: a, to: b)
                     guard plan.ok, let id = startWay(plan, payer: .district(d.id), nation: nation, by: "district:\(d.id)") else { continue }

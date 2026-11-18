@@ -456,13 +456,30 @@ final class MoonPixelUITests: XCTestCase {
         }
         XCTAssertTrue(app.sliders["drive-throttle"].exists, "the throttle")
         guard app.buttons["drive-throttle-up"].waitForExistence(timeout: 5) else { return XCTFail("no throttle buttons") }
-        for _ in 0..<4 { app.buttons["drive-throttle-up"].tap() }
-        XCTAssertTrue(until("in 1.00/0.00"), "the throttle reached the car: \(state.label)")
-        sleep(2)
-        let moving = speed.label
-        print("UITEST drive: \(moving) | \(state.label)")
+        /// The car's tile, from its own report ("tile x,y").
+        func tile() -> (Int, Int)? {
+            guard let r = state.label.range(of: "tile ") else { return nil }
+            let parts = state.label[r.upperBound...].split(separator: " ")[0].split(separator: ",").compactMap { Int($0) }
+            return parts.count == 2 ? (parts[0], parts[1]) : nil
+        }
+        let before = tile()
+        // the screen is read slowly here: what is measured is how far the car has gone, not its speed at one instant
+        app.buttons["drive-throttle-up"].tap(); app.buttons["drive-throttle-up"].tap()
+        var moved = 0, top = "0 km/h"
+        let end = Date().addingTimeInterval(8)
+        while Date() < end {
+            if speed.label != "0 km/h" { top = speed.label }
+            if let b0 = before, let t = tile() { moved = max(moved, abs(t.0 - b0.0) + abs(t.1 - b0.1)) }
+            if moved >= 3 { break }
+            usleep(200_000)
+        }
+        for _ in 0..<2 { app.buttons["drive-throttle-down"].tap() }
+        let moving = top
+        print("UITEST drive: moved \(moved) tiles, seen \(top) | \(state.label)")
         print("UITEST demo: \(state.label.components(separatedBy: " | ").last ?? "")")
-        XCTAssertNotEqual(moving, "0 km/h", "the car moves under its own power: \(moving) | \(state.label)")
+        XCTAssertNotNil(before, "the car reports its place: \(state.label)")
+        XCTAssertGreaterThanOrEqual(moved, 3, "the car moves under its own power: \(state.label)")
+        XCTAssertNotEqual(moving, "0 km/h", "and its speed was shown")
         shot("41-driving")
         // the autopilot takes over (no destination: it holds), then back to the driver
         app.buttons["drive-auto"].tap()

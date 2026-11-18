@@ -67,6 +67,9 @@ struct HUDView: View {
                 .accessibilityElement(children: .combine).accessibilityIdentifier("perf-panel")
             }
         }
+        // the top row stays at the top of the screen: anything taller than the screen grows downwards,
+        // it never pushes the clock, speed and zoom buttons up off the screen
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay { if model.showBackpack { BackpackPanel() } }
         .overlay { if let id = model.liftPanel { LiftPanel(id: id) } }
         .overlay { if model.showTravel { TravelPanel() } }
