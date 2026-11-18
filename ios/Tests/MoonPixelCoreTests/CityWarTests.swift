@@ -221,7 +221,9 @@ final class CityWarTests: XCTestCase {
         XCTAssertEqual(target.nation, 1, "the city was occupied")
         XCTAssertTrue(kinds.contains("captured"))
         let breach = s.realm.chron!.last { $0.kind == "breach" }!
-        XCTAssertEqual(s.world.tile(2, Int(breach.x / 16), Int(breach.y / 16)), 0)
+        // the gap stays open: bare ground, or (when the engines broke in at a gate) the gate reopened after the capture
+        let gap = s.world.tile(2, Int(breach.x / 16), Int(breach.y / 16))
+        XCTAssertTrue(gap == 0 || gap == s.content.tid("gate_open"), "the breach is no wall: \(gap)")
         // occupation: identity stays, the place is damaged, people flee, unrest starts, gates reopen
         XCTAssertGreaterThan(target.members.filter { s.agents[$0]?.nation == 2 }.count, 0, "residents keep who they are")
         XCTAssertGreaterThan(target.buildings.filter { !$0.done }.count, 0, "the city is damaged")

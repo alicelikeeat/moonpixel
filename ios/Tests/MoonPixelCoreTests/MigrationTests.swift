@@ -24,6 +24,8 @@ final class MigrationTests: XCTestCase {
             realm["nations"] = nations; old["realm"] = realm
             if var p = realm["player"] as? [String: Any] { p["food"] = s.realm.player.food; realm["player"] = p; old["realm"] = realm }
         }
+        // city districts (and their transport) came long after 1.2: a 1.2 save simply has none of them
+        if var realm = old["realm"] as? [String: Any] { realm["transportBox"] = nil; old["realm"] = realm }
         if var towns = old["settlements"] as? [[String: Any]] {
             let sorted = s.settlements.values.sorted { $0.id < $1.id }
             for i in towns.indices { towns[i]["food"] = sorted[i].food }

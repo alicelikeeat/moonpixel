@@ -280,6 +280,8 @@ public struct Realm: Codable {
     public var transportBox: TransportState?
     /// The last day the towns grew on their own (lifts fitted, new districts founded): once a day, in saves.
     public var growDay: Int?
+    /// The last game hour the new towns took a building step (they build hour by hour, not day by day).
+    public var growHour: Int?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
     public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }

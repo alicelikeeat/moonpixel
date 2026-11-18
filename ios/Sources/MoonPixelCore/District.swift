@@ -681,6 +681,8 @@ extension Society {
     /// services can carry it, build it (paid), then let people in. A service is built first when the
     /// next building would overload one.
     func planDistrict(_ d: District) {
+        // a district founded since the last day has its services worked out first
+        if d.services.isEmpty { refreshServices(d) }
         // a district that grew out of a town lays its main street before anything else (sites need a street)
         if d.fromTown != nil, let id = d.works?["spine"], realm.transport.sites.first(where: { $0.id == id })?.finished == nil { return }
         if d.fromTown != nil && d.works?["spine"] == nil && !(d.tried ?? []).contains("spine") { return }

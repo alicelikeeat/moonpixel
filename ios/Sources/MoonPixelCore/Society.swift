@@ -579,6 +579,8 @@ public final class Society {
         if realm.transportBox != nil { transportTick(dt) }
         let growDay = Int(world.time / MP.daySeconds)
         if realm.growDay == nil { realm.growDay = growDay } else if growDay > realm.growDay! { realm.growDay = growDay; cityGrowthDay() }
+        let growHour = Int(world.time / (MP.daySeconds / 24))
+        if realm.growHour == nil { realm.growHour = growHour } else if growHour > realm.growHour! { realm.growHour = growHour; cityGrowthHour() }
         world.advance(dt)
         tickCount += 1
         // planning and resource scans are the heavy part of a town's work. When many fall due together

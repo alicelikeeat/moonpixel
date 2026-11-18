@@ -11,9 +11,21 @@ import Foundation
 
 extension Society {
     /// A town needs this many people to found a district.
-    public static var urbanizeAt = 30
+    public static var urbanizeAt = 20
     /// At most this many districts grow out of towns (imported and demo districts do not count).
     public static var maxGrownDistricts = 6
+
+    /// Every game hour (50 seconds at 1x): each new town takes its next building step and its next transport
+    /// step, and a town big enough founds one. (The day still pays taxes, upkeep and supplies.)
+    func cityGrowthHour() {
+        guard realm.transportBox != nil || settlements.values.contains(where: { !$0.abandoned && $0.members.count >= Society.urbanizeAt }) else { return }
+        if net.districts.filter({ $0.fromTown != nil }).isEmpty { urbanize() }
+        guard realm.transportBox != nil else { return }
+        for d in net.districts.sorted(by: { $0.id < $1.id }) where d.fromTown != nil && d.autoBuild {
+            planDistrict(d)
+            planTransport(d)
+        }
+    }
 
     func cityGrowthDay() {
         fitLifts()

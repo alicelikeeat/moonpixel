@@ -397,16 +397,24 @@ struct HUDView: View {
     private var mapOverlay: some View {
         ZStack {
             Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { model.toggleMap() }
-            HStack(alignment: .center, spacing: 10) {
-                mapCanvas
-                mapControls
+            // everything is sized to the screen it is on: a landscape phone is only ~380 points tall, and a map
+            // taller than that would push the HUD's top row off the top of the screen
+            GeometryReader { g in
+                let box = max(160, min(350, g.size.height - 40))
+                HStack(alignment: .center, spacing: 10) {
+                    mapCanvas(box: box)
+                    ScrollView(.vertical, showsIndicators: false) { mapControls }
+                        .frame(width: 290).frame(maxHeight: max(120, g.size.height - 28))
+                }
+                .padding(.vertical, 14).padding(.leading, 58).padding(.trailing, 20)
+                .frame(width: g.size.width, height: g.size.height)
             }
-            .padding(.vertical, 14).padding(.leading, 58).padding(.trailing, 20)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var mapCanvas: some View {
-        let side = 340.0 * model.mapZoom
+    private func mapCanvas(box: Double) -> some View {
+        let side = (box - 10) * model.mapZoom
         return ScrollViewReader { proxy in
             ScrollView([.horizontal, .vertical]) {
                 ZStack(alignment: .topLeading) {
@@ -431,7 +439,7 @@ struct HUDView: View {
             .onAppear { proxy.scrollTo("map-me", anchor: .center) }
             .onChange(of: model.mapZoom) { _, _ in DispatchQueue.main.async { proxy.scrollTo("map-me", anchor: .center) } }
         }
-        .frame(width: 350, height: 350)
+        .frame(width: box, height: box)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(6).glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
