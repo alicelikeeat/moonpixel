@@ -136,10 +136,44 @@ jobs:
     runs-on: ubuntu-latest
     needs: [core, build, ui]
     steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/download-artifact@v4
         with: { name: MoonPixel-unsigned-ipa }
       - uses: actions/download-artifact@v4
         with: { name: ui-tests, path: ui }
+      - name: Release notes (what changed since the last release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MP_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          git fetch --tags --force > /dev/null 2>&1 || true
+          # the last published release before this one, and the commit it was built from
+          PREV=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isDraft -q '.[] | select(.isDraft == false) | .tagName' | grep -E '^v[0-9]+\.[0-9]+$' | sort -t. -k1,1V -k2,2n | tail -1)
+          PREV_SHA=$( [ -n "$PREV" ] && git rev-list -n 1 "$PREV" 2>/dev/null || true )
+          {
+            echo "## MoonPixel ${MP_VERSION} 本版变化 / What changed"
+            echo
+            if [ -n "$PREV_SHA" ]; then
+              # the changelog entries added since the last release (written for players, in Chinese)
+              git diff "$PREV_SHA" "$GITHUB_SHA" -- CHANGELOG.md | grep -E '^\+' | grep -vE '^\+\+\+' | sed 's/^+//' > added.md
+              if [ -s added.md ]; then cat added.md; else echo "（这一版没有新的更新日志条目，见下方提交记录。）"; fi
+              echo
+              echo "### 提交记录（自 ${PREV} 起）/ Commits since ${PREV}"
+              echo
+              git log --no-merges --pretty='- %s (%h)' "$PREV_SHA..$GITHUB_SHA"
+            else
+              # no earlier release: the newest changelog section
+              awk '/^## /{n++} n==1' CHANGELOG.md
+            fi
+            echo
+            echo "---"
+            echo "未签名 ipa，需自行签名后安装。核心测试、真机构建与模拟器 UI 测试均通过后才发布；截图、录像与帧时间数据来自模拟器，不是真机。完整历史见仓库里的 CHANGELOG.md。"
+            echo "Unsigned IPA: sign it yourself before installing. Published only after the core tests, the device build and the simulator UI tests passed; screenshots, recordings and frame times come from the simulator, not a device. Commit ${GITHUB_SHA}."
+          } > notes.md
+          # a release body is limited to 125 000 characters
+          head -c 120000 notes.md > notes-cut.md
+          cat notes-cut.md
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -148,7 +182,7 @@ jobs:
           TAG="v${MP_VERSION}"
           gh release create "$TAG" MoonPixel-${MP_VERSION}-unsigned.ipa ui/ui-result.txt $(ls ui/ui-*.png 2>/dev/null) --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)" \
-            --notes "原生 Swift 版（SpriteKit 2D / RealityKit 3D + SwiftUI Liquid Glass）。3D 视角（更多 → 3D 视角，可随时切回 2D）、新能力“纳米蜂群”（最多 1 048 576 个 GPU 模拟的颗粒）、即时战略玩法“指挥模式”（更多 → 指挥模式）与城市建造玩法“都市模式”（更多 → 都市模式）；都只在模拟器上验证过，没有真机帧率数据。未签名 ipa，需自行签名后安装。核心测试、真机构建与模拟器 UI 测试均通过后发布；截图、录像与帧时间数据来自模拟器，不是真机。 Native Swift build, unsigned: sign it yourself before installing. 3D view (More → 3D view, switch back any time) the Nanite swarm power (up to 1 048 576 GPU-simulated grains) Command mode, a real-time strategy battle (More → Command), and Metro mode, a city builder (More → Metro); all checked only in the simulator, no device frame times. Published only after core tests, device build and simulator UI tests passed; screenshots, recordings and frame times come from the simulator, not a device. Commit ${GITHUB_SHA}."
+            --notes-file notes-cut.md
 
   media:
     runs-on: macos-latest
