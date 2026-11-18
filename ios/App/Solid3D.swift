@@ -87,6 +87,34 @@ final class SolidRenderer {
     /// Outside elevators: the car (moved to its real height every frame) and the shaft's rails.
     private var liftEntities: [Int: (car: ModelEntity, rails: [ModelEntity], top: Float)] = [:]
     private var vehicleEntities: [Int: ModelEntity] = [:]
+    private var shownStyle = 0
+    private var sky: (moon: ModelEntity, stars: ModelEntity)?
+
+    /// The colour atlas every solid is drawn from, in the current art style (anime: cel-shaded colours).
+    private func makePalette() {
+        if let cg = Palette3D.bitmap.gradedCG {
+            palette = try? TextureResource.generate(from: cg, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none))
+        }
+        light = -1
+    }
+
+    /// The moon and the stars, round the camera, shown at night (outdoors) and faded in at dusk.
+    private func updateSky(_ world: OpenWorld, under: Bool, at eye: SIMD3<Float>) {
+        if sky == nil {
+            let moon = ModelEntity(), stars = ModelEntity()
+            moon.model = model3D(key: "moon") { Figure3D.moon() }
+            stars.model = model3D(key: "stars") { Figure3D.starDome(seed: 7) }
+            root.addChild(moon); root.addChild(stars)
+            sky = (moon, stars)
+        }
+        let night = !under && world.daylight < 0.45
+        sky!.moon.isEnabled = night; sky!.stars.isEnabled = night
+        guard night else { return }
+        // the moon crosses the sky through the night (its angle follows the clock)
+        let a = Float(world.hour / 24 * 2 * Double.pi)
+        sky!.moon.position = eye + SIMD3<Float>(cos(a) * 120, 90 + sin(a) * 40, -160)
+        sky!.stars.position = eye
+    }
     private var deckEntities: [Int: [ModelEntity]] = [:]
     private var cabHeading: Double?
     private var pool: [ModelEntity] = []
@@ -111,9 +139,7 @@ final class SolidRenderer {
         camera.camera.near = 0.1
         camera.camera.far = 600
         root.addChild(camera)
-        if let cg = Palette3D.bitmap.cgImage {
-            palette = try? TextureResource.generate(from: cg, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none))
-        }
+        makePalette()
         setLight(1, sky: UIColor(red: 0.56, green: 0.74, blue: 0.90, alpha: 1))
         for e in [player, playerRing, selectRing] { root.addChild(e) }
         playerRing.model = model3D(key: "ring-player") { Figure3D.plate(color: RGBA(hex: "#7fe6ff"), w: 0.9, d: 0.9, h: 0.04) }
@@ -210,6 +236,7 @@ final class SolidRenderer {
         guard let model = model, model.render3D, let scene = model.scene, model.world != nil, let society = model.society else { return }
         let t0 = CACurrentMediaTime()
         let world = model.activeWorld
+        if shownStyle != model.styleEpoch { shownStyle = model.styleEpoch; makePalette(); shownWorld = -1 }
         if shownWorld != model.epoch || shownEpoch != world.mapEpoch || shownDepth != model.depth {
             shownWorld = model.epoch; shownEpoch = world.mapEpoch; shownDepth = model.depth
             reset()
@@ -277,6 +304,7 @@ final class SolidRenderer {
         updateLabels(world, society, model, reach: reach)
         updatePreview(world, scene)
         updateWeather(w.fall, under: under, dt: dt)
+        updateSky(world, under: under, at: target)
         stepParticles(dt)
         let q = simd_quatf(angle: yaw, axis: [0, 1, 0])
         for b in billboards { b.orientation = q }
@@ -361,7 +389,7 @@ final class SolidRenderer {
                 // the ground picture only depends on the two flat layers: when they are the same, the old texture stays
                 var hash: UInt64 = 1469598103934665603
                 for l in 0..<2 { for v in input.layers[l] { hash = (hash ^ UInt64(v)) &* 1099511628211 } }
-                let cg = hash == oldHash ? nil : PixelArt.bakeGround(layers: input.layers).cgImage
+                let cg = hash == oldHash ? nil : PixelArt.bakeGround(layers: input.layers).styledCG
                 let sh = Mesher3D.structureHash(input.layers), eh = Mesher3D.edgeHash(input.layers)
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.built(key, mesh, cg, hash, took, structHash: sh, edgeHash: eh) }
@@ -463,7 +491,7 @@ final class SolidRenderer {
                 let gen = w.gen
                 work.async { [weak self] in
                     let mesh = Mesher3D.build(input, gen: gen)
-                    let cg = PixelArt.bakeGround(layers: input.layers).cgImage
+                    let cg = PixelArt.bakeGround(layers: input.layers).styledCG
                     DispatchQueue.main.async { self?.layerBuilt(lk, mesh, cg, rev) }
                 }
             } }

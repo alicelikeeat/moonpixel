@@ -37,7 +37,7 @@ struct DriveHUD: View {
 
     private var diag: String {
         guard let s = model.society, let v = s.playerVehicle else { return "none" }
-        return "\(v.kind.rawValue) id \(v.id) ctl \(v.control.rawValue) driving \(v.playerDriving) asked \(String(format: "%.2f", model.driveInput.throttle)) in \(String(format: "%.2f/%.2f", v.input.throttle, v.input.brake)) v \(String(format: "%.2f", v.speed)) fuel \(String(format: "%.0f", v.fuel)) halt \(v.halted ?? "-") tile \(v.tile.x),\(v.tile.y) way \(s.wayKind(at: v.tile)?.rawValue ?? "none") time \(String(format: "%.1f", s.world.time)) | \(model.demoNotes)"
+        return "\(v.kind.rawValue) id \(v.id) ctl \(v.control.rawValue) driving \(v.playerDriving) asked \(String(format: "%.2f", model.driveInput.throttle)) in \(String(format: "%.2f/%.2f", v.input.throttle, v.input.brake)) v \(String(format: "%.2f", v.speed)) fuel \(String(format: "%.0f", v.fuel)) halt \(v.halted ?? "-") tile \(v.tile.x),\(v.tile.y) way \(s.wayKind(at: v.tile)?.rawValue ?? "none") time \(String(format: "%.1f", s.world.time)) top \(String(format: "%.0f", model.topKmh)) | \(model.demoNotes)"
     }
 
     private var gauges: some View {

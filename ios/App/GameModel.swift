@@ -132,6 +132,21 @@ final class GameModel: ObservableObject {
     @Published var nearTransport = false
     /// What the transport demo built (for UI tests).
     var demoNotes = ""
+    /// The fastest the traveller's vehicle has gone since they got in (km/h).
+    var topKmh = 0.0
+    /// Pixel art as made, or the anime look; kept between sessions.
+    @Published var artStyle: ArtStyle = ArtStyle(rawValue: UserDefaults.standard.string(forKey: "artStyle") ?? "") ?? .pixel {
+        didSet {
+            UserDefaults.standard.set(artStyle.rawValue, forKey: "artStyle")
+            Bitmap.animeStyle = artStyle == .anime
+            styleEpoch += 1
+            scene?.restyle()
+        }
+    }
+    /// Bumped when the art style changes (the 3D view rebuilds its textures).
+    var styleEpoch = 0
+    /// "☀ 14:05" / "☾ 23:40": the time of day, shown on the HUD.
+    @Published var clockLine = ""
     /// "Storey 3 · 6.0 m" and, in a car, where it is going.
     @Published var heightLine = ""
     /// Yaw and pitch of the 3D view, for assistive technology and UI tests.
@@ -296,6 +311,9 @@ final class GameModel: ObservableObject {
         if args.contains("--plain-render") { plainRender = true }
         let launchView = args.contains("--3d") || args.contains("--2d") || args.contains("--first-person")
         if launchView { GameModel.keepViewSettings = false }
+        // the saved art style applies before anything is drawn (--anime / --pixel choose it for this run)
+        // (--anime / --pixel choose it for this run only, without changing the saved setting; UI tests start in pixel art)
+        Bitmap.animeStyle = args.contains("--anime") || (!(args.contains("--pixel") || args.contains("--autostart")) && artStyle == .anime)
         if args.contains("--3d") { render3D = true } else if args.contains("--2d") || args.contains("--autostart") { render3D = false }
         if args.contains("--autostart") && !args.contains("--first-person") { viewMode = .third }
         if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)); swarmFixed = true }
@@ -651,6 +669,10 @@ final class GameModel: ObservableObject {
         guard let w = world, let s = society else { return }
         refreshHeight()
         if s.playerVehicle == nil { refreshDrive() }
+        let phaseIcon: String
+        switch w.dayPhase { case .dawn: phaseIcon = "🌅"; case .day: phaseIcon = "☀︎"; case .dusk: phaseIcon = "🌇"; case .night: phaseIcon = "☾" }
+        let cl = phaseIcon + " " + w.clockText
+        if clockLine != cl { clockLine = cl }
         cameraLine = render3D ? (solid?.cameraState ?? "") : "2d"
         if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
         let h = w.hour

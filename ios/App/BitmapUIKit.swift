@@ -11,9 +11,27 @@ extension Bitmap {
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 
-    /// Crisp pixel-art texture.
+    /// The art style everything is drawn in (set by the game's setting; pixel art as made, or the anime look).
+    static var animeStyle = false
+
+    /// The picture in the current style: the anime look is twice the pixels (smoothed, inked, cel-shaded).
+    var styledCG: CGImage? { Bitmap.animeStyle ? anime().cgImage : cgImage }
+    /// Colours only (same size): for atlases looked up by coordinates, where an outline would bleed.
+    var gradedCG: CGImage? { Bitmap.animeStyle ? animeGraded().cgImage : cgImage }
+
+    /// A sprite texture in the current style, the same size on screen in both (the anime one has twice the pixels).
     var texture: SKTexture {
-        guard let cg = cgImage else { return SKTexture() }
+        guard let cg = styledCG else { return SKTexture() }
+        return Bitmap.skTexture(cg)
+    }
+
+    /// A texture from an image made in the current style: crisp pixels, or smooth at double resolution.
+    static func skTexture(_ cg: CGImage) -> SKTexture {
+        if animeStyle {
+            let t = SKTexture(image: UIImage(cgImage: cg, scale: 2, orientation: .up))
+            t.filteringMode = .linear
+            return t
+        }
         let t = SKTexture(cgImage: cg)
         t.filteringMode = .nearest
         return t

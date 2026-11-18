@@ -809,6 +809,29 @@ public enum Figure3D {
         return m
     }
 
+    /// The moon: a pale disc (a flat-faced block), seen from far below.
+    public static func moon() -> Mesh3D {
+        var m = Mesh3D()
+        m.box(-6, -6, -1, 6, 6, 1, RGBA(240, 238, 220), faces: .all)
+        m.box(-3, 1, -1.2, 0, 4, -1, RGBA(205, 205, 195), faces: .all)          // a few darker seas
+        m.box(1, -3, -1.2, 4, 0, -1, RGBA(215, 213, 200), faces: .all)
+        return m
+    }
+
+    /// Stars: small bright points over a dome round the origin, above the horizon, always the same for a seed.
+    public static func starDome(seed: Int, count: Int = 260, radius: Float = 300) -> Mesh3D {
+        var m = Mesh3D()
+        var r = RNG(seed: seed)
+        for _ in 0..<count {
+            let az = Float(r.unit()) * 2 * .pi, el = Float(0.08 + r.unit() * 1.4)
+            let x = cos(az) * cos(el) * radius, y = sin(el) * radius, z = sin(az) * cos(el) * radius
+            let s: Float = r.unit() < 0.15 ? 1.1 : 0.6
+            let tint = UInt8(200 + r.int(0, 55))
+            m.box(x - s, y - s, z - s, x + s, y + s, z + s, RGBA(tint, tint, 255), faces: .all)
+        }
+        return m
+    }
+
     /// A bridge or viaduct deck, one tile long (along x) and wide, with railings; set at the deck's height.
     public static func deck(rail: Bool) -> Mesh3D {
         var m = Mesh3D()

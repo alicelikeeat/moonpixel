@@ -18,6 +18,7 @@ struct PlayControls: View {
                     Spacer()
                     VStack(spacing: 10) {
                         round("car.fill", L("出行", "Travel"), id: "travel-open") { model.showTravel = true }
+                        round("square.stack.3d.up.fill", L("脚下搭方块", "Block under your feet"), id: "pillar-up") { model.pillarUp() }
                         if model.nearLift != nil {
                             round("arrow.up.arrow.down", L("电梯", "Elevator"), id: "lift-open") { model.liftPanel = model.nearLift }
                         }
@@ -34,6 +35,11 @@ struct PlayControls: View {
             }
             VStack(spacing: 6) {
                 Spacer()
+                if !model.clockLine.isEmpty {
+                    Text(model.clockLine).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .padding(.horizontal, 10).padding(.vertical, 4).glass(Capsule()).allowsHitTesting(false)
+                        .accessibilityIdentifier("clock-line")
+                }
                 if !model.heightLine.isEmpty {
                     Text(model.heightLine).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
                         .padding(.horizontal, 10).padding(.vertical, 4).glass(Capsule()).allowsHitTesting(false)
@@ -66,6 +72,9 @@ struct PlayControls: View {
                 .accessibilityIdentifier("hotbar-\(i)")
                 .accessibilityLabel(key.isEmpty ? L("空快捷栏", "Empty slot") : (GameModel.zh ? Items.def(key).zh : Items.def(key).en))
             }
+            Button { model.supplyPack() } label: { Image(systemName: "shippingbox.fill").frame(width: 34, height: 34) }
+                .buttonStyle(PressStyle()).glass(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityIdentifier("supply-pack").accessibilityLabel(L("一键物资", "Materials in one go"))
             Button { model.showBackpack = true } label: { Image(systemName: "backpack.fill").frame(width: 34, height: 34) }
                 .buttonStyle(PressStyle()).glass(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityIdentifier("backpack").accessibilityLabel(L("背包", "Backpack"))

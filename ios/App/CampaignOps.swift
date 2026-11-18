@@ -552,6 +552,15 @@ struct MorePanel: View {
                     }
                     Chip(title: L("交通管理", "Transport"), icon: "tram.fill", id: "Transport") { model.showMore = false; model.showTransport = true }
                     Chip(title: L("都市并入开放世界", "Bring the metro city in"), icon: "building.2.fill", id: "MetroImport") { model.showMore = false; model.importMetroCity() }
+                    Chip(title: model.artStyle == .anime ? L("像素风格", "Pixel style") : L("动漫风格", "Anime style"), icon: "paintbrush.pointed.fill", id: "ArtStyle") {
+                        model.showMore = false; model.artStyle = model.artStyle == .anime ? .pixel : .anime
+                    }
+                }
+                group(L("日夜", "Day and night")) {
+                    Chip(title: L("清晨", "Dawn"), icon: "sunrise.fill", id: "time-6") { model.showMore = false; model.setTime(6) }
+                    Chip(title: L("正午", "Noon"), icon: "sun.max.fill", id: "time-12") { model.showMore = false; model.setTime(12) }
+                    Chip(title: L("黄昏", "Dusk"), icon: "sunset.fill", id: "time-19") { model.showMore = false; model.setTime(19) }
+                    Chip(title: L("午夜", "Midnight"), icon: "moon.stars.fill", id: "time-0") { model.showMore = false; model.setTime(0) }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {

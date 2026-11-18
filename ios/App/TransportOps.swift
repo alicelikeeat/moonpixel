@@ -48,6 +48,7 @@ extension GameModel {
         d.id = v.id; d.kind = v.kind; d.name = v.name
         d.driving = v.playerDriving; d.auto = v.control == .auto
         d.kmh = abs(v.speed) * 7.2
+        topKmh = max(topKmh, d.kmh)
         let k = v.level == 1 ? s.bridge(at: v.tile)?.deck : s.wayKind(at: v.tile)
         d.limitKmh = min(v.spec.maxSpeed, k?.limit ?? v.spec.maxSpeed) * 7.2
         switch v.spec.energy {
@@ -94,6 +95,7 @@ extension GameModel {
         guard let s = society else { return }
         if let why = s.board(id, drive: drive) { showToast(L("上不了车：", "Cannot board: ") + boardText(why)); return }
         driveInput = Controls()
+        topKmh = 0
         if drive { driveInput.brake = 1 }
         showTravel = false
         refreshDrive()
@@ -264,6 +266,42 @@ extension GameModel {
         guard let d = s.importMetro(m, nation: nation) else { return }
         showToast(String(format: L("%@ 已并入开放世界：%d 人，%d 座建筑，资金 %.0f", "%@ is in the open world: %d people, %d buildings, money %.0f"), d.name, d.population, d.buildings.count, d.money))
         save(announce: false)
+    }
+
+    // MARK: building up, materials, the time of day, the art style
+
+    /// One block under the feet: up a storey, standing on the new floor (stone first, then planks, wood, parts).
+    func pillarUp() {
+        guard let s = society, !worldLocked else { return }
+        guard let good = ["stone", "planks", "wood", "parts", "iron"].first(where: { s.carried($0) >= 1 }) else {
+            showToast(L("背包里没有可以搭的方块（石料、木板、木材、构件）", "Nothing in the pack to build with (stone, planks, wood, parts)")); return
+        }
+        if let why = s.pillarUp(with: good) {
+            let text: [String: String] = ["ceiling": L("头顶已有楼板或墙", "There is a floor or a wall above"), "underground": L("地下不能往上搭", "Not underground"),
+                                          "not standing": L("在车里或电梯里不能搭", "Not in a vehicle or a lift"), "something here": L("脚下有东西", "Something is in the way")]
+            showToast(text[why] ?? why); return
+        }
+        if let b = s.realm.player.body { switchLayer(to: b.pos) }
+        showToast(String(format: L("搭了一块%@，现在在第 %d 层", "Placed %@: now on storey %d"), Recipe.goodName(good, zh: GameModel.zh), (s.realm.player.body?.depth ?? 100) - OpenWorld.storeyBase))
+        refreshHUD()
+    }
+
+    /// Fill the pack with building materials (as much as it carries). Marks the save like the other cheats.
+    func supplyPack() {
+        guard let s = society, !worldLocked else { return }
+        let got = s.supplyPack()
+        if got.isEmpty { showToast(L("背包已满", "The pack is full")); return }
+        showToast(L("物资已装入背包（此存档已标记为使用过作弊）：", "Materials packed (this save is marked as cheated): ")
+                  + got.sorted { $0.key < $1.key }.map { String(format: "%@ %.0f", Recipe.goodName($0.key, zh: GameModel.zh), $0.value) }.joined(separator: " · "))
+        refreshHUD()
+    }
+
+    /// Forward to the next time it is this hour.
+    func setTime(_ hour: Double) {
+        guard let s = society, !worldLocked else { return }
+        s.advanceTo(hour: hour)
+        refreshHUD()
+        showToast(L("时间：", "Time: ") + s.world.clockText)
     }
 }
 

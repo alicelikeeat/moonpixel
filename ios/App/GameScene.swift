@@ -169,6 +169,14 @@ final class GameScene: SKScene {
     /// Far view is allowed while watching a battle or a city.
     var minZoom: CGFloat { model?.watch == Watch.none ? 1 : 0.35 }
 
+    /// The art style changed: everything drawn is drawn again in it.
+    func restyle() {
+        resetLayer()
+        clearTextureCache()
+        for n in vehicleNodes.values { n.removeFromParent() }
+        vehicleNodes = [:]
+    }
+
     @discardableResult func clearTextureCache() -> Int {
         let n = texCache.count
         texCache.removeAll()
@@ -351,7 +359,7 @@ final class GameScene: SKScene {
                 ? ([0] + Array(max(1, world.storey - 3)..<world.storey)).map { model.society.layer($0 == 0 ? 0 : OpenWorld.storeyBase + $0).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)).layers } : nil
             bakeWork.async { [weak self] in
                 let t0 = CACurrentMediaTime()
-                let cg = (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).cgImage
+                let cg = (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).styledCG
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.baked(key, cg, took) }
             }
@@ -371,8 +379,7 @@ final class GameScene: SKScene {
         guard bakes.finished(key, current: current), let cg = cg else { return }
         model.perf.phase("bake", took)
         let t0 = CACurrentMediaTime()
-        let tex = SKTexture(cgImage: cg)
-        tex.filteringMode = .nearest
+        let tex = Bitmap.skTexture(cg)
         chunkTex.put(key, tex, bytes: cg.bytesPerRow * cg.height, keep: Set(chunkKeys.values))
         if visibleChunks.contains(key.chunk) { show(key, tex, world, model) }
         model.perf.phase("texture", CACurrentMediaTime() - t0)

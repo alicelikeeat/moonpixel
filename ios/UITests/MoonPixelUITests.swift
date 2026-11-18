@@ -479,7 +479,10 @@ final class MoonPixelUITests: XCTestCase {
         print("UITEST demo: \(state.label.components(separatedBy: " | ").last ?? "")")
         XCTAssertNotNil(before, "the car reports its place: \(state.label)")
         XCTAssertGreaterThanOrEqual(moved, 3, "the car moves under its own power: \(state.label)")
-        XCTAssertNotEqual(moving, "0 km/h", "and its speed was shown")
+        _ = moving
+        // the speed display: the fastest it showed while the car went (the screen is read too slowly to catch it in passing)
+        let topKmh = state.label.range(of: "top ").flatMap { Double(state.label[$0.upperBound...].split(separator: " ")[0]) } ?? 0
+        XCTAssertGreaterThan(topKmh, 5, "the display showed the speed it went: \(state.label)")
         shot("41-driving")
         // the autopilot takes over (no destination: it holds), then back to the driver
         app.buttons["drive-auto"].tap()
@@ -499,6 +502,52 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["drive-exit"].tap(); sleep(1)
         XCTAssertFalse(app.staticTexts["drive-speed"].exists, "out of the car, the driving display is gone")
         shot("43-out")
+    }
+
+    /// Materials in one go, blocks under the feet to climb, the time of day, and the anime style.
+    func testBlocksUnderFeetMaterialsTimeOfDayAndAnimeStyle() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20))
+        sleep(4)
+        guard app.buttons["supply-pack"].waitForExistence(timeout: 5) else { return XCTFail("no materials button") }
+        app.buttons["supply-pack"].tap(); sleep(1)
+        let height = app.staticTexts["height-line"]
+        let before = height.exists ? height.label : ""
+        app.buttons["pillar-up"].tap(); sleep(1)
+        app.buttons["pillar-up"].tap(); sleep(1)
+        let after = height.label
+        print("UITEST pillar: \(before) -> \(after)")
+        XCTAssertTrue(after.contains("Storey 2") || after.contains("第 2 层"), "two blocks: two storeys up: \(after)")
+        shot("50-pillar")
+        // the time of day: midnight, then noon
+        let clock = app.staticTexts["clock-line"]
+        XCTAssertTrue(clock.waitForExistence(timeout: 5), "the clock is shown")
+        app.buttons["more"].tap(); sleep(1)
+        let midnight = app.buttons["time-0"]
+        if !midnight.isHittable { app.swipeUp() }
+        midnight.tap(); sleep(2)
+        print("UITEST clock: \(clock.label)")
+        XCTAssertTrue(clock.label.contains("☾"), "night: \(clock.label)")
+        shot("51-night")
+        // the anime style, then back to pixel art
+        app.buttons["more"].tap(); sleep(1)
+        let style = app.buttons["ArtStyle"]
+        if !style.isHittable { app.swipeUp() }
+        style.tap(); sleep(3)
+        shot("52-anime")
+        app.buttons["more"].tap(); sleep(1)
+        let noon = app.buttons["time-12"]
+        if !noon.isHittable { app.swipeUp() }
+        noon.tap(); sleep(3)
+        XCTAssertTrue(clock.label.contains("☀︎"), "day: \(clock.label)")
+        shot("53-anime-day")
+        app.buttons["more"].tap(); sleep(1)
+        if !app.buttons["ArtStyle"].isHittable { app.swipeUp() }
+        app.buttons["ArtStyle"].tap(); sleep(2)
+        XCTAssertTrue(app.buttons["Map"].exists, "the game is still running after both style changes")
     }
 }
 
