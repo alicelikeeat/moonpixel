@@ -64,35 +64,40 @@ extension GameModel {
     }
 
     // MARK: map teleport
+    /// A tap on the map: the exact tile under the finger, and what is there.
     func pickMap(_ fx: Double, _ fy: Double) {
-        guard mapSide > 0 else { return }
-        let x = mapOrigin.x + Int(fx * Double(mapSide)), y = mapOrigin.y + Int(fy * Double(mapSide))
-        mapPick = TilePos(x, y)
-        rebuildMap()
+        let t = worldMap.tile(fx: fx, fy: fy)
+        mapPick = t
+        let d = scene.map { Int(Double(t.distance2($0.player.tile)).squareRoot()) } ?? 0
+        mapPickText = String(format: L("(%d, %d) · %@ · 距你 %d 格", "(%d, %d) · %@ · %d tiles away"), t.x, t.y, WorldMap.describe(society, t, zh: GameModel.zh), d)
     }
 
     func pickNearestMaze() {
         guard let sc = scene, let m = society.nearestMaze(cx: Int((sc.player.x / 512).rounded(.down)), cy: Int((sc.player.y / 512).rounded(.down))) else {
             showToast(L("附近没有迷宫", "No maze nearby")); return
         }
-        mapPick = TilePos(m.0, m.1)
-        rebuildMap()
+        let t = TilePos(m.0 * 32 + 15, m.1 * 32 + 33)
+        mapPick = t
+        mapPickText = L("迷宫南门", "The maze's south gate") + String(format: " (%d, %d)", t.x, t.y)
     }
 
-    func teleportToPick() {
-        guard let p = mapPick, let sc = scene else { return }
-        // a maze is entered by its south gate; anywhere else, the nearest free ground
-        let maze = world.gen.isMaze(p.x, p.y)
-        let goal = maze ? TilePos(p.x * 32 + 15, p.y * 32 + 33) : TilePos(p.x * 32 + 16, p.y * 32 + 16)
-        let t = world.findFree(near: goal, maxR: 24)
-        if world.blocked(t.x, t.y) { showToast(L("那里全是水或山，无法落脚", "Nothing but water or rock there")); return }
+    func teleportToPick() { if let p = mapPick { teleport(to: p) } }
+
+    /// Go there at once: the tile itself when there is ground, else the nearest ground (and how far it was).
+    func teleport(to t: TilePos, name: String? = nil) {
+        guard let sc = scene else { return }
+        if society.playerVehicle != nil { showToast(L("先下车再瞬移", "Get out of the vehicle first")); return }
+        if depth != 0 { showToast(L("在地下或楼上不能瞬移：先回到地面", "Not underground or upstairs: go back to the ground first")); return }
+        guard let spot = society.teleportSpot(for: t) else { showToast(L("那里 40 格内都是水或山，无法落脚", "Water or rock for 40 tiles round: nowhere to stand")); return }
         let from = CGPoint(x: sc.player.x, y: -sc.player.y)
-        sc.player = t.center
-        sc.blinkFX(from: from, to: CGPoint(x: t.center.x, y: -t.center.y))
+        sc.player = spot.spot.center
+        sc.blinkFX(from: from, to: CGPoint(x: spot.spot.center.x, y: -spot.spot.center.y))
         following = false
-        mapPick = nil
+        mapPick = nil; mapPickText = ""
         showMap = false
-        showToast(maze ? L("已瞬移到迷宫南门", "Teleported to the maze's south gate") : L("已瞬移", "Teleported"))
+        let place = name ?? WorldMap.describe(society, spot.spot, zh: GameModel.zh)
+        showToast(spot.off <= 1 ? String(format: L("已瞬移：%@", "Teleported: %@"), place)
+                                : String(format: L("已瞬移：%@（落在最近能站的地方，偏了 %d 格）", "Teleported: %@ (the nearest ground, %d tiles off)"), place, spot.off))
     }
 
     // MARK: things within reach

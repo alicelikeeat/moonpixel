@@ -170,10 +170,13 @@ final class GameModel: ObservableObject {
     @Published var metro: MetroSession?
     var commandCount = 0
     private var perfLogAcc = 0.0
+    /// The tile picked on the map (exact to the tile), and what is there.
     @Published var mapPick: TilePos?
+    @Published var mapPickText = ""
     @Published var mapZoom = 1.0
-    var mapOrigin = TilePos(0, 0)
-    var mapSide = 0
+    /// Places on the map: towns, capitals, cities, districts, airports, mazes, armies, you.
+    @Published var mapMarkers: [MapMarker] = []
+    let worldMap = WorldMap()
     @Published var lawRatio = 0.3
     @Published var lawSpaceMB = 0
     @Published var lawNewSeed = true
@@ -785,69 +788,17 @@ final class GameModel: ObservableObject {
 
     func rebuildMap() {
         guard let w = world, let sc = scene else { return }
-        let R = OpenWorld.region
         let pc = TilePos(Int((sc.player.x / 512).rounded(.down)), Int((sc.player.y / 512).rounded(.down)))
+        // as far as anything is known: explored land and the cities of the nations of the known world
         var ext = 10
-        for (k, r) in w.regions {
-            for i in 0..<r.count where r[i] != 0 {
-                ext = max(ext, abs(k.x * R + i % R - pc.x) + 2, abs(k.y * R + i / R - pc.y) + 2)
-            }
-        }
-        // the nations of the known world are on the map too: make room for their cities
-        let civ = society.civ
-        let regionChunks = civ.cfg.regionTiles / 32
-        for city in civ.cities.values where city.detail == nil {
-            ext = max(ext, abs(city.rx * regionChunks + regionChunks / 2 - pc.x) + regionChunks, abs(city.ry * regionChunks + regionChunks / 2 - pc.y) + regionChunks)
-        }
-        ext = min(ext, 160)
-        let side = ext * 2 + 1
-        mapOrigin = TilePos(pc.x - ext, pc.y - ext)
-        mapSide = side
-        var bmp = Bitmap(side, side, fill: RGBA(8, 10, 18))
-        let cols = Content.shared.biomes.map { RGBA(hex: $0.color) }
-        for y in 0..<side { for x in 0..<side {
-            let v = w.known(pc.x - ext + x, pc.y - ext + y)
-            if v != 0 { bmp.set(x, y, cols[Int(v) - 1]) }
-        } }
-        for s in society.settlements.values {
-            let x = (s.center.x >> 5) - pc.x + ext, y = (s.center.y >> 5) - pc.y + ext
-            // towns in their nation's colour: the map shows who holds what
-            let col = society.realm.nation(s.nation ?? 0).map { RGBA(hex: $0.color) } ?? RGBA(255, 216, 77)
-            bmp.rect(x - 2, y - 2, 5, 5, RGBA(20, 20, 28))
-            bmp.rect(x - 1, y - 1, 3, 3, s.abandoned ? RGBA(90, 90, 90) : col)
-        }
-        // regional nations: a frame round each region a city holds, in its colour, and the city in the middle;
-        // forces as dots, towers as a white stroke beside their city
-        for city in civ.cities.values.sorted(by: { $0.id < $1.id }) where city.detail == nil {
-            guard let p = civ.polities[city.nation] else { continue }
-            let col = RGBA(hex: p.color)
-            let x0 = city.rx * regionChunks - pc.x + ext, y0 = city.ry * regionChunks - pc.y + ext
-            bmp.rect(x0, y0, regionChunks, 1, col); bmp.rect(x0, y0 + regionChunks - 1, regionChunks, 1, col)
-            bmp.rect(x0, y0, 1, regionChunks, col); bmp.rect(x0 + regionChunks - 1, y0, 1, regionChunks, col)
-            let cx = x0 + regionChunks / 2, cy = y0 + regionChunks / 2
-            bmp.rect(cx - 2, cy - 2, 5, 5, RGBA(20, 20, 28)); bmp.rect(cx - 1, cy - 1, 3, 3, col)
-            if !civ.towers(of: city.id).isEmpty { bmp.rect(cx + 3, cy - 3, 1, 4, .white) }
-        }
-        for f in civ.forces.values.sorted(by: { $0.id < $1.id }) {
-            guard let p = civ.polities[f.nation] else { continue }
-            let x = MP.keyCX(f.region) * regionChunks + regionChunks / 2 - pc.x + ext, y = MP.keyCY(f.region) * regionChunks + regionChunks / 2 + 3 - pc.y + ext
-            bmp.rect(x, y, 2, 2, RGBA(hex: p.color))
-        }
-        for lg in society.realm.legions where lg.state != 0 {
-            let x = Int((lg.pos.x / 512).rounded(.down)) - pc.x + ext, y = Int((lg.pos.y / 512).rounded(.down)) - pc.y + ext
-            bmp.rect(x, y, 2, 2, .white)
-        }
-        // old mazes in country that has been surveyed
-        for y in 0..<side { for x in 0..<side where w.known(pc.x - ext + x, pc.y - ext + y) != 0 && w.gen.isMaze(pc.x - ext + x, pc.y - ext + y) {
-            bmp.set(x, y, RGBA(200, 110, 255))
-        } }
-        bmp.rect(ext - 1, ext - 1, 3, 3, RGBA(128, 230, 255))
-        if let p = mapPick {
-            let x = p.x - mapOrigin.x, y = p.y - mapOrigin.y
-            bmp.rect(x - 3, y, 7, 1, .white); bmp.rect(x, y - 3, 1, 7, .white)
-        }
+        let R = OpenWorld.region
+        for (k, r) in w.regions { for i in 0..<r.count where r[i] != 0 { ext = max(ext, abs(k.x * R + i % R - pc.x) + 2, abs(k.y * R + i / R - pc.y) + 2) } }
+        let civ = society.civ, rcs = civ.cfg.regionTiles / 32
+        for city in civ.cities.values where city.detail == nil { ext = max(ext, abs(city.rx * rcs + rcs / 2 - pc.x) + rcs, abs(city.ry * rcs + rcs / 2 - pc.y) + rcs) }
+        let (bmp, marks) = worldMap.render(society, centre: sc.player.tile, reach: min(ext, 80), zh: GameModel.zh)
         mapImage = bmp.uiImage
-        mapCaption = String(format: L("已探明 %d 个区块 · 存档 %@ / %@ · 城镇按国家着色；远方国家以国界框标出，走近即可进入", "%d chunks mapped · %@ of %@ on disk · towns in their nation's colour; far nations framed in theirs: walk up to enter them"), w.surveyed, GameModel.sizeText(mapBytes()), limitText)
+        mapMarkers = marks
+        mapCaption = String(format: L("已探明 %d 个区块 · 每个像素 %.0f 格 · 存档 %@ / %@", "%d chunks mapped · %.0f tiles a pixel · %@ of %@ on disk"), w.surveyed, worldMap.tilesPerPixel, GameModel.sizeText(mapBytes()), limitText)
     }
 
     // MARK: photos and assets

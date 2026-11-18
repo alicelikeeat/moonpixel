@@ -241,3 +241,67 @@ final class RefuelTests: XCTestCase {
         XCTAssertGreaterThan(n2, 0); XCTAssertEqual(from2, "own", "from the pack first")
     }
 }
+
+final class WorldMapTests: XCTestCase {
+    func explored(_ seed: Int) -> Society {
+        let s = makeSociety(seed)
+        let c = s.settlements.values.min { $0.id < $1.id }!.center
+        s.world.survey(center: TilePos(c.x >> 5, c.y >> 5), count: 900)
+        return s
+    }
+
+    func testThePictureIsDetailedAndATapNamesTheExactTile() {
+        let s = explored(11)
+        let c = s.settlements.values.min { $0.id < $1.id }!.center
+        let m = WorldMap()
+        let t0 = Date()
+        let (img, marks) = m.render(s, centre: c, reach: 20, ppc: 16, zh: true)
+        let took = Date().timeIntervalSince(t0)
+        XCTAssertEqual(img.w, 41 * 16)
+        XCTAssertEqual(m.tilesPerPixel, 2, "a pixel is two tiles (it was a whole chunk of 32)")
+        XCTAssertLessThan(took, 10)
+        // a tap names a tile, and that tile maps back to the same spot
+        for t in [c, TilePos(c.x + 37, c.y - 51), TilePos(c.x - 200, c.y + 123)] {
+            let (fx, fy) = m.fraction(t)
+            XCTAssertEqual(m.tile(fx: fx, fy: fy), t)
+        }
+        XCTAssertTrue(marks.contains { $0.kind == .player }, "you are on the map")
+        XCTAssertTrue(marks.contains { $0.kind == .town || $0.kind == .capital }, "and the towns, by name")
+        let town = marks.first { $0.kind == .town || $0.kind == .capital }!
+        XCTAssertFalse(town.name.isEmpty)
+        // the second picture of the same place reuses the painted chunks (fast)
+        let t1 = Date(); _ = m.render(s, centre: c, reach: 20, ppc: 16, zh: true)
+        XCTAssertLessThan(Date().timeIntervalSince(t1), took + 0.5)
+    }
+
+    func testTeleportLandsOnTheTileOrTheNearestGround() {
+        let s = explored(11)
+        let c = s.settlements.values.min { $0.id < $1.id }!.center
+        // free ground: on the tile itself, or right next to it
+        let f = s.world.findFree(near: TilePos(c.x + 40, c.y + 40), maxR: 10)
+        guard let a = s.teleportSpot(for: f) else { return XCTFail("a spot") }
+        XCTAssertEqual(a.spot, f); XCTAssertEqual(a.off, 0)
+        // water: the nearest shore, and how far it was
+        var water: TilePos?
+        search: for r in stride(from: 10, to: 600, by: 7) { for (dx, dy) in [(r, 0), (-r, 0), (0, r), (0, -r)] {
+            let t = TilePos(c.x + dx, c.y + dy)
+            if s.world.gen.elevation(t.x, t.y) < Biome.sea - 0.02 { water = t; break search }
+        } }
+        if let w = water, let b = s.teleportSpot(for: w) {
+            XCTAssertFalse(s.world.blocked(b.spot.x, b.spot.y))
+            XCTAssertGreaterThan(b.off, 0)
+        }
+    }
+
+    func testPreviewMap() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MP_PREVIEW"] else { throw XCTSkip("set MP_PREVIEW") }
+        let s = explored(11)
+        let c = s.settlements.values.min { $0.id < $1.id }!.center
+        let m = WorldMap()
+        let t0 = Date()
+        let (img, marks) = m.render(s, centre: c, reach: 30, zh: true)
+        print("PREVIEW map ms", Date().timeIntervalSince(t0) * 1000, img.w, "marks", marks.count)
+        var d = Data("\(img.w) \(img.h)\n".utf8); d.append(contentsOf: img.px)
+        try d.write(to: URL(fileURLWithPath: dir).appendingPathComponent("map.rgba"))
+    }
+}

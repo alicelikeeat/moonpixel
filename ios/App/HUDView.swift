@@ -406,41 +406,108 @@ struct HUDView: View {
     }
 
     private var mapCanvas: some View {
-        let side = 330.0 * model.mapZoom
-        return ScrollView([.horizontal, .vertical]) {
-            if let img = model.mapImage {
-                Image(uiImage: img).interpolation(.none).resizable().frame(width: side, height: side)
-                    .onTapGesture(coordinateSpace: .local) { p in model.pickMap(Double(p.x) / side, Double(p.y) / side) }
-                    .accessibilityIdentifier("map-image")
+        let side = 340.0 * model.mapZoom
+        return ScrollViewReader { proxy in
+            ScrollView([.horizontal, .vertical]) {
+                ZStack(alignment: .topLeading) {
+                    if let img = model.mapImage {
+                        // smooth when shrunk, crisp when enlarged
+                        Image(uiImage: img).interpolation(model.mapZoom >= 2 ? .none : .high).resizable().frame(width: side, height: side)
+                            .onTapGesture(count: 2, coordinateSpace: .local) { p in      // a double tap: go there at once
+                                model.pickMap(Double(p.x) / side, Double(p.y) / side); model.teleportToPick()
+                            }
+                            .onTapGesture(count: 1, coordinateSpace: .local) { p in model.pickMap(Double(p.x) / side, Double(p.y) / side) }
+                            .accessibilityIdentifier("map-image")
+                    }
+                    ForEach(Array(model.mapMarkers.enumerated()), id: \.offset) { _, m in marker(m, side: side) }
+                    if let p = model.mapPick {
+                        let f = model.worldMap.fraction(p)
+                        Image(systemName: "scope").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                            .shadow(color: .black, radius: 2).position(x: f.0 * side, y: f.1 * side).allowsHitTesting(false)
+                    }
+                }
+                .frame(width: side, height: side)
             }
+            .onAppear { proxy.scrollTo("map-me", anchor: .center) }
+            .onChange(of: model.mapZoom) { _, _ in DispatchQueue.main.async { proxy.scrollTo("map-me", anchor: .center) } }
         }
-        .frame(width: 340, height: 340)
+        .frame(width: 350, height: 350)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(6).glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    /// A place on the map: a dot in its colour and its name (towns by name only when enlarged, so the
+    /// whole-world view stays readable). A tap on a place's name goes there.
+    @ViewBuilder private func marker(_ m: MapMarker, side: Double) -> some View {
+        let col = Color(uiColor: UIColor(hex: m.color))
+        let at = CGPoint(x: m.fx * side, y: m.fy * side)
+        switch m.kind {
+        case .player:
+            ZStack {
+                Circle().fill(Color.cyan.opacity(0.35)).frame(width: 18, height: 18)
+                Circle().fill(Color.cyan).frame(width: 9, height: 9).overlay(Circle().stroke(.white, lineWidth: 2))
+            }
+            .position(at).allowsHitTesting(false).id("map-me")
+        case .maze:
+            Image(systemName: "square.grid.3x3.fill").font(.system(size: 9)).foregroundStyle(Color.purple).position(at).allowsHitTesting(false)
+        case .army:
+            Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+        case .airport:
+            if model.mapZoom >= 2 { Image(systemName: "airplane").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false) }
+        default:
+            let big = m.kind == .capital || m.kind == .city
+            Circle().fill(col).frame(width: big ? 9 : 7, height: big ? 9 : 7).overlay(Circle().stroke(Color.black.opacity(0.7), lineWidth: 1.5))
+                .position(at).allowsHitTesting(false)
+            if big || model.mapZoom >= 2 {
+                Button { model.teleport(to: m.tile, name: m.name) } label: {
+                    Text((m.kind == .capital ? "★ " : "") + m.name).font(.system(size: big ? 11 : 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white).padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.black.opacity(0.45), in: Capsule())
+                }
+                .buttonStyle(.plain).fixedSize()
+                .position(x: at.x, y: at.y - 13)
+                .accessibilityIdentifier("map-place-" + m.name)
+            }
+        }
     }
 
     private var mapControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(model.mapCaption).font(.system(size: 11, design: .rounded)).fixedSize(horizontal: false, vertical: true)
-            Text(L("放大后点击地图上的任意位置，再按“瞬移到这里”。紫色方块是迷宫。", "Zoom in, tap anywhere on the map, then press Teleport. Purple squares are mazes."))
+            Text(L("点一下选中格子，双击直接瞬移；点地名立刻前往。", "Tap to pick a tile, double-tap to go there at once; tap a name to go to that place."))
                 .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
                 pill("1×", "minus.magnifyingglass") { model.mapZoom = 1 }
                 pill("2×", "magnifyingglass") { model.mapZoom = 2 }
                 pill("4×", "plus.magnifyingglass") { model.mapZoom = 4 }
             }
-            pill(L("最近的迷宫", "Nearest maze"), "square.grid.3x3.fill") { model.pickNearestMaze() }
             if model.mapPick != nil {
+                Text(model.mapPickText).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit().fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("map-pick-text")
                 Button { model.teleportToPick() } label: {
                     Label(L("瞬移到这里", "Teleport here"), systemImage: "location.fill").font(.system(size: 14, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 16).frame(height: 44).background(Color(red: 0.45, green: 0.4, blue: 0.95), in: Capsule())
+                        .padding(.horizontal, 16).frame(height: 40).background(Color(red: 0.45, green: 0.4, blue: 0.95), in: Capsule())
                 }
                 .buttonStyle(PressStyle())
                 .accessibilityIdentifier("teleport")
             }
-            pill(L("关闭地图", "Close map"), "xmark") { model.toggleMap() }
+            // quick travel: the nearest places by name
+            let me = model.scene?.player.tile ?? TilePos(0, 0)
+            let near = model.mapMarkers.filter { [.capital, .town, .city, .district].contains($0.kind) }
+                .sorted { $0.tile.distance2(me) < $1.tile.distance2(me) }.prefix(4)
+            if !near.isEmpty {
+                Text(L("快速前往", "Go to")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
+                ForEach(Array(near.enumerated()), id: \.offset) { _, m in
+                    pill((m.kind == .capital ? "★" : "") + m.name, "mappin") { model.teleport(to: m.tile, name: m.name) }
+                }
+            }
+            HStack(spacing: 6) {
+                pill(L("最近的迷宫", "Nearest maze"), "square.grid.3x3.fill") { model.pickNearestMaze() }
+                pill(L("关闭", "Close"), "xmark") { model.toggleMap() }
+            }
         }
-        .padding(14).frame(width: 300, alignment: .leading)
+        .padding(14).frame(width: 290, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
+
 }
