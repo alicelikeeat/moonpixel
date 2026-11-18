@@ -42,7 +42,13 @@ struct HUDView: View {
                     VStack(alignment: .trailing, spacing: 8) {
                         speedBar
                         // the card of someone selected takes the place of the notices: both never fit together
-                        if let info = model.selected { agentCard(info) } else { noticeStack }
+                        // a person's card can be long (thoughts, family, actions): it scrolls inside a capped height,
+                        // so it never makes the HUD taller than a landscape phone and shifts the top row off screen
+                        if let info = model.selected {
+                            ScrollView(.vertical, showsIndicators: false) { agentCard(info) }
+                                .frame(width: 356).frame(maxHeight: 230)
+                                .accessibilityIdentifier("agent-card")
+                        } else { noticeStack }
                     }
                 }
                 if model.lawSavePending { savePendingBar }

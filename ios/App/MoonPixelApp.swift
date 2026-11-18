@@ -36,7 +36,9 @@ struct RootView: View {
                 if model.render3D { Solid3DView().ignoresSafeArea() }
                 // the nanite swarm is drawn over either view; it is hidden and holds no memory until one is cast
                 SwarmOverlay().ignoresSafeArea().allowsHitTesting(false)
-                HUDView()
+                // the HUD is given exactly the screen: if anything in it ever grows taller, it is laid out from
+                // the top (never centred on a taller frame, which pushed the top row off the screen)
+                GeometryReader { g in HUDView().frame(width: g.size.width, height: g.size.height, alignment: .top) }
             } else {
                 MenuView()
             }

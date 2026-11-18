@@ -85,8 +85,12 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["2×"].tap(); sleep(1)
         app.images["map-image"].tap(); sleep(1)
         shot("05i-map-pick")
-        XCTAssertTrue(app.buttons["teleport"].waitForExistence(timeout: 3), "a place was picked on the map")
-        app.buttons["teleport"].tap(); sleep(2)
+        // the middle of the map is often a town whose name label sits on top: tapping a name goes there at once
+        if app.buttons["teleport"].waitForExistence(timeout: 3) {
+            app.buttons["teleport"].tap(); sleep(2)
+        } else {
+            XCTAssertTrue(text(app, containing: "Teleported").waitForExistence(timeout: 3), "a place was picked on the map, or a name tapped went there")
+        }
         XCTAssertFalse(text(app, containing: "chunks mapped").exists, "teleporting closes the map")
         XCTAssertTrue(text(app, containing: "Teleported").exists || app.buttons["Map"].exists)
         // three nations: territory, relations, pressure and fatigue are on screen
