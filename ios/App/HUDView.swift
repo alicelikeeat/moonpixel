@@ -705,8 +705,9 @@ struct HUDView: View {
             if !near.isEmpty {
                 Text(L("快速前往", "Go to")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
                 LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
-                    ForEach(Array(near.enumerated()), id: \.offset) { _, m in
+                    ForEach(Array(near.enumerated()), id: \.offset) { i, m in
                         gridPill((m.kind == .capital ? "★" : "") + m.name, "mappin") { model.teleport(to: m.tile, name: m.name) }
+                            .accessibilityIdentifier("map-go-\(i)")
                     }
                 }
             }

@@ -83,10 +83,12 @@ final class MoonPixelUITests: XCTestCase {
         // the map: zoom, pick a place, teleport
         map.tap(); sleep(2)
         app.buttons["map-zoom-2"].tap(); sleep(1)
-        app.images["map-image"].tap(); sleep(1)
-        // a name label or a landmark may sit where the tap lands: try another spot of open map
-        if !app.buttons["teleport"].waitForExistence(timeout: 2) && !text(app, containing: "Teleported").exists && app.images["map-image"].exists {
-            app.images["map-image"].coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.47)).tap(); sleep(1)
+        // the enlarged picture is bigger than its box: tap the middle of what can be seen of it
+        let mapBox = app.scrollViews.containing(.image, identifier: "map-image").firstMatch
+        (mapBox.exists ? mapBox : app.images["map-image"]).tap(); sleep(1)
+        // a name label or a landmark may sit where the tap lands: then go by a place's name from the list
+        if !app.buttons["teleport"].waitForExistence(timeout: 2) && !text(app, containing: "Teleported").exists && app.buttons["map-go-0"].exists {
+            app.buttons["map-go-0"].tap(); sleep(2)
         }
         shot("05i-map-pick")
         // the middle of the map is often a town whose name label sits on top: tapping a name goes there at once
@@ -98,6 +100,7 @@ final class MoonPixelUITests: XCTestCase {
             XCTAssertTrue(text(app, containing: "Teleported").waitForExistence(timeout: 3), "a place was picked on the map, or a name tapped went there")
         }
         XCTAssertFalse(text(app, containing: "chunks mapped").exists, "teleporting closes the map")
+        if text(app, containing: "chunks mapped").exists { map.tap(); sleep(1) }        // whatever happened, the map is closed before going on
         XCTAssertTrue(text(app, containing: "Teleported").exists || app.buttons["Map"].exists)
         // three nations: territory, relations, pressure and fatigue are on screen
         app.buttons["Nations"].tap(); sleep(2)
@@ -576,16 +579,13 @@ final class MoonPixelUITests: XCTestCase {
 
     /// Choose a game speed: the speed bar folds to the current speed, so open it first when it is folded.
     func speed(_ app: XCUIApplication, _ label: String) {
-        let opener = app.buttons["speed"]
-        if opener.waitForExistence(timeout: 3) { opener.tap(); sleep(1) }
-        let b = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
-        guard b.waitForExistence(timeout: 3) else { return }
-        // the bar slides open: wait until the button can be tapped (open it again if it folded meanwhile)
-        let until = Date().addingTimeInterval(4)
-        while !b.isHittable && Date() < until { usleep(250_000) }
-        if !b.isHittable, opener.exists { opener.tap(); sleep(1) }
-        if b.isHittable { b.tap() }
+        // the bar folds itself five seconds after opening: open it and tap at once, a few times if need be
+        for _ in 0..<4 {
+            let b = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+            if b.exists && b.isHittable { b.tap(); return }
+            let opener = app.buttons["speed"]
+            if opener.exists && opener.isHittable { opener.tap(); usleep(800_000) } else { sleep(1) }
+        }
     }
-
 }
 
