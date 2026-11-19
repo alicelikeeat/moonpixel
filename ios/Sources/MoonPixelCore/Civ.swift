@@ -80,6 +80,8 @@ public struct CivRegion: Codable, Equatable {
     public var form: String?
     /// The underground city under it (Underground.swift), apart from any city on the surface.
     public var underCity: Int?
+    /// The city on its sea floor (Undersea.swift).
+    public var seaCity: Int?
     public var key: Int64 { MP.chunkKey(rx, ry) }
     public var coast: Bool { land > 0.25 && water > 0.12 }
 }
@@ -113,6 +115,8 @@ public final class CivCity: Codable {
     public var detail: Int?
     /// A city underground (Underground.swift): it digs, it does not stand on the surface's land.
     public var under: Bool?
+    /// A city on the sea floor, of people who breathe the water (Undersea.swift).
+    public var sea: Bool?
     /// Underground: the chunk its hall is in, how far it has dug (tiles from the centre), how far the detailed
     /// world has been carved to match, and whether it stands under the sea behind glass.
     public var underAtBox: [Int]?, dugBox: Double?, carvedBox: Int?, sealed: Bool?
@@ -881,7 +885,7 @@ public final class Civ: Codable {
 
     /// A city in a region, with people who were not counted before (a place found for the first time)
     /// or who came from elsewhere (settlers, already counted on the road).
-    @discardableResult func newCity(at key: Int64, nation: Int, people: CivPeople, firstCount: Bool, under: Bool = false) -> CivCity {
+    @discardableResult func newCity(at key: Int64, nation: Int, people: CivPeople, firstCount: Bool, under: Bool = false, sea: Bool = false) -> CivCity {
         let c = CivCity()
         c.id = nextCity; nextCity += 1
         let (rx, ry) = (MP.keyCX(key), MP.keyCY(key))
@@ -899,7 +903,9 @@ public final class Civ: Codable {
             // the first count of people who were always there: not births, and said so in the ledger
             c.ledger.newly += people.total; c.today.newly += people.total; totals.newly += people.total
         }
-        if under { c.under = true; regions[key]?.underCity = c.id } else { regions[key]?.city = c.id }
+        if under { c.under = true; regions[key]?.underCity = c.id }
+        else if sea { c.sea = true; regions[key]?.seaCity = c.id }
+        else { regions[key]?.city = c.id }
         cities[c.id] = c
         return c
     }

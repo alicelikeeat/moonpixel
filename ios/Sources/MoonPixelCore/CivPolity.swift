@@ -30,6 +30,8 @@ public struct CivPolity: Codable, Equatable {
     public var builds = true
     /// A nation of the underground (Underground.swift): it digs outward and never starts a war with the surface.
     public var underground: Bool?
+    /// A nation of the sea floor (Undersea.swift): its people breathe the water and it refuses war.
+    public var undersea: Bool?
     public func knows(_ t: String) -> Bool { techs.contains(t) }
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
 }
@@ -64,6 +66,8 @@ extension Civ {
         guard a != b, polities[a]?.status == .active, polities[b]?.status != .history else { return }
         // the underground and the surface do not go to war with each other
         if (polities[a]?.underground == true) != (polities[b]?.underground == true) { return }
+        // the nations of the sea floor refuse war: they declare none, and none can be declared on them
+        if polities[a]?.undersea == true || polities[b]?.undersea == true { return }
         let k = touch(a, b)
         guard relations[k]!.state != 1 else { return }
         relations[k]!.state = 1; relations[k]!.since = time; relations[k]!.pact = false
@@ -133,7 +137,7 @@ extension Civ {
         var r = Civ.survey(gen, rx, ry, size: cfg.regionTiles)
         r.foundAt = time
         regions[key] = r
-        if underNations { foundUnder(key, gen: gen) }
+        if underNations { foundUnder(key, gen: gen); foundSea(key, gen: gen) }
         var h = RNG(seed: gen.seed &* 977 &+ rx &* 2654435761 &+ ry &* 40503 &+ cfg.rulesVersion)
         let roll = h.unit()
         // under the coast rule (new worlds with oceans) city-states never stand edge to edge, so none is walled in

@@ -2833,6 +2833,103 @@
 "en": "UFO Landing Pad",
 "zh": "UFO 停机坪"
 }
+},
+{
+"id": 173,
+"key": "coral_wall",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"art": [
+"wall",
+"#e8806e",
+"#b04a48",
+"#f8c8b4"
+],
+"name": {
+"en": "Coral Wall",
+"zh": "珊瑚墙"
+}
+},
+{
+"id": 174,
+"key": "pearl_dome",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"art": [
+"wall",
+"#e4ecf8",
+"#9ab4d8",
+"#ffffff"
+],
+"name": {
+"en": "Pearl Dome",
+"zh": "珍珠穹顶"
+}
+},
+{
+"id": 175,
+"key": "coral",
+"layer": 2,
+"solid": 1,
+"natural": 1,
+"art": [
+"bush",
+"#f0647a",
+"#ffb4a4"
+],
+"name": {
+"en": "Coral",
+"zh": "珊瑚"
+}
+},
+{
+"id": 176,
+"key": "kelp",
+"layer": 3,
+"natural": 1,
+"art": [
+"tuft",
+"#2f7a4a",
+"#56a868"
+],
+"name": {
+"en": "Kelp",
+"zh": "海带"
+}
+},
+{
+"id": 177,
+"key": "pearl_lamp",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"light": 7,
+"art": [
+"lamp",
+"#c8d8f0",
+"#f2fbff"
+],
+"name": {
+"en": "Pearl Lamp",
+"zh": "珍珠灯"
+}
+},
+{
+"id": 178,
+"key": "seabed",
+"layer": 0,
+"water": 1,
+"art": [
+"speck",
+"#3a78a8",
+"#6aa8c8"
+],
+"name": {
+"en": "Seabed Plaza",
+"zh": "海床广场"
+}
 }
 ]
 }

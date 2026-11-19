@@ -268,6 +268,7 @@ public final class Generator {
         if let v = volcano(near: bx + 16, by + 16, radius: 48) { shapeVolcano(v, cx, cy, &g, &st, &ob, &de) }
         if isUfoPort(cx, cy) { carveUfoPort(cx, cy, &g, &st, &ob, &de) }
         else if isUnderCity(cx, cy) && volcano(near: bx + 16, by + 16, radius: 40) == nil { carveCityStair(&g, &st, &ob, &de) }
+        if isSeaCity(cx, cy) { carveSeaCity(cx, cy, &g, &st, &ob, &de) }
         c.layers = [g, st, ob, de]
         return c
     }
