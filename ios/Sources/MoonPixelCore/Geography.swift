@@ -136,7 +136,7 @@ extension Civ {
     /// the nearest city (ties to the older city). A region keeps the owner it was given; it is held by
     /// whoever holds the city that claims it. Sea is never claimed. Cheap; run daily and after captures.
     public func refreshTerritory() {
-        let live = cities.values.filter { polities[$0.nation]?.status != .history }.sorted { $0.id < $1.id }
+        let live = cities.values.filter { polities[$0.nation]?.status != .history && $0.under != true }.sorted { $0.id < $1.id }
         // which city each piece of land answers to (nearest; a city always answers for its own region)
         var best: [Int64: (d: Int, city: Int)] = [:]
         let R = cfg.claimRadius
@@ -248,7 +248,7 @@ extension Civ {
     /// once; one that still has none is reported, never made up.
     @discardableResult public func applyCoastRule(gen: Generator?) -> [Int] {
         guard coastRule else { return [] }
-        let todo = polities.keys.sorted().filter { polities[$0]!.status == .active && !seaChecked.contains($0) && homeCity($0) != nil }
+        let todo = polities.keys.sorted().filter { polities[$0]!.status == .active && polities[$0]!.underground != true && !seaChecked.contains($0) && homeCity($0) != nil }
         guard !todo.isEmpty else { return [] }
         refreshTerritory()
         var bodies = waterBodies()

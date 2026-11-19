@@ -28,6 +28,8 @@ public struct CivPolity: Codable, Equatable {
     public var ai = true
     /// Its cities choose what to build themselves (off: only what they are given, as in some tests).
     public var builds = true
+    /// A nation of the underground (Underground.swift): it digs outward and never starts a war with the surface.
+    public var underground: Bool?
     public func knows(_ t: String) -> Bool { techs.contains(t) }
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
 }
@@ -60,6 +62,8 @@ extension Civ {
 
     public func declare(_ a: Int, on b: Int) {
         guard a != b, polities[a]?.status == .active, polities[b]?.status != .history else { return }
+        // the underground and the surface do not go to war with each other
+        if (polities[a]?.underground == true) != (polities[b]?.underground == true) { return }
         let k = touch(a, b)
         guard relations[k]!.state != 1 else { return }
         relations[k]!.state = 1; relations[k]!.since = time; relations[k]!.pact = false
@@ -129,6 +133,7 @@ extension Civ {
         var r = Civ.survey(gen, rx, ry, size: cfg.regionTiles)
         r.foundAt = time
         regions[key] = r
+        if underNations { foundUnder(key, gen: gen) }
         var h = RNG(seed: gen.seed &* 977 &+ rx &* 2654435761 &+ ry &* 40503 &+ cfg.rulesVersion)
         let roll = h.unit()
         // under the coast rule (new worlds with oceans) city-states never stand edge to edge, so none is walled in
@@ -181,6 +186,14 @@ extension Civ {
 
     func politicsDaily() {
         let cfg = self.cfg
+        // a nation that reaches the age of AI raises a giantess of its own (once)
+        for id in polities.keys.sorted() where polities[id]!.status == .active && era(id) >= 5 && !giants.contains(where: { $0.nation == id }) {
+            guard let home = homeCity(id), home.detail == nil else { continue }
+            let names = [("Aurelia", "奥蕾莉亚"), ("Seraphine", "瑟拉菲娜"), ("Ondine", "昂蒂娜"), ("Valeria", "瓦莱莉亚"), ("Celestine", "塞莱斯汀")]
+            let nm = names[id % names.count]
+            raiseGiant(nation: id, at: home.regionKey, en: nm.0, zh: nm.1)
+            say("giantess_rises", [nm.0, nm.1, polities[id]!.nameEn, polities[id]!.nameZh], [id], region: home.regionKey)
+        }
         // what each nation is today
         for id in polities.keys.sorted() {
             guard var p = polities[id], p.status != .history else { continue }

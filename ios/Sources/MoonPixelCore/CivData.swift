@@ -129,7 +129,7 @@ public struct CivTech: Codable, Equatable {
     public let needs: [String]
     public let cost: Double            // research points
     public let lab: Int                // research facility level needed (0 none, 1 school, 2 institute, 3 laboratory)
-    public static let eraNames = [("Farming & crafts", "农耕手工"), ("Metal & machines", "冶金机械"), ("Industry", "工业"), ("Electric age", "电气化"), ("Information age", "信息化"), ("Future", "未来科技")]
+    public static let eraNames = [("Farming & crafts", "农耕手工"), ("Metal & machines", "冶金机械"), ("Industry", "工业"), ("Electric age", "电气化"), ("Information age", "信息化"), ("AI age", "人工智能时代")]
     /// Everything of this kind the game knows: the built-in pack and any added content packs.
     public static var all: [CivTech] { ContentRegistry.shared.techs }
     public static var byKey: [String: CivTech] { ContentRegistry.shared.techsByKey }
@@ -437,7 +437,7 @@ public struct CivUnitDef: Codable, Equatable {
         CivUnitDef(key: "submarine", en: "Attack submarine", zh: "攻击潜艇", layer: .underwater, size: .huge, tech: ["deep_yard", "electronics"], facility: "deep_yard",
                    stages: [["steel": 50, "engine": 4], ["electronics": 10, "weapons": 4]], hours: 60, crew: 50, upkeep: 6, hp: 360, armor: 2, speed: 2.5, fuelCap: 160, fuelPerDay: 8, energyPerDay: 0,
                    ammoCap: 24, foodCap: 500, heatCap: 0, cool: 0, sensor: 1, stealth: 3, weapons: [torpedo], hangar: 0, deckPerHour: 0, carrierBased: false, endurance: 0, parts: ["power", "weapons"]),
-        CivUnitDef(key: "carrier", en: "Tidewall-class carrier", zh: "潮墙级航空母舰", layer: .sea, size: .huge, tech: ["carrier_ops"], facility: "deep_yard",
+        CivUnitDef(key: "carrier", en: "Tidewall-class carrier", zh: "潮墙级航空母舰", layer: .sea, size: .huge, tech: ["naval_eng", "steam"], facility: "shipyard",
                    stages: [["steel": 200, "engine": 8], ["armor": 30, "parts": 40], ["electronics": 30, "weapons": 6]], hours: 96, crew: 400, upkeep: 20, hp: 2200, armor: 3, speed: 2.5, fuelCap: 600, fuelPerDay: 40, energyPerDay: 0,
                    ammoCap: 200, foodCap: 4000, heatCap: 0, cool: 0, sensor: 3, stealth: 0, weapons: [shipAA], hangar: 12, deckPerHour: 4, carrierBased: false, endurance: 0, parts: ["power", "hangar", "control", "weapons"]),
         CivUnitDef(key: "frame", en: "Warden heavy frame", zh: "守望者重型机兵", layer: .ground, size: .large, tech: ["frame", "frame_reactor"], facility: "frame_works",

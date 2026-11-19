@@ -78,6 +78,8 @@ public struct CivRegion: Codable, Equatable {
     public var legal: Int?, control: Int?, claim: Int?
     /// The landform the region lies in (Landforms.swift), when the world made one there.
     public var form: String?
+    /// The underground city under it (Underground.swift), apart from any city on the surface.
+    public var underCity: Int?
     public var key: Int64 { MP.chunkKey(rx, ry) }
     public var coast: Bool { land > 0.25 && water > 0.12 }
 }
@@ -109,6 +111,17 @@ public final class CivCity: Codable {
     public var founded = 0.0
     /// The Society town this city is (detailed level); its people and food are counted there, not here.
     public var detail: Int?
+    /// A city underground (Underground.swift): it digs, it does not stand on the surface's land.
+    public var under: Bool?
+    /// Underground: the chunk its hall is in, how far it has dug (tiles from the centre), how far the detailed
+    /// world has been carved to match, and whether it stands under the sea behind glass.
+    public var underAtBox: [Int]?, dugBox: Double?, carvedBox: Int?, sealed: Bool?
+    public var dug: Double { get { dugBox ?? 0 } set { dugBox = newValue } }
+    public var carved: Int { get { carvedBox ?? 0 } set { carvedBox = newValue } }
+    public var underAt: (Int, Int)? {
+        get { underAtBox.flatMap { $0.count == 2 ? ($0[0], $0[1]) : nil } }
+        set { underAtBox = newValue.map { [$0.0, $0.1] } }
+    }
     public var people = CivPeople()
     public var sick = 0
     /// Who the people feel they belong to: nation id -> share (sums to 1). Changes slowly, not with the flag.
@@ -216,6 +229,8 @@ public final class Civ: Codable {
     public var nextDrop = 1, nextGiant = 1
     /// Passes without a town held by an enemy force standing in them (region -> nation): held at once, given
     /// back the moment the force leaves (TwinPorts.swift).
+    /// Nations of the underground cities live in this world (Underground.swift).
+    public var underNations = false
     public var heldPasses: [Int64: Int] = [:] { didSet { if heldPasses != oldValue { geoCache.clear() } } }
     /// What happened, in order, with the ids involved: the record a war can be replayed and checked from.
     public var chronicle: [CivEvent] = []
@@ -228,7 +243,7 @@ public final class Civ: Codable {
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
         case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
-        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle
+        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle, underNations
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -254,6 +269,7 @@ public final class Civ: Codable {
         try c.encode(targetWars, forKey: .targetWars); try c.encode(nextEnvoy, forKey: .nextEnvoy); try c.encode(nextTargetWar, forKey: .nextTargetWar)
         try c.encode(drops, forKey: .drops); try c.encode(giants, forKey: .giants); try c.encode(nextDrop, forKey: .nextDrop); try c.encode(nextGiant, forKey: .nextGiant)
         try c.encode(heldPasses.keys.sorted().map { [$0, Int64(heldPasses[$0]!)] }, forKey: .heldPasses); try c.encode(chronicle, forKey: .chronicle)
+        try c.encode(underNations, forKey: .underNations)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -304,6 +320,7 @@ public final class Civ: Codable {
         nextGiant = try c.decodeIfPresent(Int.self, forKey: .nextGiant) ?? (giants.map { $0.id }.max() ?? 0) + 1
         for pair in try c.decodeIfPresent([[Int64]].self, forKey: .heldPasses) ?? [] where pair.count == 2 { heldPasses[pair[0]] = Int(pair[1]) }
         chronicle = try c.decodeIfPresent([CivEvent].self, forKey: .chronicle) ?? []
+        underNations = try c.decodeIfPresent(Bool.self, forKey: .underNations) ?? false
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -446,6 +463,7 @@ public final class Civ: Codable {
         refreshTerritory()
         politicsDaily()
         if envoys { vassalsDaily(); envoyChoices() }
+        if underNations { undergroundDaily() }
         tripsDaily()
         industryDaily()
         forcesDaily()
@@ -863,7 +881,7 @@ public final class Civ: Codable {
 
     /// A city in a region, with people who were not counted before (a place found for the first time)
     /// or who came from elsewhere (settlers, already counted on the road).
-    @discardableResult func newCity(at key: Int64, nation: Int, people: CivPeople, firstCount: Bool) -> CivCity {
+    @discardableResult func newCity(at key: Int64, nation: Int, people: CivPeople, firstCount: Bool, under: Bool = false) -> CivCity {
         let c = CivCity()
         c.id = nextCity; nextCity += 1
         let (rx, ry) = (MP.keyCX(key), MP.keyCY(key))
@@ -881,7 +899,7 @@ public final class Civ: Codable {
             // the first count of people who were always there: not births, and said so in the ledger
             c.ledger.newly += people.total; c.today.newly += people.total; totals.newly += people.total
         }
-        regions[key]?.city = c.id
+        if under { c.under = true; regions[key]?.underCity = c.id } else { regions[key]?.city = c.id }
         cities[c.id] = c
         return c
     }

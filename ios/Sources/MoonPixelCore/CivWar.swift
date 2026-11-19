@@ -646,6 +646,22 @@ extension Civ {
         f.units.compactMap { units[$0] }.reduce(0.0) { acc, u in acc + u.hp / u.def.hp * u.def.weapons.reduce(0.0) { $0 + $1.damage } } * (1 - f.crew.hungerIndex) * f.morale
     }
 
+    /// The age a nation is in (the highest era among what it knows).
+    public func era(_ id: Int) -> Int { polities[id]?.techs.compactMap { CivTech.byKey[$0]?.era }.max() ?? 0 }
+
+    /// Order the machines of its age a nation has none of yet (one at a time).
+    func ageMachines(_ id: Int) {
+        guard let p = polities[id] else { return }
+        let have = Set(units.values.filter { $0.nation == id }.map { $0.kind } + projects.values.filter { $0.nation == id }.map { $0.kind })
+        var want: [String] = []
+        if era(id) >= 2 { want.append("carrier") }
+        if era(id) >= 5 { want += ["frame", "shifter", "sky_carrier"] }
+        for kind in want where !have.contains(kind) {
+            guard let def = CivUnitDef.byKey[kind], def.tech.allSatisfy(p.knows) else { continue }
+            if let c = cities(of: id).first(where: { $0.has(def.facility) > 0 }) { order(kind, nation: id, city: c.id); return }
+        }
+    }
+
     func warChoices(_ id: Int) {
         guard let p = polities[id] else { return }
         // war: only when it is worth its cost, against a weaker neighbour, while the people are pressed
@@ -688,6 +704,9 @@ extension Civ {
                 if let c = cities(of: id).first(where: { $0.has(def.facility) > 0 }) { order(kind, nation: id, city: c.id); break }
             }
         }
+        // the great machines of an age are built once the age is reached, war or peace: a carrier in the age of
+        // industry (where there is a shipyard), frames, a shifter and a sky carrier in the age of AI
+        if p.treasury > 50 && projects.values.filter({ $0.nation == id }).count < 2 { ageMachines(id) }
         for u in units.values.sorted(by: { $0.id < $1.id }) where u.nation == id && u.depot != nil { _ = deploy(u.id) }
         // forces: march on the nearest enemy city they can reach
         if atWar {

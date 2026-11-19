@@ -72,7 +72,7 @@ final class LogisticsTests: XCTestCase {
         let home = c.newCity(at: MP.chunkKey(0, 0), nation: n, people: CivPeople(adults: 3000, children: 1000, elders: 500), firstCount: true)
         home.facilities = ["farm": 600, "house": 700, "well": 2]
         home.stock = ["grain": 1e6]; c.totals.add(\.found, "grain", 1e6)
-        for f in ["deep_yard", "aircraft_works", "airfield", "plant", "fusion_plant", "barracks"] { home.facilities[f] = 2 }
+        for f in ["shipyard", "deep_yard", "aircraft_works", "airfield", "plant", "fusion_plant", "barracks"] { home.facilities[f] = 2 }
         for (k, v) in ["steel": 5000.0, "armor": 500, "parts": 2000, "engine": 200, "electronics": 1000, "weapons": 200, "core": 40, "fuel": 5000, "ammo": 5000] { home.stock[k] = v }
         let foe = c.newPolity(origin: "first", near: nil)
         _ = c.newCity(at: MP.chunkKey(5, 0), nation: foe, people: CivPeople(adults: 50), firstCount: true)

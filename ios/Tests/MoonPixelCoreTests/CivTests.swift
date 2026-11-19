@@ -169,7 +169,7 @@ final class CivTests: XCTestCase {
         c.polities[n]!.techs = CivTech.all.map { $0.key }
         c.polities[n]!.ai = false                                          // the test gives the orders
         let t = city(c, x, nation: n, adults: 3000, farms: 600, houses: 700, grain: 1e6)
-        for f in ["frame_works", "deep_yard", "aircraft_works", "sky_yard", "motor_works", "barracks", "airfield", "plant", "fusion_plant"] { t.facilities[f] = 2 }
+        for f in ["frame_works", "shipyard", "deep_yard", "aircraft_works", "sky_yard", "motor_works", "barracks", "airfield", "plant", "fusion_plant"] { t.facilities[f] = 2 }
         for (k, v) in ["steel": 5000.0, "armor": 500, "parts": 2000, "engine": 200, "electronics": 1000, "weapons": 200, "core": 40, "fuel": 5000, "ammo": 5000] { t.stock[k] = v }
         return (n, t)
     }

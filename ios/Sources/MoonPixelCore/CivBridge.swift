@@ -77,6 +77,8 @@ extension Society {
         if let t = explorer { c.discover(around: t, radius: 3, gen: world.gen, detailed: detailed) }
         syncDetailed(c)
         c.applyCoastRule(gen: world.gen)
+        // the nations of the underground cities (worlds from v2.16 on; old worlds meet them as they explore)
+        if !c.underNations { c.underNations = true; for k in c.regions.keys.sorted() { c.foundUnder(k, gen: world.gen) } }
         if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t) }
         syncShownOwners(c)
         // towers with real elevators get their food by them, and only while they stand
@@ -84,6 +86,8 @@ extension Society {
         for t in c.towerIndex.towers.values { let want: Bool? = served.contains(t.id) ? true : nil; if t.realLift != want { t.realLift = want } }
         supplyTowers()
         c.advance(to: world.time)
+        // underground, near the player, the nations' digging is carved into the rock as it goes
+        if realm.player.depth == 1, let t = explorer { digUnderground(around: t) }
         refreshStanding(c)
         c.born.removeAll()
     }
@@ -160,7 +164,7 @@ extension Society {
     func showNearby(_ c: Civ, around t: TilePos) {
         let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
         guard agents.count + 40 < world.budget.maxAgents, settlements.values.filter({ !$0.abandoned }).count < world.budget.maxSettlements else { return }
-        for city in c.cities.values.sorted(by: { $0.id < $1.id }) where city.detail == nil && city.shownAs == nil && abs(city.rx - rx) <= 1 && abs(city.ry - ry) <= 1 {
+        for city in c.cities.values.sorted(by: { $0.id < $1.id }) where city.detail == nil && city.shownAs == nil && city.under != true && abs(city.rx - rx) <= 1 && abs(city.ry - ry) <= 1 {
             guard let p = c.polities[city.nation], p.status == .active, city.pop >= 12 else { continue }
             let size = c.cfg.regionTiles
             let mid = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)

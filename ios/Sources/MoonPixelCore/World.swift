@@ -152,8 +152,8 @@ public final class Generator {
             if !open {
                 let r = Double(MP.h2(seed &+ 31, wx, wy) & 0xffff) / 65536.0
                 ob[i] = ores.first { r < $0.1 }?.0 ?? wall
-            } else if cavern > 0.3 && wet > 0.25 {
-                g[i] = lake
+            } else if (cavern > 0.3 && wet > 0.25) || (oceans && seaAbove(wx, wy)) {
+                g[i] = lake                                          // under the sea, every cavern is flooded
             } else if MP.h01(seed &+ 5, wx, wy) < 0.012 { de[i] = ct.tid("mushroom") }
         } }
         if isUnderCity(cx, cy) {
@@ -161,10 +161,8 @@ public final class Generator {
             c.layers = [g, st, ob, de]
             return c
         }
-        // one ruin in every 3x3 block of chunks
-        let rx = Int((Double(cx) / 3).rounded(.down)), ry = Int((Double(cy) / 3).rounded(.down))
-        let h = MP.h2(seed &+ 555, rx, ry)
-        if rx * 3 + Int(h % 3) == cx && ry * 3 + Int((h >> 8) % 3) == cy {
+        // one ruin in every 3x3 block of chunks (fewer in new worlds: isUnderRuin)
+        if isUnderRuin(cx, cy) {
             let rwall = ct.tid("ruin_wall"), rfloor = ct.tid("ruin_floor")
             for y in 10...20 { for x in 10...20 {
                 let i = y * 32 + x
@@ -179,10 +177,12 @@ public final class Generator {
         return c
     }
 
+    /// One ruin in every 3 x 3 block of chunks; in new worlds (with oceans) only one block in three has one.
     public func isUnderRuin(_ cx: Int, _ cy: Int) -> Bool {
         let rx = Int((Double(cx) / 3).rounded(.down)), ry = Int((Double(cy) / 3).rounded(.down))
         let h = MP.h2(seed &+ 555, rx, ry)
-        return rx * 3 + Int(h % 3) == cx && ry * 3 + Int((h >> 8) % 3) == cy
+        guard rx * 3 + Int(h % 3) == cx && ry * 3 + Int((h >> 8) % 3) == cy else { return false }
+        return !oceans || (h >> 16) % 3 == 0
     }
 
     public func generate(_ cx: Int, _ cy: Int) -> Chunk {
@@ -391,15 +391,15 @@ public final class Generator {
     /// One chunk in every 10x10 block of chunks (about one every 640 m each way) holds an underground city (not
     /// under a ruin).
     public static let underCitySpacing = 10
+    /// New worlds (with oceans) have a quarter as many: one in every 20 x 20 chunks.
+    public var underSpacing: Int { oceans ? 20 : Generator.underCitySpacing }
     public func isUnderCity(_ cx: Int, _ cy: Int) -> Bool {
-        let n = Generator.underCitySpacing
+        let n = underSpacing
         let rx = Int((Double(cx) / Double(n)).rounded(.down)), ry = Int((Double(cy) / Double(n)).rounded(.down))
         let h = MP.h2(seed &+ 888, rx, ry)
         guard rx * n + Int(h % UInt32(n)) == cx && ry * n + Int((h >> 8) % UInt32(n)) == cy else { return false }
         if abs(cx) <= 2 && abs(cy) <= 2 { return false }
-        let rr = Int((Double(cx) / 3).rounded(.down)), rr2 = Int((Double(cy) / 3).rounded(.down))
-        let hr = MP.h2(seed &+ 555, rr, rr2)
-        return !(rr * 3 + Int(hr % 3) == cx && rr2 * 3 + Int((hr >> 8) % 3) == cy)
+        return !isUnderRuin(cx, cy)
     }
 
     /// On the surface over an underground city, an entrance nobody can miss: a round plaza of brick ringed by
