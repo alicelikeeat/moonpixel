@@ -10,7 +10,7 @@ import Foundation
 // they are. A pixel of the picture is a known square of tiles, so a tap on it names one tile.
 
 public struct MapMarker: Equatable {
-    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building }
+    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building, monument }
     public var kind: Kind
     public var name: String
     public var color: String               // hex
@@ -187,6 +187,7 @@ public final class WorldMap {
                 add(.volcano, zh ? "火山" : "Volcano", "#ff5a1a", TilePos(v.x, v.y))
             }
         } }
+        for m in s.realm.monuments ?? [] { add(.monument, m.kind.name(zh: zh), "#ffd25a", m.center) }
         // a detailed map (a few pixels a tile) names every building at its door: tap a name to go there
         if ppc >= 64 {
             for d in s.net.districts { for b in d.buildings where b.state == .open {

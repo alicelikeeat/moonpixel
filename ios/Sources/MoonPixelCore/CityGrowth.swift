@@ -29,6 +29,7 @@ extension Society {
 
     func cityGrowthDay() {
         fitLifts()
+        monumentDay()
         urbanize()
         guard realm.transportBox != nil else { return }
         for d in net.districts.sorted(by: { $0.id < $1.id }) where d.fromTown != nil {

@@ -96,6 +96,7 @@ final class SolidRenderer {
     private var vehicleEntities: [Int: ModelEntity] = [:]
     /// The saucers of the UFO airports in view, and their light beams.
     private var ufoEntities: [Int: (ship: ModelEntity, beam: ModelEntity)] = [:]
+    private var monumentEntities: [Int: ModelEntity] = [:]
     private var shownStyle = 0
     private var sky: (moon: ModelEntity, stars: ModelEntity)?
 
@@ -355,6 +356,7 @@ final class SolidRenderer {
         updateLifts(society, model, reach: reach)
         updateVehicles(world, society, model, reach: reach)
         updateUfos(world, society, model, reach: reach)
+        updateMonuments(world, society, model, reach: reach)
         updateMachines(world, society, model, reach: reach)
         updateLabels(world, society, model, reach: reach)
         updatePreview(world, scene)
@@ -378,6 +380,8 @@ final class SolidRenderer {
         vehicleEntities = [:]
         for e in ufoEntities.values { e.ship.removeFromParent(); e.beam.removeFromParent() }
         ufoEntities = [:]
+        for e in monumentEntities.values { e.removeFromParent() }
+        monumentEntities = [:]
         for d in deckEntities.values { for e in d { e.removeFromParent() } }
         deckEntities = [:]
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
@@ -990,6 +994,27 @@ final class SolidRenderer {
             e.beam.scale = SIMD3(1, max(0.01, Float(u.z) + 0.3), 1)
         }
         for (id, e) in ufoEntities where !seen.contains(id) { e.ship.removeFromParent(); e.beam.removeFromParent(); ufoEntities[id] = nil }
+    }
+
+    /// The capitals' monuments: each modelled whole (halls and golden roofs, the statue, the towers), standing
+    /// on its own tiles at the height of the ground there.
+    private func updateMonuments(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
+        guard model.depth == 0, let vp = model.scene?.viewPos, vp.x.isFinite, vp.y.isFinite else {
+            for e in monumentEntities.values { e.removeFromParent() }; monumentEntities = [:]; return
+        }
+        var seen = Set<Int>()
+        for m in society.monuments(near: vp.tile, reach: Int(reach / 16) + 40) {
+            seen.insert(m.id)
+            let e = monumentEntities[m.id] ?? {
+                let e = ModelEntity()
+                e.model = model3D(key: "monument-\(m.kind.rawValue)") { Figure3D.monument(m.kind) }
+                root.addChild(e)
+                monumentEntities[m.id] = e
+                return e
+            }()
+            e.position = SIMD3(Float(m.x), groundY(world, m.center.center), Float(m.y))
+        }
+        for (id, e) in monumentEntities where !seen.contains(id) { e.removeFromParent(); monumentEntities[id] = nil }
     }
 
     /// Vehicles in reach at their real place, height and heading; bridge decks at their height over the water or road below.

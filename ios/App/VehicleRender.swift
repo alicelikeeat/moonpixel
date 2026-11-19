@@ -118,6 +118,36 @@ extension GameScene {
     }
 
     static var ufoTexture: SKTexture?
+    static var monumentTextures: [MonumentKind: SKTexture] = [:]
+
+    /// The capitals' monuments in the flat view: the structure painted standing up from its ground, its foot
+    /// three quarters of the way down its plot (the gardens and gates round it are the world's own tiles).
+    func updateMonuments2D(_ society: Society, _ model: GameModel) {
+        guard model.depth == 0, viewPos.x.isFinite, viewPos.y.isFinite else { for n in monumentNodes.values { n.removeFromParent() }; monumentNodes = [:]; return }
+        let reach = Int(900.0 / Double(max(0.3, zoom)) * 1.4 / 16) + 30
+        var seen = Set<Int>()
+        for m in society.monuments(near: viewPos.tile, reach: reach) {
+            seen.insert(m.id)
+            let n = monumentNodes[m.id] ?? {
+                let tex = GameScene.monumentTextures[m.kind] ?? {
+                    let t = MonumentArt.picture(m.kind, ppt: 32).cgImage.map { SKTexture(image: UIImage(cgImage: $0, scale: 2, orientation: .up)) } ?? SKTexture()
+                    t.filteringMode = .linear
+                    GameScene.monumentTextures[m.kind] = t
+                    return t
+                }()
+                let s = SKSpriteNode(texture: tex)
+                s.size = CGSize(width: tex.size().width, height: tex.size().height)
+                s.anchorPoint = CGPoint(x: 0.5, y: 0)
+                addChild(s)
+                monumentNodes[m.id] = s
+                return s
+            }()
+            let foot = Double(m.y) + Double(m.d) * 0.78
+            n.position = CGPoint(x: Double(m.x) * 16 + Double(m.w) * 8, y: -foot * 16)
+            n.zPosition = 9 + CGFloat(foot) * 1e-5
+        }
+        for (id, n) in monumentNodes where !seen.contains(id) { n.removeFromParent(); monumentNodes[id] = nil }
+    }
 
     /// Car drawings by model and paint, made once.
     static var carTextures: [String: SKTexture] = [:]

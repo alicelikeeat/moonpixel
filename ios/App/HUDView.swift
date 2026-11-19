@@ -478,6 +478,17 @@ struct HUDView: View {
             }
         case .volcano:
             Image(systemName: "flame.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.orange).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+        case .monument:
+            // a capital's landmark: a gold column; its name once the map is enlarged, a tap goes there
+            Image(systemName: "building.columns.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+            if model.mapZoom >= 2 {
+                Button { model.teleport(to: m.tile, name: m.name) } label: {
+                    Text(m.name).font(.system(size: 9, weight: .bold, design: .rounded)).foregroundStyle(.black)
+                        .padding(.horizontal, 4).padding(.vertical, 1).background(col.opacity(0.9), in: Capsule())
+                }
+                .buttonStyle(.plain).fixedSize().position(x: at.x, y: at.y - 11)
+                .accessibilityIdentifier("map-monument-" + m.name)
+            }
         case .army:
             Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .airport:

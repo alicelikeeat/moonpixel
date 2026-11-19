@@ -71,6 +71,7 @@ final class GameScene: SKScene {
     var vehicleNodes: [Int: SKNode] = [:]
     /// The saucers of the UFO airports in view, by id.
     var ufoNodes: [Int: SKSpriteNode] = [:]
+    var monumentNodes: [Int: SKSpriteNode] = [:]
     var driveAcc = 0.0
     var simDebt = 0.0
     private var badgeNodes: [TilePos: SKNode] = [:]
@@ -199,6 +200,8 @@ final class GameScene: SKScene {
         vehicleNodes = [:]
         for n in ufoNodes.values { n.removeFromParent() }
         ufoNodes = [:]
+        for n in monumentNodes.values { n.removeFromParent() }
+        monumentNodes = [:]
     }
 
     @discardableResult func clearTextureCache() -> Int {
@@ -310,6 +313,7 @@ final class GameScene: SKScene {
                 updateLifts2D(society, model)
                 updateVehicles2D(society, model)
                 updateUfos2D(society, model)
+                updateMonuments2D(society, model)
             }
         }
 

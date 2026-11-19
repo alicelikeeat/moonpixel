@@ -285,6 +285,8 @@ public struct Realm: Codable {
     public var growHour: Int?
     /// Places the traveller's presence favours, and until when ("t<town>", "d<district>", "c<city>": game time).
     public var favorUntil: [String: Double]?
+    /// The capitals' monuments (palace cities, statues, towers...: Monuments.swift).
+    public var monuments: [Monument]?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
     public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
@@ -318,7 +320,7 @@ extension Society {
         "split": ("The united realm broke apart: %@ stand again", "统一王朝分裂：%@ 各自独立"),
         "revived": ("%@ rose again at %@", "%@ 在 %@ 复国"), "submitted": ("%@ submitted to %@", "%@ 归附于 %@"),
         "cooperation": ("%@ and %@ signed a cooperation agreement: open trade and mutual aid", "%@ 与 %@ 签署合作协定：开放贸易、互相援助"), "aid": ("%@ sent food to hungry %@", "%@ 向缺粮的 %@ 运送粮食援助"),
-        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
+        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "monument": ("%@ raised a %@ at %@", "%@ 在%@旁建成了%@"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
         "harvest_good": ("Bumper harvest in %@", "%@ 喜获丰收"), "harvest_bad": ("Poor harvest in %@", "%@ 遭遇歉收"),
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
