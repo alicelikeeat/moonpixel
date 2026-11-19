@@ -157,6 +157,8 @@ final class SolidRenderer {
     private var pool: [ModelEntity] = []
     private let player = ModelEntity()
     private let playerRing = ModelEntity()
+    /// The parachute over the traveller, open only while it is.
+    private let chute = ModelEntity()
     private let selectRing = ModelEntity()
     private var previews: [ModelEntity] = []
     private var billboards: [Entity] = []
@@ -178,7 +180,9 @@ final class SolidRenderer {
         root.addChild(camera)
         makePalette()
         setLight(1, sky: UIColor(red: 0.56, green: 0.74, blue: 0.90, alpha: 1))
-        for e in [player, playerRing, selectRing] { root.addChild(e) }
+        for e in [player, playerRing, selectRing, chute] { root.addChild(e) }
+        chute.model = model3D(key: "parachute") { Figure3D.parachute() }
+        chute.isEnabled = false
         playerRing.model = model3D(key: "ring-player") { Figure3D.plate(color: RGBA(hex: "#7fe6ff"), w: 0.9, d: 0.9, h: 0.04) }
         selectRing.model = model3D(key: "ring-select") { Figure3D.plate(color: RGBA(hex: "#fff266"), w: 1.0, d: 1.0, h: 0.05) }
         selectRing.isEnabled = false
@@ -838,6 +842,9 @@ final class SolidRenderer {
         let bodyZ = society.realm.player.body.map { Float($0.z) } ?? feetAt.y
         settle(player, at: SIMD3(feetAt.x, bodyZ, feetAt.z), dt: dt, fresh: abs(player.position.x - Float(scene.player.x / 16)) > 6 || abs(player.position.y - bodyZ) > 1.5)
         playerRing.position = player.position + SIMD3<Float>(-0.45, 0.02, -0.45)
+        let chuting = society.realm.player.body?.chute == true
+        chute.isEnabled = chuting
+        if chuting { chute.position = player.position + SIMD3<Float>(0, 2.4, 0) }
         if let a = society.agents[model.selectedID] {
             selectRing.isEnabled = true
             selectRing.position = place(a.pos, world, lift: 0.03) + SIMD3<Float>(-0.5, 0, -0.5)

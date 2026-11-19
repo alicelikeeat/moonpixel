@@ -8,6 +8,10 @@ extension Society {
         public var pop = 0, identity = 0, towns = 0, soldiers = 0
         public var food = 0.0, pressure = 0.0, pFood = 0.0, pHousing = 0.0, pJobs = 0.0, pLand = 0.0, fatigue = 0.0, rep = 0.0, share = 0.0
         public var landless = false, atWar = false
+        /// Its allies (name and colour), the landmarks it holds, and its overall strength (see compositePower).
+        public var allies: [(name: String, color: String)] = []
+        public var landmarks = 0, composite = 0
+        public var foes: [String] = []
     }
     public struct RelationInfo { public var a = "", b = "", ca = "", cb = "", state = 0, value = 0.0, pact = false, years = 0.0 }
 
@@ -21,8 +25,22 @@ extension Society {
             i.pop = n.pop; i.identity = n.identity; i.towns = n.towns; i.soldiers = n.soldiers; i.food = n.food
             i.pressure = n.pressure; i.pFood = n.pFood; i.pHousing = n.pHousing; i.pJobs = n.pJobs; i.pLand = n.pLand
             i.fatigue = n.fatigue; i.rep = n.rep; i.share = powerShare(n.id); i.landless = n.exileSince != nil; i.atWar = realm.atWar(n.id)
+            i.allies = realm.relations.filter { ($0.a == n.id || $0.b == n.id) && $0.pact }.compactMap { r in realm.nation(r.a == n.id ? r.b : r.a) }
+                .map { ($0.name(zh: zh), $0.color) }
+            i.foes = realm.relations.filter { ($0.a == n.id || $0.b == n.id) && $0.state == 1 }.compactMap { r in realm.nation(r.a == n.id ? r.b : r.a)?.name(zh: zh) }
+            i.landmarks = (realm.monuments ?? []).filter { $0.nation == n.id }.count
+            i.composite = compositePower(n.id)
             return i
         }
+    }
+
+    /// A nation's overall strength in one number: its people, its soldiers (as hard as they fight: alongside
+    /// allies, holding a taken landmark), its knowledge, its towns, its landmarks and its stores.
+    public func compositePower(_ id: Int) -> Int {
+        guard let n = realm.nation(id), n.exileSince == nil else { return 0 }
+        let fight = Double(n.soldiers) * 3 * allianceBonus(id) * landmarkBonus(id)
+        let held = Double((realm.monuments ?? []).filter { $0.nation == id }.count)
+        return Int((Double(n.pop) + fight + Double(n.techCount) * 25 + Double(n.towns) * 40 + held * 150 + n.food / 10).rounded())
     }
 
     public func relationInfos() -> [RelationInfo] {

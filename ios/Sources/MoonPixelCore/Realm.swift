@@ -148,6 +148,10 @@ public struct Nation: Codable {
     // refreshed every game hour
     public var pressure = 0.0, pFood = 0.0, pHousing = 0.0, pJobs = 0.0, pLand = 0.0
     public var pop = 0, identity = 0, towns = 0, soldiers = 0, food = 0.0
+    /// Its life's records (for its grave when it passes away): when first seen, highs, births, deaths, wars,
+    /// and where its seat last stood.
+    public var founded: Double?, peakPop: Int?, peakTowns: Int?, peakSoldiers: Int?
+    public var born: Int?, died: Int?, wars: Int?, lastSeat: TilePos?
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
 }
 
@@ -202,6 +206,8 @@ public struct RealmCounts: Codable, Equatable { public var wars = 0, truces = 0,
 
 public struct PlayerState: Codable {
     public var nation = 0                  // 0 = free traveller
+    /// The flying saucer the traveller rides (its id), if any.
+    public var ufo: Int?
     public var hp = 100.0
     public var food = 0.0, wood = 0.0, stone = 0.0
     public var nextAttack = 0.0
@@ -322,7 +328,7 @@ extension Society {
         "split": ("The united realm broke apart: %@ stand again", "统一王朝分裂：%@ 各自独立"),
         "revived": ("%@ rose again at %@", "%@ 在 %@ 复国"), "submitted": ("%@ submitted to %@", "%@ 归附于 %@"),
         "cooperation": ("%@ and %@ signed a cooperation agreement: open trade and mutual aid", "%@ 与 %@ 签署合作协定：开放贸易、互相援助"), "aid": ("%@ sent food to hungry %@", "%@ 向缺粮的 %@ 运送粮食援助"),
-        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "monument": ("%@ finished a great monument by %@: the %@", "%@ 在%@旁建成了%@"), "annex": ("%@ tore up its alliance and marched to annex %@", "%@ 撕毁盟约，出兵吞并 %@"), "annex_off": ("%@ called off the annexation of %@ and made the alliance again", "%@ 吞并 %@ 失利，罢兵并重新结盟"), "ally_rebuild": ("%@ helped its fallen ally %@ rise again at %@", "%@ 帮助盟友 %@ 在%@重新建国"), "monument_taken": ("%@ took the %@ landmark %@: its armies fight twice as hard", "%@ 夺取了 %@ 的地标%@，战力翻倍"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
+        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "monument": ("%@ finished a great monument by %@: the %@", "%@ 在%@旁建成了%@"), "annex": ("%@ tore up its alliance and marched to annex %@", "%@ 撕毁盟约，出兵吞并 %@"), "annex_off": ("%@ called off the annexation of %@ and made the alliance again", "%@ 吞并 %@ 失利，罢兵并重新结盟"), "ally_rebuild": ("%@ helped its fallen ally %@ rise again at %@", "%@ 帮助盟友 %@ 在%@重新建国"), "extinct": ("%@ has passed into history: at most %@ people, %@ dead; its national cemetery is laid out", "%@ 已经灭亡：最多时有 %@ 人，共有 %@ 人逝去，国家公墓已经建成"), "monument_taken": ("%@ took the %@ landmark %@: its armies fight twice as hard", "%@ 夺取了 %@ 的地标%@，战力翻倍"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
         "harvest_good": ("Bumper harvest in %@", "%@ 喜获丰收"), "harvest_bad": ("Poor harvest in %@", "%@ 遭遇歉收"),
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
@@ -469,6 +475,9 @@ extension Society {
             var n = realm.nations[k]
             n.pop = pop; n.towns = ts.count; n.soldiers = soldiers; n.food = food
             n.identity = agents.values.filter { $0.nation == id }.count
+            if n.founded == nil { n.founded = now }
+            n.peakPop = max(n.peakPop ?? 0, pop); n.peakTowns = max(n.peakTowns ?? 0, ts.count); n.peakSoldiers = max(n.peakSoldiers ?? 0, soldiers)
+            if let seat = (n.capital.flatMap { settlements[$0] } ?? ts.first) { n.lastSeat = seat.center }
             n.pFood = pop == 0 ? 0 : min(1, max(0, 1 - food / (p * cfg.foodPerHead)))
             n.pHousing = pop == 0 ? 0 : Double(homeless) / p
             n.pJobs = workers == 0 ? 0 : min(1, max(0, (Double(workers) - slots) / Double(workers)))
@@ -709,7 +718,7 @@ extension Society {
                 emit("fell", [realm.nations[k].name(zh: zh)], .zero)
                 for r in realm.relations.indices where realm.relations[r].a == id || realm.relations[r].b == id {
                     if realm.relations[r].state == 1 { realm.relations[r].state = 2; realm.relations[r].since = now }
-                    realm.relations[r].pact = false
+                    // (an alliance outlasts the fall: its ally may help it rise again)
                 }
                 for lg in realm.legions where lg.state != 0 && settlements[lg.target]?.nation == nil { sendHome(lg) }
             } else if has { realm.nations[k].exileSince = nil }
@@ -727,6 +736,7 @@ extension Society {
         let a = realm.nation(rel.a)?.name(zh: zh) ?? "", b = realm.nation(rel.b)?.name(zh: zh) ?? ""
         if state == 1 {
             realm.counts.wars += 1
+            for id in [rel.a, rel.b] { if let k = realm.ni(id) { realm.nations[k].wars = (realm.nations[k].wars ?? 0) + 1 } }
             realm.relations[r].value = max(-1, rel.value - 0.3)
             realm.relations[r].pact = false
         } else if state == 2 {

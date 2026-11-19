@@ -61,6 +61,29 @@ extension GameModel {
         return nil
     }
 
+    /// Board the saucer resting beside you.
+    func boardUfo() {
+        guard society != nil else { return }
+        if society.boardUfo() { showToast(L("登上了飞碟：它会按航线起飞绕场，随时可以跳伞", "Aboard the saucer: it takes off on its round; you can jump with a parachute at any time")) }
+        else { showToast(L("附近没有停在机坪上的飞碟", "No saucer resting on a pad nearby")) }
+        refreshHeight()
+    }
+
+    /// Jump out with a parachute (from any height).
+    func jumpFromUfo() {
+        guard society != nil, society.jumpFromUfo() else { return }
+        showToast(L("跳伞！用摇杆控制方向，落地不会受伤", "Jump! Steer with the stick; the landing will not hurt"))
+        refreshHeight()
+    }
+
+    /// Step off the saucer while it rests on its pad.
+    func leaveUfo() {
+        guard society != nil else { return }
+        if society.leaveUfo(), let b = society.realm.player.body { scene?.player = b.pos; showToast(L("走下了飞碟", "Off the saucer")) }
+        else { showToast(L("飞碟还在空中：可以跳伞", "The saucer is in the air: jump with the parachute")) }
+        refreshHeight()
+    }
+
     /// Step into the lift at the landing (calls it first if it is elsewhere).
     func enterLift() {
         guard society != nil else { return }
@@ -127,5 +150,11 @@ extension GameModel {
         nearLift = liftHere()?.lift.id
         inLift = society.playerLift != nil
         atLiftDoor = society.playerLanding() != nil
+        let u = society.ridingUfo
+        onUfo = u != nil; ufoLanded = u?.landed ?? false
+        nearUfo = u == nil && b.depth == 0 && society.landedUfo(near: b.pos) != nil
+        chuting = b.chute == true
+        if let u = u { heightLine = String(format: L("乘坐飞碟 · 离地 %.0f m", "Aboard the saucer · %.0f m up"), u.z * 2) + (u.landed ? L(" · 停在机坪", " · on the pad") : "") }
+        else if chuting { heightLine = String(format: L("跳伞中 · 高 %.0f m", "Parachuting · %.0f m"), b.z * 2) }
     }
 }

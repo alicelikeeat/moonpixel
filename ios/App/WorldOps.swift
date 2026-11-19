@@ -9,6 +9,11 @@ struct NationCard: Identifiable {
     var line1 = "", line2 = "", line3 = ""
     var pressure = 0.0, fatigue = 0.0
     var landless = false, joined = false
+    var allies: [(name: String, color: String)] = []
+    var foes: [String] = []
+    var composite = 0, share = 0.0, landmarks = 0
+    /// Label and value pairs, laid out in two columns on the card.
+    var facts: [(String, String)] = []
 }
 
 /// Nations, the player's part in them, world laws and storage. Threading: the
@@ -100,6 +105,13 @@ extension GameModel {
             var c = NationCard()
             c.id = n.id; c.name = n.name; c.color = n.color
             c.pressure = n.pressure; c.fatigue = n.fatigue; c.landless = n.landless; c.joined = p.nation == n.id
+            c.allies = n.allies; c.foes = n.foes; c.composite = n.composite; c.share = n.share; c.landmarks = n.landmarks
+            c.facts = n.landless ? [(L("认同", "Belong"), "\(n.identity)")] : [
+                (L("领袖", "Leader"), n.leader), (L("城镇", "Towns"), "\(n.towns)"),
+                (L("人口", "People"), "\(n.pop)"), (L("士兵", "Soldiers"), "\(n.soldiers)"),
+                (L("科技", "Tech"), n.tech), (L("存粮", "Food"), "\(Int(n.food))"),
+                (L("地标", "Landmarks"), "\(n.landmarks)"), (L("对你", "To you"), String(format: "%+d", Int(n.rep * 100))),
+            ]
             if n.landless {
                 c.line1 = String(format: L("流亡中 · 仍有 %d 人认同", "In exile · %d people still belong"), n.identity)
             } else {
@@ -114,7 +126,7 @@ extension GameModel {
         var rel: [String] = []
         for r in s.relationInfos() {
             let state = r.state == 1 ? L("交战", "at war") : (r.state == 2 ? L("休战", "truce") : L("和平", "peace"))
-            let pact = r.pact ? L(" · 结盟", " · allied") : ""
+            let pact = r.pact ? L(" · 🤝 盟友", " · 🤝 allies") : ""
             rel.append(String(format: L("%@ — %@：%@ %.1f 年 · 关系 %+d%@", "%@ — %@: %@ for %.1f y · relations %+d%@"), r.a, r.b, state, r.years, Int(r.value * 100), pact))
         }
         relationLines = rel

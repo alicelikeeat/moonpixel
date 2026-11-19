@@ -281,7 +281,11 @@ final class GameScene: SKScene {
         else if !model.lawBusy {
             let wish = moving ? (mv.length > 1 ? mv.normalized : mv) * (90.0 * (mv.length > 0.92 ? 1.8 : 1.0)) : Vec2.zero
             if society.playerVehicle != nil { rideFrame(society, model, wish: wish, dt: dt) }
-            else {
+            else if society.realm.player.ufo != nil {
+                // aboard a saucer: carried wherever it flies
+                society.ufoRideStep()
+                if let b = society.realm.player.body { player = b.pos }
+            } else {
                 moveBody(society, world, model, wish: wish, dt: dt)
                 walkStairs(society, model)
                 if model.drive != nil { model.refreshDrive() }

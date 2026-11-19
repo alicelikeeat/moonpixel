@@ -65,6 +65,61 @@ extension Society {
         return UfoState(id: 0, pos: pos, z: z, spin: time * (z > 0.1 ? 3.0 : 0.4), beam: beam, landed: z < 0.05)
     }
 
+    // MARK: riding a saucer, and jumping out
+
+    /// A saucer at rest on its pad within `reach` tiles of a place, if any.
+    public func landedUfo(near p: Vec2, reach: Double = 4) -> UfoState? {
+        ufos(near: p, reach: reach * 16 + 64).filter { $0.landed && $0.pos.distance(to: p) <= reach * 16 }.min { $0.pos.distance(to: p) < $1.pos.distance(to: p) }
+    }
+
+    /// The saucer the traveller rides, where it is now.
+    public var ridingUfo: UfoState? {
+        guard let id = realm.player.ufo, let b = realm.player.body else { return nil }
+        return ufos(near: b.pos, reach: 4000).first { $0.id == id }
+    }
+
+    /// Board a saucer resting on its pad beside the traveller: it takes them up on its round.
+    @discardableResult public func boardUfo() -> Bool {
+        guard realm.player.ufo == nil, var b = realm.player.body, b.depth == 0, b.platform == nil, let u = landedUfo(near: b.pos) else { return false }
+        realm.player.ufo = u.id
+        b.x = u.pos.x; b.y = u.pos.y; b.vx = 0; b.vy = 0; b.vz = 0; b.state = .standing; b.chute = nil
+        realm.player.body = b
+        ufoRideStep()
+        return true
+    }
+
+    /// Every frame while aboard: the traveller stands on the saucer's top, wherever it is.
+    public func ufoRideStep() {
+        guard var b = realm.player.body else { return }
+        guard let u = ridingUfo else { realm.player.ufo = nil; b.state = .falling; b.chute = true; realm.player.body = b; return }
+        let ground = WorldGround(self).floor(0, u.pos.tile) ?? b.z
+        b.x = u.pos.x; b.y = u.pos.y; b.z = ground + u.z + 1.1
+        b.vx = 0; b.vy = 0; b.vz = 0; b.state = .standing; b.depth = 0
+        realm.player.body = b
+        realm.player.depth = 0
+    }
+
+    /// Jump out of the saucer with a parachute: down slowly, steering, and no harm on landing.
+    @discardableResult public func jumpFromUfo() -> Bool {
+        guard realm.player.ufo != nil, var b = realm.player.body else { return false }
+        realm.player.ufo = nil
+        b.state = .falling; b.vz = 0; b.chute = true; b.sinceGround = 1
+        realm.player.body = b
+        return true
+    }
+
+    /// Step off a saucer resting on its pad.
+    @discardableResult public func leaveUfo() -> Bool {
+        guard realm.player.ufo != nil, var b = realm.player.body, let u = ridingUfo, u.landed else { return false }
+        realm.player.ufo = nil
+        let spot = world.findFree(near: TilePos(u.pos.tile.x, u.pos.tile.y + 3), maxR: 4)
+        b.x = spot.center.x; b.y = spot.center.y
+        b.z = WorldGround(self).floor(0, spot) ?? b.z
+        b.state = .standing
+        realm.player.body = b
+        return true
+    }
+
     // MARK: a public swimming pool
 
     /// A public swimming pool: a fenced deck of stone, a big lane pool (lane ropes as lily-pad dots, a diving
@@ -134,6 +189,23 @@ extension Figure3D {
             let top = SIMD3(cos(a) * R * 0.5, 0.45, sin(a) * R * 0.5), foot = SIMD3(cos(a) * R * 0.75, 0.04, sin(a) * R * 0.75)
             m.frustum(top, foot, 0.06, 0.05, dark, seg: 6)
             m.frustum(foot - SIMD3(0, 0.04, 0), foot + SIMD3(0, 0.02, 0), 0.16, 0.16, dark, seg: 8)
+        }
+        return m
+    }
+
+    /// A parachute canopy, its lines meeting below at the harness (the origin is at the canopy's middle).
+    public static func parachute() -> Mesh3D {
+        var m = Mesh3D()
+        let colors = [RGBA(240, 80, 70), RGBA(250, 246, 236)]
+        let n = 12, R: Float = 1.7
+        for i in 0..<n {
+            let a0 = Float(i) / Float(n) * 2 * .pi, a1 = Float(i + 1) / Float(n) * 2 * .pi
+            let p0 = SIMD3<Float>(cos(a0) * R, -0.35, sin(a0) * R), p1 = SIMD3<Float>(cos(a1) * R, -0.35, sin(a1) * R)
+            let q0 = SIMD3<Float>(cos(a0) * R * 0.55, 0.3, sin(a0) * R * 0.55), q1 = SIMD3<Float>(cos(a1) * R * 0.55, 0.3, sin(a1) * R * 0.55)
+            let c = colors[i % 2]
+            m.face(p0, p1, q1, q0, c); m.face(p0, q0, q1, p1, c.darkened(0.2))
+            m.tri(q0, q1, SIMD3(0, 0.45, 0), c); m.tri(q0, SIMD3(0, 0.45, 0), q1, c.darkened(0.2))
+            if i % 3 == 0 { m.frustum(p0, SIMD3(0, -1.5, 0), 0.02, 0.02, RGBA(60, 60, 60), seg: 3) }
         }
         return m
     }

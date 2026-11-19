@@ -746,7 +746,7 @@ public final class Society {
             // inside: two beds against the far wall, a kitchen, a table with chairs, a chest, a bookshelf and a
             // flower pot; nothing right behind the door
             let inside = dd + TilePos(-out.x, -out.y)
-            var taken: Set<TilePos> = [inside]
+            var taken: Set<TilePos> = [inside, TilePos(1, h / 2), TilePos(w - 2, h / 2)]
             func put(_ x: Int, _ y: Int, _ key: String, wood: Double) {
                 let t = TilePos(x, y)
                 guard x > 0, y > 0, x < w - 1, y < h - 1, !taken.contains(t) else { return }
@@ -759,7 +759,7 @@ public final class Society {
             put(1, h - 2 == farY ? 1 : h - 2, "kitchen", wood: 1)
             put(w - 2, h - 2 == farY ? 1 : h - 2, "chest", wood: 1)
             put(midX, farY, "bookshelf", wood: 1)
-            put(1, midY, "flower_pot", wood: 0)
+            put(midX - 1, farY, "flower_pot", wood: 0)          // (the middle of each end wall stays free: a stair up goes there)
             // the front: windows either side of the door (glass when the town builds in stone)
             if stone {
                 b.cells = b.cells.map { c in
@@ -1458,6 +1458,7 @@ public final class Society {
         let f = agents[m.birthFather]
         c.mother = m.id
         c.nation = m.nation ?? s.nation
+        if let nid = c.nation, let ki = realm.ni(nid) { realm.nations[ki].born = (realm.nations[ki].born ?? 0) + 1 }
         c.father = f?.id ?? 0
         c.clanEn = f?.clanEn ?? m.clanEn; c.clanZh = f?.clanZh ?? m.clanZh
         c.pos = m.pos; c.prevPos = m.pos
@@ -1478,6 +1479,7 @@ public final class Society {
     }
 
     func die(_ a: Agent, _ cause: String) {
+        if let nid = a.nation, let k = realm.ni(nid) { realm.nations[k].died = (realm.nations[k].died ?? 0) + 1 }
         guard a.alive, let s = settlements[a.sid] else { return }
         a.alive = false
         abort(a, s)

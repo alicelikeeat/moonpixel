@@ -30,6 +30,15 @@ struct PlayControls: View {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) { toolsOpen.toggle() }
                             }
                         }
+                        // saucers: aboard, jump with a parachute (or step off on the pad); beside one, get on
+                        if model.onUfo {
+                            HStack(spacing: 8) {
+                                if model.ufoLanded { round("figure.walk", L("下飞碟", "Step off"), id: "ufo-leave") { model.leaveUfo() } }
+                                liftButton(L("跳伞", "Jump"), "figure.fall", id: "ufo-jump", tint: Color(red: 0.9, green: 0.35, blue: 0.3)) { model.jumpFromUfo() }
+                            }
+                        } else if model.nearUfo {
+                            liftButton(L("登上飞碟", "Board"), "circle.circle.fill", id: "ufo-board", tint: Color(red: 0.3, green: 0.75, blue: 0.85)) { model.boardUfo() }
+                        }
                         // lifts: the way in and out, right where the thumb is
                         if model.inLift {
                             HStack(spacing: 8) {

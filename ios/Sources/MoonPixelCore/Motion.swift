@@ -36,6 +36,8 @@ public struct Body: Codable, Equatable {
     public var lx: Double?, ly: Double?, lz: Double?
     /// The seat taken (0: the driver's); nil while standing.
     public var seat: Int?
+    /// A parachute open: the fall is slow and steerable, and the landing does no harm.
+    public var chute: Bool?
     public init() {}
     public init(at p: Vec2, z: Double, depth: Int) { x = p.x; y = p.y; self.z = z; self.depth = depth }
     public var pos: Vec2 { get { Vec2(x, y) } set { x = newValue.x; y = newValue.y } }
@@ -144,7 +146,7 @@ public enum Motion {
 
         // --- horizontal: full control on a floor, some in the air
         if b.airborne {
-            let k = min(1, cfg.airControl * h)
+            let k = min(1, cfg.airControl * (b.chute == true ? 2 : 1) * h)
             b.vx += (wish.x - b.vx) * k; b.vy += (wish.y - b.vy) * k
         } else { b.vx = wish.x; b.vy = wish.y }
         for axis in 0..<2 {
@@ -188,7 +190,8 @@ public enum Motion {
         case .rising, .falling:
             b.sinceGround += h
             let from = b.z
-            b.vz = max(b.vz - cfg.gravity * h, -cfg.maxFall)
+            // under a parachute: about 4 m a second down at most
+            b.vz = max(b.vz - cfg.gravity * h, b.chute == true ? -Motion.chuteFall : -cfg.maxFall)
             var nz = b.z + b.vz * h
             // the floor of the layer above is a ceiling
             if b.vz > 0, let up = g.above(b.depth), let f = g.floor(up, t), nz + cfg.height > f - cfg.slab {
@@ -216,9 +219,13 @@ public enum Motion {
         return out
     }
 
+    /// The speed a parachute falls at, tiles a second.
+    public static let chuteFall = 2.2
+
     static func land(_ b: inout Body, at f: Double, surfaceVz: Double, cfg: MotionConfig, _ o: MotionStep) -> MotionStep {
         var out = o
-        let impact = max(0, surfaceVz - b.vz)
+        let impact = b.chute == true ? 0 : max(0, surfaceVz - b.vz)
+        b.chute = nil
         out.landed = true; out.impact = impact
         if impact > cfg.safeImpact { out.damage += (impact * impact - cfg.safeImpact * cfg.safeImpact) * cfg.damagePerImpact2 / 10 }
         b.z = f; b.vz = surfaceVz; b.sinceGround = 0

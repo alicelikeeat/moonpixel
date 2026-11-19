@@ -147,12 +147,12 @@ extension Society {
 
     /// Landmarks a nation holds that another nation raised.
     public func capturedLandmarks(_ nation: Int) -> [Monument] {
-        (realm.monuments ?? []).filter { $0.nation == nation && ($0.builder ?? $0.nation) != nation }
+        (realm.monuments ?? []).filter { $0.kind != .cemetery && $0.nation == nation && ($0.builder ?? $0.nation) != nation }
     }
 
     /// A nation that holds a landmark taken from another fights with twice its strength.
     public func landmarkBonus(_ nation: Int) -> Double { capturedLandmarks(nation).isEmpty ? 1 : 2 }
 
     /// Towns with a landmark keep the largest garrisons: twice the soldiers, and four more.
-    func landmarkTown(_ s: Settlement) -> Bool { (realm.monuments ?? []).contains { $0.town == s.id } }
+    func landmarkTown(_ s: Settlement) -> Bool { (realm.monuments ?? []).contains { $0.town == s.id && $0.kind != .cemetery } }
 }

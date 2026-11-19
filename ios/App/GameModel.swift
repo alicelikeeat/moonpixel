@@ -112,6 +112,10 @@ final class GameModel: ObservableObject {
     /// The elevator the traveller is in or beside, if any (the button to open its panel shows then).
     @Published var nearLift: Int?
     @Published var inLift = false              // riding a lift
+    @Published var nearUfo = false             // a saucer resting on its pad beside the traveller
+    @Published var onUfo = false               // aboard a saucer
+    @Published var ufoLanded = false           // ... and it rests on its pad
+    @Published var chuting = false             // falling under a parachute
     @Published var atLiftDoor = false          // standing at a lift's doors (it is called to you)
     // transport (v2.7): the vehicle the traveller is in, its controls, the travel and network panels
     /// What the driving or passenger display shows (nil when not in a vehicle).

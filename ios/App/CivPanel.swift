@@ -49,7 +49,8 @@ struct CivWorldSection: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 6) {
+        // one row that scrolls sideways when the screen is narrow (nothing laid over anything)
+        ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 6) {
             TextField(L("搜索国家", "Search nations"), text: $query)
                 .textFieldStyle(.plain).font(.system(size: 12, design: .rounded)).padding(.horizontal, 10).frame(height: 32)
                 .background(Color.white.opacity(0.12), in: Capsule()).frame(maxWidth: 180).accessibilityIdentifier("civ-search")
@@ -58,8 +59,11 @@ struct CivWorldSection: View {
             }
             Chip(title: showGone ? L("隐藏已亡", "Hide fallen") : L("显示已亡", "Show fallen"), icon: "clock.arrow.circlepath", id: "civ-gone") { showGone.toggle() }
             Chip(title: nearOnly ? L("全部已发现", "All found") : L("只看附近", "Nearby"), icon: "location.fill", id: "civ-near") { nearOnly.toggle() }
-        }
+        } }
     }
+
+    /// A nation's overall strength in one number: people, soldiers, knowledge and cities.
+    static func composite(_ p: CivPolity) -> Int { p.pop + p.detailPop + p.soldiers * 3 + p.techs.count * 25 + p.cityCount * 40 }
 
     private func label(_ s: CivSort) -> String {
         switch s {
@@ -106,9 +110,18 @@ struct CivWorldSection: View {
                     Text(statusText(p)).font(.system(size: 9, weight: .semibold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.white.opacity(0.18), in: Capsule())
                     if model.civCommand == p.id { Text(L("执政中", "in your hands")).font(.system(size: 9, weight: .bold, design: .rounded)).foregroundStyle(.yellow) }
                 }
+                HStack(spacing: 6) {
+                    Text(L("综合国力", "Strength")).font(.system(size: 10, design: .rounded)).opacity(0.7)
+                    Text("\(CivWorldSection.composite(p))").font(.system(size: 13, weight: .heavy, design: .rounded)).monospacedDigit()
+                    let allies = c.relations.values.filter { $0.pact && ($0.a == p.id || $0.b == p.id) }.compactMap { c.polities[$0.a == p.id ? $0.b : $0.a] }
+                    ForEach(allies.prefix(3), id: \.id) { a in
+                        Text(L("盟友 ", "Ally ") + a.name(zh: GameModel.zh)).font(.system(size: 9, weight: .bold, design: .rounded)).lineLimit(1)
+                            .padding(.horizontal, 5).padding(.vertical, 1).background(Color(hex: a.color).opacity(0.35), in: Capsule())
+                    }
+                }
                 Text(L("人口 \(p.pop + p.detailPop) · 城市 \(p.cityCount) · 存粮 \(days(p.foodDays)) · 科技 \(p.techs.count) · 兵员 \(p.soldiers) · 交战 \(c.wars(of: p.id).count)",
                        "people \(p.pop + p.detailPop) · cities \(p.cityCount) · food \(days(p.foodDays)) · tech \(p.techs.count) · under arms \(p.soldiers) · wars \(c.wars(of: p.id).count)"))
-                    .font(.system(size: 10, design: .rounded)).opacity(0.8)
+                    .font(.system(size: 10, design: .rounded)).opacity(0.8).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 4)
             Button { toggleFavourite(p.id) } label: { Image(systemName: fav ? "star.fill" : "star").foregroundStyle(fav ? .yellow : .white).frame(width: 32, height: 32) }
