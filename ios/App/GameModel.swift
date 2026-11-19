@@ -77,6 +77,8 @@ final class GameModel: ObservableObject {
     @Published var arsenalLines: [String] = []
     @Published var showArsenal = false
     @Published var showCheats = false
+    /// The battle of the twin ports, played on its own fixed seeds (WarDemoView.swift).
+    @Published var showWarDemo = false
     @Published var showDiagnostics = false
     /// Frame-time diagnostics shown over the game (More → Performance).
     @Published var showPerf = false

@@ -52,6 +52,8 @@ public struct WarBalance: Codable, Equatable {
     public var liftPerYard = 4000.0, intakePerPort = 3000.0
     /// Hours a shifter takes to change form, and how much faster it runs as a vehicle (Mechs.swift).
     public var shiftHours = 0.5, vehicleSpeed = 2.4
+    /// Hours between the first troops standing at the place and the assault (the frozen reckoning).
+    public var assaultHours = 24.0
     public init() {}
 
     /// The attacker's chance to win a fight for a place at this ratio of effective strength.
@@ -129,6 +131,9 @@ public struct CivTargetWar: Codable, Equatable {
     public var forces: [Int] = []
     public var contests: [CivContest] = []
     public var ended: Double?
+    /// When the first troops able to take the place stood there: the assault comes `assaultHours` later, so
+    /// reinforcements may still change the reckoning before it is frozen.
+    public var groundSince: Double?
 }
 
 extension Civ {
@@ -224,8 +229,10 @@ extension Civ {
         let bodies = waterBodies()
         let home = homeCity(a)
         func near(_ c: CivCity) -> Int { home.map { dist($0.regionKey, c.regionKey) } ?? 0 }
+        // a port first: the capital's port above all (the most worth having), then the nearest
+        let cap = polities[b]?.capital
         let ports = theirs.filter { portSite($0.regionKey, bodies: bodies) != nil }
-        if let p = ports.min(by: { near($0) != near($1) ? near($0) < near($1) : $0.id < $1.id }) { return (p.id, "port") }
+        if let p = ports.min(by: { ($0.id == cap) != ($1.id == cap) ? $0.id == cap : (near($0) != near($1) ? near($0) < near($1) : $0.id < $1.id) }) { return (p.id, "port") }
         let passes = theirs.filter { (regions[$0.regionKey]?.mountain ?? 0) >= cfg.passMountain }
         if let p = passes.min(by: { near($0) != near($1) ? near($0) < near($1) : $0.id < $1.id }) { return (p.id, "pass") }
         let c = theirs.min { near($0) != near($1) ? near($0) < near($1) : $0.id < $1.id }!
@@ -329,6 +336,7 @@ extension Civ {
         w.since = time; w.stageSince = time
         w.mobilisable = mobilisable(a)
         targetWars.append(w)
+        record("war_for_place", nations: [a, b], region: cities[target]?.regionKey, ids: [w.id, target], note: kind)
         return w.id
     }
 
@@ -336,8 +344,9 @@ extension Civ {
     public func attack(on w: CivTargetWar) -> (points: Double, ground: Bool, lines: [String]) {
         guard let c = cities[w.target] else { return (0, false, []) }
         var pts = 0.0, ground = false, lines: [String] = [], waiting = 0
-        // by sea when no way over land exists at all (geography, not who stands in the way)
-        let bySea = route(from: homeCity(w.attacker)?.regionKey ?? c.regionKey, to: c.regionKey, size: .person) == nil
+        // by sea when no way over land exists at all from any of the attacker's cities (geography, not who stands
+        // in the way): a port taken on the far shore means the next place there is reached by land
+        let bySea = !cities(of: w.attacker).contains { route(from: $0.regionKey, to: c.regionKey, size: .person) != nil }
         let landing = bySea ? cfg.war.landing : 1
         // by sea, only what the fleet lifts and the port takes in lands this round (counted once, here)
         let round = bySea ? landingRound(w.attacker, at: c) : (lands: Double.infinity, lift: Double.infinity, intake: Double.infinity)
@@ -349,13 +358,16 @@ extension Civ {
                 guard there else { waiting += 1; continue }
                 if u.air == .parked && f.layer != .ground { waiting += 1; continue }          // in a hangar: not deployed
                 let onGround = f.layer == .ground && cfg.war.occupiers.contains(u.kind) && !shifting(u)     // mid-shift: neither moves nor takes
+                let fromSky = u.dropped == true                                                  // dropped from a sky carrier: no quay, no boats
                 if onGround {
                     let raw = unitPoints(u)
-                    if landed + raw > round.lands { onShips += 1; continue }                 // still on the ships
-                    landed += raw
+                    if !fromSky {
+                        if landed + raw > round.lands { onShips += 1; continue }                 // still on the ships
+                        landed += raw
+                    }
                     ground = true
                 }
-                pts += WarBalance.contribution(count: 1, base: cfg.war.points[u.kind] ?? 50, condition: u.hp / max(1, u.def.hp), supply: s, terrain: onGround ? landing : 1)
+                pts += WarBalance.contribution(count: 1, base: cfg.war.points[u.kind] ?? 50, condition: u.hp / max(1, u.def.hp), supply: s, terrain: onGround && !fromSky ? landing : 1)
             }
         }
         lines.append(String(format: "landing x%.2f, %d units not there yet", landing, waiting))
@@ -378,6 +390,8 @@ extension Civ {
         k.lines = a.lines + d.lines
         w.contests.append(k)
         w.arrived = a.points
+        record(k.won ? "contest_won" : "contest_lost", nations: [w.attacker, w.defender], region: c.regionKey, ids: [w.id],
+               note: String(format: "%.1f : %.1f = %.2f, chance %.3f, roll %.3f", k.attacker, k.defender, k.ratio, k.chance, k.roll))
         targetWars[i] = w
         return k
     }
@@ -402,7 +416,10 @@ extension Civ {
                 }
             case .depart, .arrive:
                 let a = attack(on: w)
-                if a.ground { w.stage = .contest; w.stageSince = time }
+                if a.ground {
+                    if w.groundSince == nil { w.groundSince = time; w.stage = .arrive; record("arrived", nations: [w.attacker, w.defender], region: c.regionKey, ids: [w.id]) }
+                    if time - w.groundSince! >= cfg.war.assaultHours * MP.daySeconds / 24 { w.stage = .contest; w.stageSince = time }
+                }
                 else if days >= cfg.war.arriveDays { w.stage = .withdrawn; w.stageSince = time }
                 else if a.points > 0 { w.stage = .arrive }
             case .contest:

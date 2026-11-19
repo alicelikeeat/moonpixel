@@ -104,6 +104,7 @@ struct HUDView: View {
         .overlay { if model.showWar { WarPanel() } }
         .overlay { if model.showMore { MorePanel() } }
         .overlay { if model.showCheats { CheatPanel() } }
+        .overlay { if model.showWarDemo { WarDemoView() } }
         .overlay { if model.showDiagnostics { DiagnosticsPanel() } }
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .any(of: [.images, .videos]))
         .onChange(of: model.pick) { _, v in

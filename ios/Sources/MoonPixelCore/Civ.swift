@@ -214,6 +214,11 @@ public final class Civ: Codable {
     public var drops: [CivDrop] = []
     public var giants: [CivGiant] = []
     public var nextDrop = 1, nextGiant = 1
+    /// Passes without a town held by an enemy force standing in them (region -> nation): held at once, given
+    /// back the moment the force leaves (TwinPorts.swift).
+    public var heldPasses: [Int64: Int] = [:]
+    /// What happened, in order, with the ids involved: the record a war can be replayed and checked from.
+    public var chronicle: [CivEvent] = []
     public init(seed: Int) { self.seed = seed; rng = RNG(seed: seed &* 7919 &+ 17) }
 
     // Saving. The rules (`cfg`) are not saved: they belong to the version of the game. Every field is
@@ -221,7 +226,7 @@ public final class Civ: Codable {
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
         case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
-        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant
+        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -246,6 +251,7 @@ public final class Civ: Codable {
         try c.encode(envoys, forKey: .envoys); try c.encode(envoysOut, forKey: .envoysOut); try c.encode(vassals, forKey: .vassals)
         try c.encode(targetWars, forKey: .targetWars); try c.encode(nextEnvoy, forKey: .nextEnvoy); try c.encode(nextTargetWar, forKey: .nextTargetWar)
         try c.encode(drops, forKey: .drops); try c.encode(giants, forKey: .giants); try c.encode(nextDrop, forKey: .nextDrop); try c.encode(nextGiant, forKey: .nextGiant)
+        try c.encode(heldPasses.keys.sorted().map { [$0, Int64(heldPasses[$0]!)] }, forKey: .heldPasses); try c.encode(chronicle, forKey: .chronicle)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -294,6 +300,8 @@ public final class Civ: Codable {
         giants = try c.decodeIfPresent([CivGiant].self, forKey: .giants) ?? []
         nextDrop = try c.decodeIfPresent(Int.self, forKey: .nextDrop) ?? (drops.map { $0.id }.max() ?? 0) + 1
         nextGiant = try c.decodeIfPresent(Int.self, forKey: .nextGiant) ?? (giants.map { $0.id }.max() ?? 0) + 1
+        for pair in try c.decodeIfPresent([[Int64]].self, forKey: .heldPasses) ?? [] where pair.count == 2 { heldPasses[pair[0]] = Int(pair[1]) }
+        chronicle = try c.decodeIfPresent([CivEvent].self, forKey: .chronicle) ?? []
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -391,6 +399,7 @@ public final class Civ: Codable {
         happened[key, default: 0] += 1
         news.append(CivNews(t: time, key: key, args: args, nations: nations, region: region))
         if news.count > 400 { news.removeFirst(news.count - 400) }
+        if envoys { record(key, nations: nations, region: region, ids: [], note: args.enumerated().filter { $0.offset % 2 == 0 }.map { $0.element }.joined(separator: " · ")) }
     }
 
     // MARK: - the clock
@@ -419,6 +428,7 @@ public final class Civ: Codable {
         if envoys { envoysHourly(); targetWarsHourly() }
         dropsHourly()
         if !giants.isEmpty { giantsHourly() }
+        if envoys { holdPasses() }
         let h = Int((time - hourAcc) / (MP.daySeconds / 24)) % 24
         for id in cities.keys.sorted() where id % 24 == h {
             guard let c = cities[id], c.detail == nil else { continue }

@@ -579,6 +579,9 @@ struct MorePanel: View {
                     Chip(title: L("黄昏", "Dusk"), icon: "sunset.fill", id: "time-19") { model.showMore = false; model.setTime(19) }
                     Chip(title: L("午夜", "Midnight"), icon: "moon.stars.fill", id: "time-0") { model.showMore = false; model.setTime(0) }
                 }
+                group(L("战争演示", "War demonstration")) {
+                    Chip(title: L("双港之战", "The twin ports"), icon: "flag.2.crossed.circle.fill", id: "TwinPorts") { model.showMore = false; model.showWarDemo = true }
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L("转头灵敏度", "Look speed")).font(.system(size: 11, design: .rounded)).frame(width: 84, alignment: .leading)

@@ -115,6 +115,7 @@ extension Civ {
     /// Who holds a region now (nil: no one): whoever holds the city it answers to, the moment it changes hands.
     public func controller(_ key: Int64) -> Int? { regions[key].flatMap(holder) }
     @inline(__always) public func holder(_ r: CivRegion) -> Int? {
+        if let h = heldPasses[r.key] { return h }
         if let cl = r.claim, let c = cities[cl], polities[c.nation]?.status != .history { return c.nation }
         return r.control
     }

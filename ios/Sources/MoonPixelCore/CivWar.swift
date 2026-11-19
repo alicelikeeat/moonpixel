@@ -23,6 +23,8 @@ public struct CivUnit: Codable, Equatable {
     public var form: String?, shiftDone: Double?
     /// The player is at its controls (Piloting.swift): the computer gives it no new orders meanwhile.
     public var pilot: Bool?
+    /// Came down from a sky carrier (it did not come through a port).
+    public var dropped: Bool?
     public var ready: [String: Double] = [:]           // weapon -> game time it can fire again
     public var def: CivUnitDef { CivUnitDef.byKey[kind]! }
     public func ok(_ part: String) -> Bool { (parts[part] ?? 1) > 0 }
@@ -330,6 +332,12 @@ extension Civ {
             let speed = ms.map { formSpeed($0) }.min() ?? 1
             f.progress += speed / 24
             for i in f.units.indices { if var u = units[f.units[i]] { u.fuel = max(0, u.fuel - u.def.fuelPerDay / 24); units[u.id] = u } }
+            // a pass held by an enemy closes the road: the force stops before it
+            if let next = f.path.first, let h = heldPasses[next], h != f.nation, atWar(h, f.nation), f.layer == .ground {
+                f.path = []; f.progress = 0
+                record("road_closed", nations: [f.nation, h], region: next, ids: [f.id])
+                continue
+            }
             while f.progress >= 1 && !f.path.isEmpty {
                 f.progress -= 1
                 let next = f.path.removeFirst()
@@ -430,6 +438,10 @@ extension Civ {
             for uid in f.units { guard let o = units[uid] else { continue }; let d = o.def
                 marks.append(Mark(id: uid, nation: f.nation, layer: o.layer, region: o.at ?? f.region, armor: d.armor, parked: o.air == .parked)) }
         }
+        // at a place a war is being fought for, its two sides do not trade blows there hour by hour: the
+        // contest (one frozen reckoning, Diplomacy.swift) settles it
+        var decided = Set<String>()
+        if envoys { for w in targetWars where w.ended == nil { if let c = cities[w.target] { decided.insert("\(c.regionKey):\(min(w.attacker, w.defender))-\(max(w.attacker, w.defender))") } } }
         for fid in forces.keys.sorted() {
             guard let f = forces[fid] else { continue }
             let foes = Set(wars(of: f.nation))
@@ -446,6 +458,7 @@ extension Civ {
                     // the nearest seen enemy this weapon can reach on its layers, lowest id first
                     var best: (Mark, Int)?
                     for m in marks where foes.contains(m.nation) && w.layers.contains(m.layer) && (!m.parked || m.layer == .ground) {
+                        if !decided.isEmpty && m.region == at && decided.contains("\(at):\(min(f.nation, m.nation))-\(max(f.nation, m.nation))") { continue }
                         let dd = dist(at, m.region)
                         guard dd <= w.range, units[m.id] != nil, sees(f.nation, m.id) else { continue }
                         if best == nil || dd < best!.1 || (dd == best!.1 && m.id < best!.0.id) { best = (m, dd) }

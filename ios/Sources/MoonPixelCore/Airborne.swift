@@ -89,9 +89,10 @@ extension Civ {
             let f = CivForce(); f.id = nextForce; nextForce += 1; f.nation = d.nation; f.region = d.region; f.layer = .ground
             f.units = [d.unit]; f.crew = d.crew
             forces[f.id] = f
-            u.force = f.id; u.air = .none
+            u.force = f.id; u.air = .none; u.dropped = true
             units[d.unit] = u
             fight("landed", u.kind, "", [d.nation], d.region)
+            record("frame_landed", nations: [d.nation], region: d.region, ids: [d.unit])
         }
         drops = left
     }
@@ -155,7 +156,7 @@ extension Civ {
     func giantsHourly() {
         for i in giants.indices {
             if giants[i].task == "guard" {
-                giants[i].stamina = max(0, giants[i].stamina - 0.02)
+                giants[i].stamina = max(0, giants[i].stamina - 0.01)          // about four days on watch
                 giants[i].guardHours += 1
                 if giants[i].stamina < 0.2 { giants[i].task = ""; giants[i].guarding = nil; giants[i].history.append("day \(day): too tired to keep watch") }
             } else {
