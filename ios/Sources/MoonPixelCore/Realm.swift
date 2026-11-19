@@ -945,7 +945,7 @@ extension Society {
         let now = world.time
         guard let src = settlements.values.filter({ !$0.abandoned && $0.members.count >= 9 })
                 .max(by: { $0.members.count != $1.members.count ? $0.members.count < $1.members.count : $0.id > $1.id }) else { return false }
-        let site = world.findSite(from: src.center, minR: 80, maxR: 170, salt: 5000 + nextSID * 17, avoid: settlements.values.map { $0.center }, avoidDist: 70)
+        let site = world.findSite(from: src.center, minR: 80 * townSpread, maxR: 170 * townSpread, salt: 5000 + nextSID * 17, avoid: settlements.values.map { $0.center }, avoidDist: 70 * townSpread)
         if site.isNone { return false }
         var houses: [Int: [Agent]] = [:]
         for a in src.members.compactMap({ agents[$0] }) where a.legion == nil { houses[household(a, now), default: []].append(a) }

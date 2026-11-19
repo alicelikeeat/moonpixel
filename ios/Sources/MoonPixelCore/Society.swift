@@ -511,6 +511,9 @@ public final class Society {
         return a
     }
 
+    /// Towns stand farther apart in new worlds (with oceans): 1.6 times the old spacing.
+    public var townSpread: Double { world.gen.oceans ? 1.6 : 1 }
+
     @discardableResult public func foundSettlement(_ center: TilePos) -> Settlement {
         let s = Settlement()
         s.id = nextSID; nextSID += 1
@@ -557,8 +560,8 @@ public final class Society {
         var centers: [TilePos] = []
         for i in 0..<villages {
             let from = centers.isEmpty ? origin : centers[rng.index(centers.count)]
-            var p = world.findSite(from: from, minR: centers.isEmpty ? 0 : 70, maxR: centers.isEmpty ? 40 : 140, salt: 900 + i * 7, avoid: centers, avoidDist: 64)
-            if p.isNone { p = world.findSite(from: origin, minR: 0, maxR: 900, salt: 990 + i, avoid: centers, avoidDist: 64) }
+            var p = world.findSite(from: from, minR: centers.isEmpty ? 0 : 70 * townSpread, maxR: centers.isEmpty ? 40 : 140 * townSpread, salt: 900 + i * 7, avoid: centers, avoidDist: 64 * townSpread)
+            if p.isNone { p = world.findSite(from: origin, minR: 0, maxR: 900 * townSpread, salt: 990 + i, avoid: centers, avoidDist: 64 * townSpread) }
             if p.isNone { continue }
             centers.append(p)
             let s = foundSettlement(p)
@@ -956,7 +959,7 @@ public final class Society {
         let avoid = settlements.values.filter { !$0.abandoned }.map { $0.center }
         var best: (TilePos, Double)?
         for k in 0..<4 {
-            let p = world.findSite(from: c, minR: 70, maxR: 190, salt: 2000 + nextSID * 13 + k * 101, avoid: avoid, avoidDist: 70)
+            let p = world.findSite(from: c, minR: 70 * townSpread, maxR: 190 * townSpread, salt: 2000 + nextSID * 13 + k * 101, avoid: avoid, avoidDist: 70 * townSpread)
             if p.isNone { continue }
             var score = 0.0
             var water = false

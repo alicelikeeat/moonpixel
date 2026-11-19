@@ -285,7 +285,7 @@ extension Society {
 
         // 5. a railway and a train to each other district of the nation (or across an open border) within reach
         for o in net.districts.sorted(by: { $0.id < $1.id }) where o.id != d.id && (o.nation == d.nation || borderOpen(d.nation, o.nation)) {
-            guard o.center.distance2(d.center) <= 700 * 700, d.population >= 100 || open >= 4 else { continue }
+            guard o.center.distance2(d.center) <= 1600 * 1600, d.population >= 60 || open >= 3 else { continue }
             let tag = "rail:\(o.id)"
             // one railway per pair: the district with the lower id lays it
             if (o.works?["rail:\(d.id)"]) != nil || tried.contains(tag) { continue }
@@ -308,6 +308,31 @@ extension Society {
                 if let v = buy(.train, at: a, heading: atan2(Double(track[2].y - a.y), Double(track[2].x - a.x))) { assign(v, to: l); d.note("train \(v.id) runs to \(o.name)") }
             } else { d.note("could not open the railway to \(o.name) yet") }
             return
+        }
+        // 5a. high-speed rail: a line of its own to the nearest other city (of the nation, or across an open border)
+        // within 2400 tiles, with its own stations and a high-speed train: every city has one once it has a neighbour
+        if d.population >= 60 || open >= 3,
+           let o = net.districts.filter({ $0.id != d.id && ($0.nation == d.nation || borderOpen(d.nation, $0.nation)) && $0.center.distance2(d.center) <= 2400 * 2400 })
+                .min(by: { $0.center.distance2(d.center) != $1.center.distance2(d.center) ? $0.center.distance2(d.center) < $1.center.distance2(d.center) : $0.id < $1.id }) {
+            let tag = "hsr:\(o.id)"
+            if (o.works?["hsr:\(d.id)"]) == nil && !tried.contains(tag) {
+                if site(tag) == nil {
+                    let from = TilePos(d.center.x - 24, d.center.y + 26), to = TilePos(o.center.x + 24, o.center.y + 30)
+                    if start(tag, planWay(.hsr, from: from, to: to, join: false)) || tried.contains(tag) { return }
+                } else if done(tag), !realm.transport.lines.contains(where: { $0.payer == .district(d.id) && $0.name.hasSuffix("⚡\(o.id)") }) {
+                    let track = site(tag)!.cells.map { $0.t }.filter { wayKind(at: $0) == .hsr && bridge(at: $0) == nil && tunnel(at: $0) == nil }
+                    if track.count >= 4 {
+                        let a = track[1], b = track[track.count - 2]
+                        if let s0 = addStop(.station, at: a, name: d.name + (zh ? " 高铁站" : " High-speed Station"), nation: d.nation, district: d.id),
+                           let s1 = addStop(.station, at: b, name: o.name + (zh ? " 高铁站" : " High-speed Station"), nation: o.nation, district: o.id),
+                           let l = addLine(.hsr, stops: [s0.id, s1.id], name: d.name + " – " + o.name + (zh ? " 高铁 ⚡" : " high-speed ⚡") + "\(o.id)", headway: 240, nation: d.nation, payer: .district(d.id)) {
+                            d.note("opened the high-speed line to \(o.name)")
+                            if let v = buy(.hsr, at: a, heading: atan2(Double(track[2].y - a.y), Double(track[2].x - a.x))) { assign(v, to: l) }
+                        }
+                        return
+                    } else { tried.insert(tag) }
+                }
+            }
         }
         // 5b. a highway to each other district of the nation (or across an open border) within 600 tiles, and an
         // intercity coach along it: the cities are joined by road as well as by rail and air
@@ -336,8 +361,8 @@ extension Society {
             } else { d.note("could not open the coach to \(o.name) yet") }
             return
         }
-        // 6. an airport (a runway three tiles wide, a taxiway and an apron) once it has 150 people
-        if (d.population >= 150 || open >= 6) && !tried.contains("airport") && site("runway1") == nil {
+        // 6. an airport (a runway three tiles wide, a taxiway and an apron): every city has one, early
+        if (d.population >= 50 || open >= 3) && !tried.contains("airport") && site("runway1") == nil {
             if let field = airfield(d, length: 64, avoid: nil) {
                 // all of it or nothing: a runway started alone would block every site found later. What the
                 // store lacks for the whole field is bought in first, when the money is there; else it saves up.
