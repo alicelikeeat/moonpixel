@@ -21,6 +21,8 @@ public struct CivUnit: Codable, Equatable {
     public var cruising = false                        // a sky carrier high in near space: unseen by most, harmless to all
     /// A shifter's form ("vehicle" or "robot"; nil: robot), and when a change of form ends (Mechs.swift).
     public var form: String?, shiftDone: Double?
+    /// The player is at its controls (Piloting.swift): the computer gives it no new orders meanwhile.
+    public var pilot: Bool?
     public var ready: [String: Double] = [:]           // weapon -> game time it can fire again
     public var def: CivUnitDef { CivUnitDef.byKey[kind]! }
     public func ok(_ part: String) -> Bool { (parts[part] ?? 1) > 0 }
@@ -570,7 +572,8 @@ extension Civ {
                     if a.aloft <= 0 && a.air != .parked { units[uid] = a; divert(uid, from: f); continue }
                 case .parked:
                     // missions: strike what has been seen within reach, or look around when nothing is known
-                    guard slots > 0, a.fuel > 0 || a.def.fuelCap == 0 else { break }
+                    // (an aircraft the player flies goes only where they send it: Piloting.swift)
+                    guard slots > 0, a.fuel > 0 || a.def.fuelCap == 0, a.pilot != true else { break }
                     let reach = Int(a.def.endurance * a.def.speed / 24 / 2)
                     let seen = intel.filter { $0.key.hasPrefix("\(f.nation):") && $0.value.live && dist($0.value.region, f.region) <= reach }.map { $0.value.region }.sorted()
                     if let t = seen.first ?? (wars(of: f.nation).isEmpty ? nil : nearestFoeCity(f)) {
@@ -675,7 +678,7 @@ extension Civ {
         for u in units.values.sorted(by: { $0.id < $1.id }) where u.nation == id && u.depot != nil { _ = deploy(u.id) }
         // forces: march on the nearest enemy city they can reach
         if atWar {
-            for f in forces.values.sorted(by: { $0.id < $1.id }) where f.nation == id && f.path.isEmpty && f.layer != .highAir {
+            for f in forces.values.sorted(by: { $0.id < $1.id }) where f.nation == id && f.path.isEmpty && f.layer != .highAir && !piloted(f) {
                 if let t = nearestFoeCity(f) { _ = send(f.id, to: t, attack: true) }
             }
         }

@@ -688,6 +688,14 @@ struct HUDView: View {
                 }
                 .buttonStyle(PressStyle())
                 .accessibilityIdentifier("teleport")
+                if model.society.civ.pilotedUnit != nil {
+                    Button { model.pilotGoToPick() } label: {
+                        Label(L("派驾驶中的单位前往", "Send the unit you drive there"), systemImage: "steeringwheel").font(.system(size: 13, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 14).frame(maxWidth: .infinity).frame(height: 36).background(Color.orange.opacity(0.85), in: Capsule())
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityIdentifier("pilot-go")
+                }
             }
             // quick travel: the nearest places by name
             let me = model.scene?.player.tile ?? TilePos(0, 0)

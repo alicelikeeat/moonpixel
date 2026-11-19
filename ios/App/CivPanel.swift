@@ -263,6 +263,7 @@ struct CivNationSheet: View {
 /// Land and war: what the nation owns and holds, its ports and strength, its vassals, its ground; the envoys
 /// it sent or met; and each war for a place, its report first line first (tap to see why).
 struct CivGroundWarCard: View {
+    @EnvironmentObject var model: GameModel
     let c: Civ
     let nation: Int
     @State private var open: Set<Int> = []
@@ -284,6 +285,41 @@ struct CivGroundWarCard: View {
             }
             ForEach(Array(envoys.enumerated()), id: \.offset) { _, e in
                 Label(c.envoyLine(e, zh: zh), systemImage: "envelope.fill").font(.system(size: 10, design: .rounded)).opacity(0.9)
+            }
+            // special units: whose, where, doing what, when they arrive; the player may take the controls
+            let mine = model.mayPilot(nation)
+            ForEach(c.specialUnits(of: nation), id: \.self) { uid in
+                Text(c.unitLine(uid, zh: zh)).font(.system(size: 10, design: .rounded))
+                if mine {
+                    let u = c.units[uid]
+                    let flying = c.pilotedUnit.flatMap { c.units[$0] }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            if u?.pilot == true {
+                                Chip(title: L("交还电脑", "Hand back"), icon: "hand.raised.slash", id: "pilot-release-\(uid)") { model.pilotRelease() }
+                            } else {
+                                Chip(title: L("驾驶", "Take the controls"), icon: "steeringwheel", id: "pilot-take-\(uid)") { model.pilotTake(uid) }
+                            }
+                            if u?.kind == "shifter" {
+                                Chip(title: u?.form == "vehicle" ? L("变人形", "Stand up") : L("变车辆", "To vehicle"), icon: "arrow.triangle.2.circlepath", id: "shift-\(uid)") { model.pilotShift(uid) }
+                            }
+                            if u?.kind == "frame" || u?.kind == "shifter", let f = u?.force.flatMap({ c.forces[$0] }), f.units.contains(where: { c.units[$0]?.kind == "sky_carrier" }) {
+                                Chip(title: L("投送", "Drop"), icon: "arrow.down.to.line", id: "drop-\(uid)") { model.pilotDrop(uid) }
+                            }
+                            if u?.pilot == true, (u?.def.hangar ?? 0) > 0 {
+                                Chip(title: L("切换舰载机", "To an aircraft"), icon: "airplane", id: "to-aircraft") { model.pilotSwitch(toAircraft: true) }
+                            }
+                            if let a = flying, a.def.hangar == 0, a.def.carrierBased, a.force == u?.force {
+                                Chip(title: L("回到母舰", "Back to the carrier"), icon: "ferry", id: "to-carrier") { model.pilotSwitch(toAircraft: false) }
+                            }
+                        }
+                    }
+                }
+            }
+            ForEach(c.giants.filter { $0.nation == nation }, id: \.id) { g in
+                Text(zh ? "\(g.nameZh) · 体力 \(Int(g.stamina * 100))% · 救援 \(g.rescued) 人 · 守城 \(Int(g.guardHours)) 小时 · 清障 \(g.cleared) 处"
+                        : "\(g.nameEn) · stamina \(Int(g.stamina * 100))% · rescued \(g.rescued) · on guard \(Int(g.guardHours)) h · cleared \(g.cleared)")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
             }
             ForEach(Array(wars), id: \.id) { w in
                 let lines = c.warLines(w, zh: zh)
@@ -530,6 +566,40 @@ enum CivText {
 }
 
 extension GameModel {
+    /// The player may take the controls of this nation's machines: the nation they govern or belong to.
+    func mayPilot(_ nation: Int) -> Bool { civCommand == nation || (society.realm.player.nation != 0 && society.realm.player.nation == nation) }
+
+    func pilotTake(_ uid: Int) {
+        let c = society.civ
+        guard let u = c.units[uid] else { return }
+        if let why = c.takeControl(uid, nation: u.nation) { showToast(L("无法驾驶：", "Cannot take the controls: ") + why) }
+        else { showToast(L("你在驾驶 ", "At the controls of ") + (GameModel.zh ? u.def.zh : u.def.en) + L("：在地图上选一处，派它前往", ": pick a place on the map to send it there")) }
+    }
+    func pilotRelease() { society.civ.releaseControl(); showToast(L("已交还电脑，任务照常继续", "Handed back: the computer carries on with its task")) }
+    func pilotShift(_ uid: Int) {
+        let c = society.civ
+        guard let u = c.units[uid] else { return }
+        if let why = c.shift(uid, to: u.form == "vehicle" ? "robot" : "vehicle") { showToast(Civ.shiftReason(why, zh: GameModel.zh)) }
+        else { showToast(L("变形中（约半小时游戏时间）", "Changing form (about half an hour of game time)")) }
+    }
+    func pilotDrop(_ uid: Int) {
+        if let why = society.civ.drop(uid) { showToast(L("无法投送：", "Cannot drop: ") + why) }
+        else { showToast(L("机甲投送中，两小时后落地", "Frame dropping: it lands in two hours")) }
+    }
+    func pilotSwitch(toAircraft: Bool) {
+        let c = society.civ
+        let r = toAircraft ? c.switchToAircraft() : c.switchToCarrier()
+        showToast(r == nil ? L("没有可切换的", "Nothing to switch to") : (toAircraft ? L("已切换到舰载机", "Now in an aircraft") : L("已回到母舰", "Back on the carrier")))
+    }
+    /// Send the unit at the controls to the place picked on the map.
+    func pilotGoToPick() {
+        guard let t = mapPick else { return }
+        let c = society.civ
+        let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
+        if let why = c.pilotGo(to: MP.chunkKey(rx, ry)) { showToast(L("无法前往：", "Cannot go: ") + why) }
+        else { showToast(L("已出发", "On its way")) }
+    }
+
     /// Govern a regional nation (or hand it back to the computer). Only one at a time.
     func takeCharge(_ id: Int?) {
         let c = society.civ

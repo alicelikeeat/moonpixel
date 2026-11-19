@@ -394,7 +394,7 @@ extension Civ {
             case .muster:
                 // everything on the ground near home sets out for the place
                 if days >= cfg.war.musterDays {
-                    for f in forces.values.sorted(by: { $0.id < $1.id }) where f.nation == w.attacker && f.path.isEmpty && f.layer == .ground {
+                    for f in forces.values.sorted(by: { $0.id < $1.id }) where f.nation == w.attacker && f.path.isEmpty && f.layer == .ground && !piloted(f) {
                         if send(f.id, to: c.regionKey, attack: true) { w.forces.append(f.id) }
                     }
                     w.sent = w.forces.compactMap { forces[$0] }.reduce(0.0) { acc, f in acc + f.units.compactMap { units[$0] }.reduce(0.0) { $0 + unitPoints($1) } }
