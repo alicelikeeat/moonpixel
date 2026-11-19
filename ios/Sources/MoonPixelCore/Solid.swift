@@ -656,7 +656,7 @@ public enum Figure3D {
             let hip = P(x, 7.5, 0), knee = P(x, 4, swing * 0.6 + 0.3), ankle = P(x, 1.2, swing)
             m.frustum(hip, knee, 1.6 * u, 1.35 * u, pants, seg: 8)
             m.frustum(knee, ankle, 1.35 * u, 1.05 * u, pants, seg: 8)
-            m.ellipsoid(P(x, 0.9, swing + 0.6), R(1.5, 0.95, 2.3), shoes, seg: 8, rings: 4)
+            m.ellipsoid(P(x, 0.95, swing + 0.6), R(1.5, 0.95, 2.3), shoes, seg: 8, rings: 4)          // the sole on the ground
         }
         // the body: hips, a waist and a chest (ellipsoids), a skirt for a woman, a collar
         m.ellipsoid(P(0, 8, 0), R(3.6, 1.9, 2.3), pants, seg: 12, rings: 5)

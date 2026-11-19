@@ -173,7 +173,9 @@ final class SolidTests: XCTestCase {
         var face = Bitmap(8, 8, fill: RGBA(hex: "#f2c8a4")); face.set(2, 3, RGBA(hex: "#101010"))
         let f = Figure3D.human(look, frame: 0, held: "", child: false, female: false, face: face)
         check(f, "face")
-        XCTAssertGreaterThan(f.triangles, b.triangles)
+        // (the photo's pixels are plates just in front of the face, in place of the modelled eyes)
+        XCTAssertTrue(f.positions.contains { abs($0.z - (3.6 + 0.25) / 16) < 1e-4 }, "the photo's plates on the face")
+        XCTAssertNotEqual(f.positions, Figure3D.human(look, frame: 0, held: "", child: false, female: false).positions)
         for sp in Species.all { for frame in 0..<2 {
             let m = Figure3D.animal(sp, frame: frame)
             check(m, sp.key)

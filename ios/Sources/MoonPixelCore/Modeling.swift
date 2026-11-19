@@ -29,14 +29,23 @@ extension Mesh3D {
     }
 
     /// A quad lit by its own normal (from its corners: a, b, c, d counter-clockwise seen from outside).
+    /// Each of its two triangles is kept only if it has area (a pinched quad at the pole of a sphere, or a
+    /// triangle given as a quad, keeps its one real half); the normal is that of the quad as a whole.
     public mutating func face(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ color: RGBA) {
-        var n = vcross(b - a, c - a)
-        if vlen(n) < 1e-9 { n = vcross(c - a, d - a) }
-        guard vlen(n) > 1e-9 else { return }
-        n = vnorm(n)
+        let n1 = vcross(b - a, c - a), n2 = vcross(c - a, d - a)
+        let keep1 = vlen(n1) > 2e-6, keep2 = vlen(n2) > 2e-6
+        guard keep1 || keep2 else { return }
+        let n = vnorm((keep1 ? n1 : .zero) + (keep2 ? n2 : .zero))
+        let k1 = keep1 && vdot(n1, n) > 1e-6, k2 = keep2 && vdot(n2, n) > 1e-6
+        guard k1 || k2 else { return }
         let sh = Mesh3D.shade(for: n)
         let t = Palette3D.uv(cel ? Mesh3D.celColor(color, shade: sh < 0.06 ? 0 : sh) : color.darkened(sh))
-        quad(a, b, c, d, normal: n, uv: (t, t, t, t))
+        // four corners always (the ink outline works on quads), triangles only where they have area
+        let i = UInt32(positions.count)
+        positions.append(a); positions.append(b); positions.append(c); positions.append(d)
+        for _ in 0..<4 { normals.append(n); uvs.append(t) }
+        if k1 { indices.append(i); indices.append(i + 1); indices.append(i + 2) }
+        if k2 { indices.append(i); indices.append(i + 2); indices.append(i + 3) }
     }
 
     /// A triangle (a quad with its last corner repeated).
