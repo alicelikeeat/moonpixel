@@ -177,6 +177,7 @@ extension Society {
     /// tier (x, y, w, d in tiles; from and to as storeys), with the tier's wall colour and whether it is glass.
     /// The 3D view draws these for the floors it does not mesh (the far ones), so a skyline is seen whole.
     public func skylineBlocks(near c: TilePos, radius: Int) -> [SkylineBlock] {
+        guard radius > 0 else { return [] }
         var out: [SkylineBlock] = []
         for d in (realm.transportBox?.districts ?? []) {
             for b in d.buildings where b.state == .open && b.floors.count >= 8 && abs(b.x - c.x) <= radius && abs(b.y - c.y) <= radius {

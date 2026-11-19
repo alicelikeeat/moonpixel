@@ -111,6 +111,7 @@ jobs:
                   name = ''.join(ch if ch.isalnum() or ch in '-' else '-' for ch in name)[:60]
                   shutil.copy('uishots/' + a['exportedFileName'], 'ui-' + name + '.png')
           " 2>/dev/null; ls ui-*.png 2>/dev/null
+          python3 scripts/crash-report.py || true
           exit $rc
       - uses: actions/upload-artifact@v4
         if: always()

@@ -21,6 +21,8 @@ extension Society {
 
     /// The saucers of the UFO airports within `reach` (world units) of `p`, where they are now.
     public func ufos(near p: Vec2, reach: Double) -> [UfoState] {
+        // (before the view has a place, e.g. the first frame of a new world, there is nothing to show)
+        guard p.x.isFinite, p.y.isFinite, reach.isFinite, reach > 0, abs(p.x) < 1e12, abs(p.y) < 1e12 else { return [] }
         let t0 = world.time
         let r = Int(reach / 512) + 1
         let cx = Int((p.x / 512).rounded(.down)), cy = Int((p.y / 512).rounded(.down))

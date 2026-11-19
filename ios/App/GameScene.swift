@@ -148,6 +148,7 @@ final class GameScene: SKScene {
     /// Where one comes out, the stairs there wait until one has stepped off them, so nobody bounces back.
     func walkStairs(_ society: Society, _ model: GameModel) {
         guard society.playerVehicle == nil, let b = society.realm.player.body, b.platform == nil else { return }
+        guard player.x.isFinite, player.y.isFinite else { return }
         let t = player.tile
         let key = Content.shared.tile(society.layer(model.depth).tile(2, t.x, t.y))?.key
         guard key == "stairs_up" || key == "stairs_down" else { stairLock = nil; return }

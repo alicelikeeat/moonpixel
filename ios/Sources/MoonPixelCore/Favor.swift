@@ -12,7 +12,7 @@ extension Society {
 
     /// Mark the places near the traveller as favoured for the next few days (called every game hour).
     func favorHour() {
-        guard let p = realm.player.body?.pos ?? (realm.player.depth == nil ? nil : realm.player.body?.pos) else { return }
+        guard let p = realm.player.body?.pos, p.x.isFinite, p.y.isFinite else { return }
         let here = p.tile, r2 = Society.favorReach * Society.favorReach
         let until = world.time + Society.favorDays * MP.daySeconds
         var f = realm.favorUntil ?? [:]

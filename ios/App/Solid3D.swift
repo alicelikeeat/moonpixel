@@ -613,6 +613,7 @@ final class SolidRenderer {
         guard model.depth != 1 else { return }
         skylineFrame += 1
         if skylineFrame % 20 != 1 { return }                 // a few times a second is plenty
+        guard target.x.isFinite, target.z.isFinite, abs(target.x) < 1e9, abs(target.z) < 1e9 else { return }
         let c = TilePos(Int(target.x.rounded(.down)), Int(target.z.rounded(.down)))
         let blocks = society.skylineBlocks(near: c, radius: 280)
         let n = model.depth >= OpenWorld.storeyBase ? model.depth - OpenWorld.storeyBase : 0
