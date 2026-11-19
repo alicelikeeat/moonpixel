@@ -9,7 +9,11 @@ import SwiftUI
 final class Diagnostics: NSObject, MXMetricManagerSubscriber {
     static let shared = Diagnostics()
     private let d = UserDefaults.standard
-    static var dir: URL { GameModel.documents.appendingPathComponent("diagnostics", isDirectory: true) }
+    /// Its own folder in Documents (looked up here, not through GameModel: that type belongs to the main actor
+    /// and MetricKit calls in from elsewhere).
+    static var dir: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("diagnostics", isDirectory: true)
+    }
 
     /// Set at launch: the last session ended without the app being closed (a crash, or the system ending it).
     private(set) var lastEndedAbruptly = false

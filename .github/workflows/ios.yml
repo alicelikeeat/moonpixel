@@ -14,7 +14,7 @@ name: iOS unsigned IPA
 on:
   workflow_dispatch:
   push:
-    branches: ["claude/moonpixel-v1-full-spec-fze5jp", "main"]
+    branches: ["claude/moonpixel-v1-full-spec-fze5jp", "claude/keen-maxwell-yxqpz9", "main"]
     paths: ["ios/**", "content/**", "tools/gen_swift_content.py", ".github/workflows/ios.yml"]
 permissions:
   contents: write
