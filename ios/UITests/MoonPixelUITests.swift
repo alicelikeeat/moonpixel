@@ -436,6 +436,14 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertNotEqual(first, later, "the car moved: \(first) -> \(later)")
         XCTAssertTrue(later.contains("Ground") || later.contains("地面"), "and stopped at the ground: \(later)")
         shot("34-car-down")
+        // out of the car with one button, onto the landing: no longer in the car
+        XCTAssertTrue(app.buttons["lift-exit"].waitForExistence(timeout: 5), "an Exit button while riding")
+        app.buttons["lift-exit"].tap(); sleep(2)
+        XCTAssertFalse(line.label.contains("In the car") || line.label.contains("电梯中"), "stepped out: \(line.label)")
+        shot("34b-stepped-out")
+        // and back in from the landing with one button
+        if app.buttons["lift-enter"].waitForExistence(timeout: 8) { app.buttons["lift-enter"].tap(); sleep(3) }
+        shot("34c-back-in")
     }
 
     /// The transport demo: get into the car from the travel panel, drive it, hand it to the autopilot and back,
@@ -447,6 +455,7 @@ final class MoonPixelUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20))
         sleep(9)
+        if app.buttons["tools"].waitForExistence(timeout: 10) && !app.buttons["travel-open"].exists { app.buttons["tools"].tap(); sleep(1) }
         guard app.buttons["travel-open"].waitForExistence(timeout: 10) else { return XCTFail("no travel button") }
         app.buttons["travel-open"].tap(); sleep(1)
         shot("40-travel")
@@ -524,6 +533,7 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["supply-pack"].tap(); sleep(1)
         let height = app.staticTexts["height-line"]
         let before = height.exists ? height.label : ""
+        if !app.buttons["pillar-up"].exists { app.buttons["tools"].tap(); sleep(1) }
         app.buttons["pillar-up"].tap(); sleep(1)
         app.buttons["pillar-up"].tap(); sleep(1)
         let after = height.label

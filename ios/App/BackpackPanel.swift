@@ -5,6 +5,7 @@ import MoonPixelCore
 /// buttons: a touch that starts on one never reaches the 3D view, so it never turns the camera.
 struct PlayControls: View {
     @EnvironmentObject var model: GameModel
+    @State private var toolsOpen = false
 
     var body: some View {
         ZStack {
@@ -16,10 +17,31 @@ struct PlayControls: View {
                 Spacer()
                 HStack(alignment: .bottom) {
                     Spacer()
-                    VStack(spacing: 10) {
-                        round("car.fill", L("出行", "Travel"), id: "travel-open") { model.showTravel = true }
-                        round("square.stack.3d.up.fill", L("脚下搭方块", "Block under your feet"), id: "pillar-up") { model.pillarUp() }
-                        if model.nearLift != nil {
+                    VStack(alignment: .trailing, spacing: 10) {
+                        // the less used actions fold into one button and open out to the left
+                        HStack(spacing: 8) {
+                            if toolsOpen {
+                                round("car.fill", L("出行", "Travel"), id: "travel-open") { model.showTravel = true; withAnimation(.snappy) { toolsOpen = false } }
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                                round("square.stack.3d.up.fill", L("脚下搭方块", "Block under your feet"), id: "pillar-up") { model.pillarUp() }
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                            }
+                            round(toolsOpen ? "xmark" : "square.grid.2x2.fill", L("工具", "Tools"), id: "tools") {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) { toolsOpen.toggle() }
+                            }
+                        }
+                        // lifts: the way in and out, right where the thumb is
+                        if model.inLift {
+                            HStack(spacing: 8) {
+                                round("list.number", L("选楼层", "Floors"), id: "lift-open") { model.liftPanel = model.nearLift }
+                                liftButton(L("出电梯", "Exit"), "figure.walk.departure", id: "lift-exit", tint: Color(red: 0.2, green: 0.7, blue: 0.4)) { model.exitLift() }
+                            }
+                        } else if model.atLiftDoor {
+                            HStack(spacing: 8) {
+                                round("list.number", L("电梯", "Elevator"), id: "lift-open") { model.liftPanel = model.nearLift }
+                                liftButton(L("进电梯", "Enter"), "arrow.up.arrow.down.square.fill", id: "lift-enter", tint: Color(red: 0.3, green: 0.5, blue: 0.95)) { model.enterLift() }
+                            }
+                        } else if model.nearLift != nil {
                             round("arrow.up.arrow.down", L("电梯", "Elevator"), id: "lift-open") { model.liftPanel = model.nearLift }
                         }
                         if model.render3D && model.viewMode == .first {
@@ -79,6 +101,20 @@ struct PlayControls: View {
                 .buttonStyle(PressStyle()).glass(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityIdentifier("backpack").accessibilityLabel(L("背包", "Backpack"))
         }
+    }
+
+    /// A wide labelled button for getting in or out of a lift.
+    private func liftButton(_ title: String, _ icon: String, id: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            action()
+        } label: {
+            Label(title, systemImage: icon).font(.system(size: 15, weight: .bold, design: .rounded))
+                .padding(.horizontal, 16).frame(height: 50)
+                .background(tint.opacity(0.85), in: Capsule())
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityIdentifier(id)
     }
 
     private func round(_ icon: String, _ label: String, id: String, big: Bool = false, _ act: @escaping () -> Void) -> some View {
@@ -198,9 +234,17 @@ struct LiftPanel: View {
     @State private var number = ""
 
     var body: some View {
-        GlassSheet(title: L("外置电梯", "Outside elevator"), subtitle: status, close: { model.liftPanel = nil }) {
+        GlassSheet(title: L("电梯", "Elevator"), subtitle: status, close: { model.liftPanel = nil }) {
             VStack(alignment: .leading, spacing: 8) {
                 if let e = model.society?.lift(id) {
+                    // the way in or out first, big
+                    if model.society?.realm.player.body?.platform == id {
+                        Chip(title: e.docked ? L("出电梯（到这一层）", "Step out here") : L("到站后出电梯", "Step out at the next stop"), icon: "figure.walk.departure",
+                             tint: Color(red: 0.2, green: 0.7, blue: 0.4).opacity(0.8), id: "lift-panel-exit") { model.exitLift() }
+                    } else if model.atLiftDoor {
+                        Chip(title: e.open(at: model.liftHere()?.stop ?? -1) ? L("进电梯", "Step in") : L("呼叫并进电梯", "Call and step in"), icon: "arrow.up.arrow.down.square.fill",
+                             tint: Color(red: 0.3, green: 0.5, blue: 0.95).opacity(0.8), id: "lift-panel-enter") { model.enterLift() }
+                    }
                     TextField(L("输入层号", "Storey number"), text: $number).keyboardType(.numberPad).textFieldStyle(.roundedBorder).frame(maxWidth: 160)
                         .accessibilityIdentifier("lift-number")
                     let inside = model.society?.realm.player.body?.platform == id

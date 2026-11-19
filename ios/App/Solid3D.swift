@@ -987,6 +987,20 @@ final class SolidRenderer {
                     shaft.position = SIMD3(Float(e.x), bottom, Float(e.y))
                     shaft.scale = SIMD3(1, max(0.1, top - bottom), 1)
                     root.addChild(shaft); rails.append(shaft)
+                    // a lit doorway at every landing, facing the shaft, so the way in and out is plain to see
+                    let mid = SIMD2<Float>(Float(e.x) + Float(e.w) / 2, Float(e.y) + Float(e.d) / 2)
+                    for st in e.stops {
+                        let l = ModelEntity()
+                        l.model = model3D(key: "lift-landing") { Figure3D.liftLanding() }
+                        let c = SIMD2<Float>(Float(st.door.x) + 0.5, Float(st.door.y) + 0.5)
+                        let dir = mid - c
+                        // the landing's +x turned towards the shaft, about the tile's middle
+                        let ang = -atan2(dir.y, dir.x)
+                        l.orientation = simd_quatf(angle: ang, axis: [0, 1, 0])
+                        let off = simd_quatf(angle: ang, axis: [0, 1, 0]).act(SIMD3<Float>(-0.5, 0, -0.5))
+                        l.position = SIMD3(c.x, Float(st.z), c.y) + off
+                        root.addChild(l); rails.append(l)
+                    }
                     entry = (car, rails, top)
                     liftEntities[e.id] = entry
                 }

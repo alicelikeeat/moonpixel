@@ -61,10 +61,37 @@ extension GameModel {
         return nil
     }
 
+    /// Step into the lift at the landing (calls it first if it is elsewhere).
+    func enterLift() {
+        guard society != nil else { return }
+        switch society.playerEnterLift() {
+        case .entered:
+            if let b = society.realm.player.body { scene?.player = b.pos }
+            showToast(L("已进入电梯：选择要去的楼层", "In the lift: choose a floor"))
+            if let e = society.playerLift { liftPanel = e.id }
+        case .called: showToast(L("电梯正在来，门开了就能进", "The lift is on its way; step in when the doors open"))
+        case .wait: showToast(L("正在开门…", "Opening the doors…"))
+        default: showToast(L("这里不是电梯口", "Not at a lift"))
+        }
+        refreshHeight()
+    }
+
+    /// Step out onto the landing of the floor the car stands at.
+    func exitLift() {
+        guard society != nil else { return }
+        guard let out = society.playerExitLift() else {
+            showToast(L("电梯还在两层之间，到站开门后再出", "Between floors: step out when it stops and opens")); return
+        }
+        liftPanel = nil
+        switchLayer(to: out.pos)                     // (the floor it stands at may be another storey than where you got in)
+        showToast(L("已出电梯：", "Out of the lift: ") + (out.depth == 0 ? L("地面", "Ground") : String(format: L("第 %d 层", "Storey %d"), out.depth - OpenWorld.storeyBase)))
+        refreshHeight()
+    }
+
     /// Call the car to where the traveller stands, or (inside) send it to this landing.
     func callLift(_ id: Int, to stop: Int) {
         guard let e = society?.lift(id) else { return }
-        e.call(stop, at: world.time)
+        if society.playerLift?.id == id { society.playerRideLift(to: stop) } else { e.call(stop, at: world.time) }
         showToast(String(format: L("已呼叫：%@", "Called: %@"), stopName(e.stops[stop])))
     }
 
@@ -98,5 +125,7 @@ extension GameModel {
         } else if b.airborne { s += L(" · 空中", " · in the air") }
         heightLine = s
         nearLift = liftHere()?.lift.id
+        inLift = society.playerLift != nil
+        atLiftDoor = society.playerLanding() != nil
     }
 }

@@ -110,6 +110,8 @@ final class GameModel: ObservableObject {
     @Published var liftPanel: Int?
     /// The elevator the traveller is in or beside, if any (the button to open its panel shows then).
     @Published var nearLift: Int?
+    @Published var inLift = false              // riding a lift
+    @Published var atLiftDoor = false          // standing at a lift's doors (it is called to you)
     // transport (v2.7): the vehicle the traveller is in, its controls, the travel and network panels
     /// What the driving or passenger display shows (nil when not in a vehicle).
     @Published var drive: DriveState?

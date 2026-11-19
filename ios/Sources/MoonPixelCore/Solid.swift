@@ -539,7 +539,19 @@ enum TileShapes {
             b(3, 0, 4, 10, 6, 9, c2); b(4, 6, 5, 7, 3, 6, c1)
             if t.artKind == "ore" { b(5, 9, 6, 2, 1, 2, c3); b(8, 9, 8, 2, 1, 2, c3); b(12.5, 2, 7, 1, 2, 2, c3); b(6, 2, 12.5, 2, 2, 1, c3) }
         case "door":
-            b(0, 22, 5, 16, 2, 6, c2); b(1, 0, 7, 14, 22, 2, c1); b(11, 9, 9, 2, 2, 1, RGBA(hex: "#e8c84a"))
+            // a doorway you can see from the street: a frame as tall as the wall, a lintel, a panelled door with
+            // its handle, a little roof over it and a lamp on each side of the wall
+            let frame = c2.darkened(0.1), gold = RGBA(hex: "#e8c84a"), lamp = RGBA(hex: "#ffe08a")
+            b(0, 0, 4.5, 2, 24, 7, frame); b(14, 0, 4.5, 2, 24, 7, frame)
+            b(0, 19, 4, 16, 5, 8, frame)
+            b(2, 0, 7, 12, 19, 2, c1)
+            for (px, py) in [(Float(3.2), Float(10.5)), (8.6, 10.5), (3.2, 2), (8.6, 2)] {
+                b(px, py, 6.6, 4.2, 6.5, 2.8, c1.darkened(0.12))
+            }
+            b(11.5, 8.5, 5.6, 1.4, 1.4, 4.8, gold)
+            b(-1.5, 24, 1, 19, 1.5, 14, c3.darkened(0.15)); b(0, 25.5, 2.5, 16, 1, 11, c3)
+            b(-1.6, 15, 1.4, 1.4, 3, 1.4, lamp); b(-1.6, 15, 13.2, 1.4, 3, 1.4, lamp)
+            b(16.2, 15, 1.4, 1.4, 3, 1.4, lamp); b(16.2, 15, 13.2, 1.4, 3, 1.4, lamp)
         case "fence", "gate":
             let post = t.artKind == "gate" ? c1.lightened(0.15) : c2
             m.px(o, 6, 0, 6, 4, 13, 4, post)

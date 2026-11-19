@@ -575,7 +575,7 @@ public final class Society {
 
     // MARK: tick
     public func tick(_ dt: Double) {
-        if realm.liftBox != nil { liftsStep(dt) }
+        if realm.liftBox != nil { playerLiftAssist(); liftsStep(dt) }
         if realm.transportBox != nil { transportTick(dt) }
         let growDay = Int(world.time / MP.daySeconds)
         if realm.growDay == nil { realm.growDay = growDay } else if growDay > realm.growDay! { realm.growDay = growDay; cityGrowthDay() }
@@ -699,7 +699,7 @@ public final class Society {
     @discardableResult func queue(_ s: Settlement, _ type: String) -> Bool {
         let b = Building()
         b.type = type
-        var w = 6, h = type == "farm" ? 4 : 5
+        var w = type == "house" ? 7 : 6, h = type == "farm" ? 4 : (type == "house" ? 6 : 5)
         if let spec = Society.roomSpecs[type] ?? Society.landmarkSpecs[type] { w = spec.w; h = spec.h }
         var pos = TilePos(0, 0)
         if type == "well" {
@@ -728,11 +728,12 @@ public final class Society {
             let stone = has("masonry") && s.stone > 24
             let wall = stone ? "wall_stone" : "wall_wood"
             let cx = pos.x + w / 2, cy = pos.y + h / 2
-            var dd = TilePos(2, h - 1), out = TilePos(0, 1)
+            // the door in the middle of the side facing the town's centre
+            var dd = TilePos(w / 2, h - 1), out = TilePos(0, 1)
             if abs(s.center.y - cy) >= abs(s.center.x - cx) {
-                if s.center.y < cy { dd = TilePos(2, 0); out = TilePos(0, -1) }
+                if s.center.y < cy { dd = TilePos(w / 2, 0); out = TilePos(0, -1) }
             } else {
-                dd = s.center.x < cx ? TilePos(0, 2) : TilePos(w - 1, 2)
+                dd = s.center.x < cx ? TilePos(0, h / 2) : TilePos(w - 1, h / 2)
                 out = s.center.x < cx ? TilePos(-1, 0) : TilePos(1, 0)
             }
             for dy in 1..<(h - 1) { for dx in 1..<(w - 1) { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 0, key: "wood_floor", wood: 0, stone: 0)) } }
@@ -740,10 +741,33 @@ public final class Society {
                 if TilePos(dx, dy) == dd { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: "door_wood", wood: 1, stone: 0)) }
                 else { b.cells.append(BuildCell(dx: dx, dy: dy, layer: 2, key: wall, wood: stone ? 0 : 1, stone: stone ? 1 : 0)) }
             } }
-            let farY = dd.y == 0 && dd.x == 2 ? h - 2 : 1
-            let farX = dd.x == 0 && dd.y == 2 ? w - 2 : 1
-            b.cells.append(BuildCell(dx: farX, dy: farY, layer: 2, key: "bed", wood: 2, stone: 0))
-            b.cells.append(BuildCell(dx: w - 1 - farX, dy: farY, layer: 2, key: "bed", wood: 2, stone: 0))
+            let farY = out.y < 0 ? h - 2 : 1                    // the far side from the door
+            let farX = out.x < 0 ? w - 2 : 1
+            // inside: two beds against the far wall, a kitchen, a table with chairs, a chest, a bookshelf and a
+            // flower pot; nothing right behind the door
+            let inside = dd + TilePos(-out.x, -out.y)
+            var taken: Set<TilePos> = [inside]
+            func put(_ x: Int, _ y: Int, _ key: String, wood: Double) {
+                let t = TilePos(x, y)
+                guard x > 0, y > 0, x < w - 1, y < h - 1, !taken.contains(t) else { return }
+                taken.insert(t)
+                b.cells.append(BuildCell(dx: x, dy: y, layer: 2, key: key, wood: wood, stone: 0))
+            }
+            put(farX, farY, "bed", wood: 2); put(w - 1 - farX, farY, "bed", wood: 2)
+            let midY = h / 2, midX = w / 2
+            put(midX, midY, "table", wood: 1); put(midX - 1, midY, "chair", wood: 1); put(midX + 1, midY, "chair", wood: 1)
+            put(1, h - 2 == farY ? 1 : h - 2, "kitchen", wood: 1)
+            put(w - 2, h - 2 == farY ? 1 : h - 2, "chest", wood: 1)
+            put(midX, farY, "bookshelf", wood: 1)
+            put(1, midY, "flower_pot", wood: 0)
+            // the front: windows either side of the door (glass when the town builds in stone)
+            if stone {
+                b.cells = b.cells.map { c in
+                    guard c.layer == 2, c.key == wall else { return c }
+                    let alongFront = (out.y != 0 && c.dy == dd.y && abs(c.dx - dd.x) == 2) || (out.x != 0 && c.dx == dd.x && abs(c.dy - dd.y) == 2)
+                    var c2 = c; if alongFront { c2.key = "wall_glass" }; return c2
+                }
+            }
             b.door = pos + dd + out
         }
         if let spec = Society.roomSpecs[type] ?? Society.landmarkSpecs[type] {
