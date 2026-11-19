@@ -308,12 +308,16 @@ extension Society {
         // 5b. a highway to each other district of the nation (or across an open border) within 600 tiles, and an
         // intercity coach along it: the cities are joined by road as well as by rail and air
         for o in net.districts.sorted(by: { $0.id < $1.id }) where o.id != d.id && (o.nation == d.nation || borderOpen(d.nation, o.nation)) {
-            guard o.center.distance2(d.center) <= 600 * 600, d.population >= 120 || open >= 5 else { continue }
+            guard o.center.distance2(d.center) <= 450 * 450, d.population >= 120 || open >= 5 else { continue }
             let tag = "road:\(o.id)"
             if (o.works?["road:\(d.id)"]) != nil || tried.contains(tag) { continue }
             if site(tag) == nil {
+                // planning a long road is costly: after a try that could not be paid for, wait a day to try again
+                let cool = "road-\(d.id)-\(o.id)"
+                if world.time < (realm.cool[cool] ?? 0) { continue }
                 let from = TilePos(d.center.x + 20, d.center.y + 4), to = TilePos(o.center.x - 20, o.center.y + 4)
                 if start(tag, planWay(.highway, from: from, to: to, join: true)) || tried.contains(tag) { return }
+                realm.cool[cool] = world.time + MP.daySeconds
                 continue
             }
             guard done(tag), !realm.transport.lines.contains(where: { $0.kind == .bus && $0.payer == .district(d.id) && $0.name.hasSuffix("~\(o.id)") }) else { continue }
