@@ -242,7 +242,7 @@ extension Generator {
 
     /// The land as made, before any levelling.
     public func naturalElevation(_ wx: Int, _ wy: Int) -> Double {
-        let e = 0.5 + elevBias + 0.62 * nElev.get(Double(wx), Double(wy))
+        let e = 0.5 + elevBias + 0.62 * nElev.get(Double(wx), Double(wy)) + continental(Double(wx), Double(wy))
         guard e > Biome.sea else { return e }
         // rolling hills inland (none at the shore, fuller further from it), and volcanoes on top
         let inland = Swift.min(1, Swift.max(0, (e - Biome.sea - 0.02) / 0.1))

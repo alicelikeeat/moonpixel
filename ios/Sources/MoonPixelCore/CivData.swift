@@ -32,6 +32,15 @@ public struct CivConfig: Codable, Equatable {
     public var forage = 0.25                                  // nutrition per hungry adult per day found off the land, whatever the stock
     // --- places
     public var regionTiles = 256                              // a region is 8 x 8 chunks
+    // --- geography (Geography.swift)
+    public var openSeaRegions = 4                             // a body of water this many regions or more is open sea
+    public var claimRadius = 2                                // land within this many regions answers to the nearest city
+    public var coastSearch = 8                                // how far out the coast rule surveys for a coast
+    public var straitDetour = 6                               // regions longer round by sea than across: a strait
+    public var passMountain = 0.3                             // mountain share that makes a way in a pass
+    public var deltaIsles = 4, deltaWater = 0.2               // river regions with this much water that make a delta
+    // --- envoys, vassals and wars for a place (Diplomacy.swift): every number in one table
+    public var war = WarBalance()
     public var rulesVersion = 1
     public var cityStateChance = 0.22                         // of a region with fertile land, when first known
     public var housePeople = 6.0, wellWater = 40.0, riverWater = 400.0

@@ -74,6 +74,8 @@ public struct CivRegion: Codable, Equatable {
     public var river = false
     public var city: Int?                                   // the city in it (one at most)
     public var foundAt = 0.0
+    /// Who owns it by right, who holds it now, and the city it answers to (Geography.swift). Nil: no one.
+    public var legal: Int?, control: Int?, claim: Int?
     public var key: Int64 { MP.chunkKey(rx, ry) }
     public var coast: Bool { land > 0.25 && water > 0.12 }
 }
@@ -196,6 +198,16 @@ public final class Civ: Codable {
     public var rng = RNG(seed: 1)
     /// New nations the realm must learn of (id, names, colour, emblem); the bridge takes them.
     public var born: [Int] = []
+    /// A world made under the coast rule (every starting nation reaches open sea); old worlds keep their land.
+    public var coastRule = false
+    /// Nations the coast rule has looked at (each once).
+    public var seaChecked = Set<Int>()
+    /// Nations send envoys before war, and refusals become wars for a place (worlds made under the coast rule).
+    public var envoys = false
+    public var envoysOut: [CivEnvoy] = []
+    public var vassals: [CivVassal] = []
+    public var targetWars: [CivTargetWar] = []
+    public var nextEnvoy = 1, nextTargetWar = 1
     public init(seed: Int) { self.seed = seed; rng = RNG(seed: seed &* 7919 &+ 17) }
 
     // Saving. The rules (`cfg`) are not saved: they belong to the version of the game. Every field is
@@ -203,6 +215,7 @@ public final class Civ: Codable {
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
         case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
+        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -223,6 +236,9 @@ public final class Civ: Codable {
         try c.encode(totals, forKey: .totals); try c.encode(rng, forKey: .rng); try c.encode(born, forKey: .born)
         try c.encode(commandOrder.compactMap { commandResults[$0] }, forKey: .commandResults); try c.encode(pendingCommands, forKey: .pendingCommands)
         try c.encode(towerIndex, forKey: .towerIndex); try c.encodeIfPresent(campaign, forKey: .campaign)
+        try c.encode(coastRule, forKey: .coastRule); try c.encode(seaChecked.sorted(), forKey: .seaChecked)
+        try c.encode(envoys, forKey: .envoys); try c.encode(envoysOut, forKey: .envoysOut); try c.encode(vassals, forKey: .vassals)
+        try c.encode(targetWars, forKey: .targetWars); try c.encode(nextEnvoy, forKey: .nextEnvoy); try c.encode(nextTargetWar, forKey: .nextTargetWar)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -259,6 +275,14 @@ public final class Civ: Codable {
         pendingCommands = try c.decodeIfPresent([WorldCommand].self, forKey: .pendingCommands) ?? []
         towerIndex = try c.decodeIfPresent(TowerIndex.self, forKey: .towerIndex) ?? TowerIndex()
         campaign = try c.decodeIfPresent(CivCampaign.self, forKey: .campaign)
+        coastRule = try c.decodeIfPresent(Bool.self, forKey: .coastRule) ?? false
+        seaChecked = Set(try c.decodeIfPresent([Int].self, forKey: .seaChecked) ?? [])
+        envoys = try c.decodeIfPresent(Bool.self, forKey: .envoys) ?? false
+        envoysOut = try c.decodeIfPresent([CivEnvoy].self, forKey: .envoysOut) ?? []
+        vassals = try c.decodeIfPresent([CivVassal].self, forKey: .vassals) ?? []
+        targetWars = try c.decodeIfPresent([CivTargetWar].self, forKey: .targetWars) ?? []
+        nextEnvoy = try c.decodeIfPresent(Int.self, forKey: .nextEnvoy) ?? (envoysOut.map { $0.id }.max() ?? 0) + 1
+        nextTargetWar = try c.decodeIfPresent(Int.self, forKey: .nextTargetWar) ?? (targetWars.map { $0.id }.max() ?? 0) + 1
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -371,6 +395,7 @@ public final class Civ: Codable {
     func hourly() {
         runPending()
         warHourly()
+        if envoys { envoysHourly(); targetWarsHourly() }
         let h = Int((time - hourAcc) / (MP.daySeconds / 24)) % 24
         for id in cities.keys.sorted() where id % 24 == h {
             guard let c = cities[id], c.detail == nil else { continue }
@@ -383,7 +408,9 @@ public final class Civ: Codable {
 
     /// One day, in the same order every time: research and plans, then every city, then everyone on the road.
     func daily(world: OpenWorld?) {
+        refreshTerritory()
         politicsDaily()
+        if envoys { vassalsDaily(); envoyChoices() }
         tripsDaily()
         industryDaily()
         forcesDaily()

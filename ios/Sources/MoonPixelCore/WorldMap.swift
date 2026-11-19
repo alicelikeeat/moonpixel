@@ -10,7 +10,8 @@ import Foundation
 // they are. A pixel of the picture is a known square of tiles, so a tap on it names one tile.
 
 public struct MapMarker: Equatable {
-    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building, monument, underCity }
+    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building, monument, underCity
+        case nation, port, occupied, pass }
     public var kind: Kind
     public var name: String
     public var color: String               // hex
@@ -23,6 +24,8 @@ public final class WorldMap {
     public private(set) var side = 0                      // chunks across (and down)
     public private(set) var ppc = 8                       // pixels per chunk
     private var tiles: [String: Bitmap] = [:]             // painted chunks, by chunk, scale and what they were made from
+    /// The Nations view (地形｜国土): land in its holder's colour, borders, occupied land hatched.
+    public var political = false
     public init() {}
 
     /// Tiles per pixel of the picture.
@@ -169,6 +172,7 @@ public final class WorldMap {
                 }
             }
         }
+        if political { paintNations(s.civ, &img) }
         // markers
         var marks: [MapMarker] = []
         func add(_ k: MapMarker.Kind, _ n: String, _ c: String, _ t: TilePos) {
@@ -210,9 +214,70 @@ public final class WorldMap {
                 add(.building, n, "#e8d8b0", b.door)
             } }
         }
+        if political { nationMarkers(s.civ, zh: zh, add: add) }
         for lg in s.realm.legions where lg.state != 0 { add(.army, zh ? "军队" : "Army", s.realm.nation(lg.nation)?.color ?? "#ffffff", lg.pos.tile) }
         add(.player, zh ? "你" : "You", "#7fe6ff", centre)
         return (img, marks)
+    }
+
+    // MARK: the Nations view
+
+    /// Land in the colour of the nation holding it (the sea left blue: it is everyone's), a solid line where
+    /// the owners by right differ, and land held by someone other than its owner hatched in the owner's colour.
+    public func paintNations(_ civ: Civ, _ img: inout Bitmap) {
+        let rcs = max(1, civ.cfg.regionTiles / 32)            // chunks a region
+        let w = max(1, ppc / 5)
+        func owner(_ rx: Int, _ ry: Int) -> Int? { civ.regions[MP.chunkKey(rx, ry)].flatMap { civ.isSea($0) ? nil : $0.legal } }
+        for cy in 0..<side { for cx in 0..<side {
+            let x = origin.x + cx, y = origin.y + cy
+            let rx = OpenWorld.floorDiv(x, rcs), ry = OpenWorld.floorDiv(y, rcs)
+            guard let r = civ.regions[MP.chunkKey(rx, ry)], !civ.isSea(r) else { continue }
+            let h = civ.holder(r), l = r.legal
+            guard let shown = h ?? l else { continue }
+            let hc = RGBA(hex: civ.polities[shown]?.color ?? "#cccccc")
+            let lc = l.map { RGBA(hex: civ.polities[$0]?.color ?? "#cccccc") } ?? hc
+            let contested = l != nil && h != nil && l != h
+            for py in 0..<ppc { for px in 0..<ppc {
+                let X = cx * ppc + px, Y = cy * ppc + py
+                var c = img.get(X, Y).lerp(hc, 0.4)
+                if contested && (X + Y) % 6 < 2 { c = lc.darkened(0.15) }
+                img.set(X, Y, c)
+            } }
+            let lx = x - rx * rcs, ly = y - ry * rcs
+            // a vassal keeps its own colour inside; its border is drawn in its suzerain's colour
+            let line = (l.flatMap { civ.suzerain(of: $0) }.flatMap { civ.polities[$0] }).map { RGBA(hex: $0.color) } ?? lc.darkened(0.5)
+            if lx == 0 && owner(rx - 1, ry) != l { img.rect(cx * ppc, cy * ppc, w, ppc, line) }
+            if lx == rcs - 1 && owner(rx + 1, ry) != l { img.rect(cx * ppc + ppc - w, cy * ppc, w, ppc, line) }
+            if ly == 0 && owner(rx, ry - 1) != l { img.rect(cx * ppc, cy * ppc, ppc, w, line) }
+            if ly == rcs - 1 && owner(rx, ry + 1) != l { img.rect(cx * ppc, cy * ppc + ppc - w, ppc, w, line) }
+        } }
+    }
+
+    /// In the Nations view: each nation's name in the middle of its land, its capital, its ports and passes,
+    /// and a flag where a city is held by someone other than its owner.
+    func nationMarkers(_ civ: Civ, zh: Bool, add: (MapMarker.Kind, String, String, TilePos) -> Void) {
+        let rc = civ.cfg.regionTiles
+        func mid(_ k: Int64) -> TilePos? { civ.regions[k].map { TilePos($0.rx * rc + rc / 2, $0.ry * rc + rc / 2) } }
+        let bodies = civ.waterBodies()
+        for id in civ.polities.keys.sorted() {
+            guard let p = civ.polities[id], p.status == .active else { continue }
+            let land = civ.territory(of: id, legal: true)
+            guard !land.isEmpty else { continue }
+            let xs = land.compactMap { civ.regions[$0] }
+            let cx = xs.map { Double($0.rx) }.reduce(0, +) / Double(xs.count), cy = xs.map { Double($0.ry) }.reduce(0, +) / Double(xs.count)
+            add(.nation, p.name(zh: zh), p.color, TilePos(Int((cx + 0.5) * Double(rc)), Int((cy + 0.5) * Double(rc))))
+            if let cap = p.capital.flatMap({ civ.cities[$0] }), cap.detail == nil { add(.capital, cap.name(zh: zh), p.color, TilePos(cap.rx * rc + rc / 2, cap.ry * rc + rc / 2)) }
+            for k in land where civ.cities.values.contains(where: { $0.regionKey == k && $0.nation == civ.controller(k) }) && civ.portSite(k, bodies: bodies) != nil {
+                if let t = mid(k) { add(.port, zh ? "港口" : "Port", p.color, TilePos(t.x, t.y + rc / 4)) }
+            }
+            for t in civ.traits(of: id, bodies: bodies) where t.kind == .basin {
+                for k in t.places { if let m = mid(k) { add(.pass, zh ? "关" : "Pass", civ.polities[civ.controller(k) ?? id]?.color ?? p.color, m) } }
+            }
+        }
+        for k in civ.occupied() {
+            guard let r = civ.regions[k], r.city != nil, let h = civ.controller(k), let t = mid(k) else { continue }
+            add(.occupied, zh ? "占领" : "Occupied", civ.polities[h]?.color ?? "#ffffff", TilePos(t.x + rc / 6, t.y - rc / 6))
+        }
     }
 
     /// What is at a tile, in a few words, for the map's pick card.

@@ -176,6 +176,7 @@ struct CivNationSheet: View {
                 GlassSheet(title: p.name(zh: GameModel.zh), subtitle: statusText(p) + " · " + L("建国于第 \(Int(p.founded / MP.daySeconds)) 天（\(origin(p.origin))）", "founded day \(Int(p.founded / MP.daySeconds)) (\(origin(p.origin)))"), close: { model.civDetail = nil }) {
                     VStack(alignment: .leading, spacing: 10) {
                         head(p, c)
+                        CivGroundWarCard(c: c, nation: id)
                         CivPeopleCard(c: c, nation: id)
                         CivFoodCard(c: c, nation: id)
                         research(p)
@@ -254,6 +255,41 @@ struct CivNationSheet: View {
             Text(L("近事", "Lately")).font(.system(size: 13, weight: .bold, design: .rounded))
             ForEach(Array(mine.enumerated()), id: \.offset) { _, n in
                 Text(L("第\(Int(n.t / MP.daySeconds))天 ", "day \(Int(n.t / MP.daySeconds)) ") + CivText.line(n)).font(.system(size: 10, design: .rounded)).opacity(0.85)
+            }
+        }
+    }
+}
+
+/// Land and war: what the nation owns and holds, its ports and strength, its vassals, its ground; the envoys
+/// it sent or met; and each war for a place, its report first line first (tap to see why).
+struct CivGroundWarCard: View {
+    let c: Civ
+    let nation: Int
+    @State private var open: Set<Int> = []
+    var body: some View {
+        let zh = GameModel.zh
+        let envoys = c.envoysOut.filter { $0.from == nation || $0.to == nation }.suffix(3)
+        let wars = c.targetWars.filter { $0.attacker == nation || $0.defender == nation }.suffix(3)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(L("国土与战事", "Land and war")).font(.system(size: 13, weight: .bold, design: .rounded))
+            ForEach(Array(c.nationFacts(nation, zh: zh).enumerated()), id: \.offset) { _, line in
+                Text(line).font(.system(size: 11, design: .rounded))
+            }
+            ForEach(Array(envoys.enumerated()), id: \.offset) { _, e in
+                Label(c.envoyLine(e, zh: zh), systemImage: "envelope.fill").font(.system(size: 10, design: .rounded)).opacity(0.9)
+            }
+            ForEach(Array(wars), id: \.id) { w in
+                let lines = c.warLines(w, zh: zh)
+                Button { if open.contains(w.id) { open.remove(w.id) } else { open.insert(w.id) } } label: {
+                    Label(lines.head, systemImage: "flag.2.crossed.fill").font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain).accessibilityIdentifier("war-report-\(w.id)")
+                if open.contains(w.id) {
+                    ForEach(Array(lines.details.enumerated()), id: \.offset) { _, d in
+                        Text(d).font(.system(size: 10, design: .rounded)).opacity(0.8).padding(.leading, 18)
+                    }
+                }
             }
         }
     }
@@ -463,7 +499,10 @@ enum CivText {
         "history": ("%@ has passed into history", "%@ 成为历史"),
         "restored": ("%@ rose again at %@", "%@ 在 %@ 复国"), "seceded": ("%@ broke away from %@", "%@ 脱离 %@ 独立"),
         "federated": ("%@ joined %@ in one federation", "%@ 与 %@ 合为一邦"), "submitted": ("%@ submitted to %@", "%@ 归附 %@"),
-        "pact": ("%@ and %@ stand together", "%@ 与 %@ 结盟"), "tech": ("%@ learned %@", "%@ 掌握了 %@"),
+        "pact": ("%@ and %@ stand together", "%@ 与 %@ 结盟"),
+        "coast_granted": ("%@ was given a port on the open sea", "%@ 获得了一处通向公海的港口"),
+        "vassal": ("%@ became a vassal of %@", "%@ 归附 %@，成为附属国"), "vassal_free": ("%@ is no one's vassal any more", "%@ 不再是附属国"),
+        "envoy_sent": ("%@ sent an envoy to %@", "%@ 派使者前往 %@"), "envoy_refused": ("%@ refused the envoy of %@", "%@ 拒绝了 %@ 的劝降"), "tech": ("%@ learned %@", "%@ 掌握了 %@"),
         "built_unit": ("A %@ was completed at %@", "%@ 在 %@ 建成"), "convoy_lost": ("A convoy from %@ was lost", "来自 %@ 的车队失踪"),
         "refugees_left": ("%@ people fled %@ for %@", "%@ 人逃离 %@，前往 %@"), "migrants_left": ("%@ people left %@ for %@", "%@ 人离开 %@，迁往 %@"),
     ]

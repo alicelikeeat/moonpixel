@@ -12,6 +12,8 @@ public struct WorldRecipe: Codable, Equatable {
     public var villages = 4, perVillage = 30
     public var startTech = 0
     public var minPopulation = 100
+    /// Oceans and continents, and the coast rule for nations (worlds made from v2.16 on; nil in older saves).
+    public var oceans: Bool? = true
     /// Keys of what was recognised, in order (e.g. "desert", "island", "era:5").
     public var tags: [String] = []
     public init() {}

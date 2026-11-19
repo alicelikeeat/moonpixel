@@ -131,7 +131,11 @@ extension Civ {
         regions[key] = r
         var h = RNG(seed: gen.seed &* 977 &+ rx &* 2654435761 &+ ry &* 40503 &+ cfg.rulesVersion)
         let roll = h.unit()
-        guard !occupied, r.land >= 0.5, r.fertility > 0.25, roll < cfg.cityStateChance * (0.5 + r.fertility) else { return true }
+        // under the coast rule (new worlds with oceans) city-states never stand edge to edge, so none is walled in
+        // by its neighbours' cities: only on every other region, twice as likely there (the same number overall)
+        let spaced = coastRule
+        if spaced && (rx + ry) & 1 != 0 { return true }
+        guard !occupied, r.land >= 0.5, r.fertility > 0.25, roll < cfg.cityStateChance * (spaced ? 2 : 1) * (0.5 + r.fertility) else { return true }
         // a city-state that was always here: its people are counted now, for the first time
         let n = newPolity(origin: "city_state", near: key)
         let adults = 20 + Int(h.unit() * 90 * r.fertility), kids = adults / 3, old = adults / 6
@@ -211,7 +215,7 @@ extension Civ {
         }
         for k in relations.keys.sorted() {
             guard var r = relations[k] else { continue }
-            if r.state == 2 && (time - r.since) / MP.daySeconds > yearDays * 0.5 { r.state = 0; r.since = time }
+            if r.state == 2 && (time - r.since) / MP.daySeconds > (envoys ? max(cfg.war.truceDays, yearDays * 0.5) : yearDays * 0.5) { r.state = 0; r.since = time }
             r.trade *= 0.95
             r.value += (r.trade > 1 ? 0.004 : 0) - (r.state == 1 ? 0.004 : 0)
             // two growing peoples pressing on the same land, with nothing to trade, come to resent each other

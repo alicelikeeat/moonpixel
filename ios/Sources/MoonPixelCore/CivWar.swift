@@ -606,6 +606,7 @@ extension Civ {
             let foes = here.filter { atWar($0.nation, c.nation) }
             let defenders = here.filter { $0.nation == c.nation }
             c.besieged = !foes.isEmpty
+            if envoys && contested(c) { continue }          // a place fought for is settled by its contest, once
             guard let taker = foes.min(by: { $0.id < $1.id }), defenders.isEmpty else { c.occupier = nil; c.occupyHours = 0; continue }
             if c.occupier != taker.nation { c.occupier = taker.nation; c.occupyHours = 0 }
             c.occupyHours += 1
@@ -642,9 +643,11 @@ extension Civ {
             }
             // only against a far weaker polity (three times by default): between equals, no war
             if r.state == 0 && (pressed || grudge) && r.value < -0.1 && p.power > q.power * (cfg.warGap ?? 3) && p.treasury > 0 && p.fatigue < 0.5 && p.power > 5 {
-                if rng.unit() < cfg.warChance / yearDays { declare(id, on: o) }
+                if !envoys && rng.unit() < cfg.warChance / yearDays { declare(id, on: o) }   // with envoys, wars start from a refusal
             }
-            if r.state == 1 && (p.fatigue > 0.8 || p.power < q.power * 0.5) && (time - r.since) / MP.daySeconds > 4 { makePeace(id, o) }
+            // (a war for a place ends with its own truce, when the place is taken or the attacker withdraws)
+            let forPlace = envoys && targetWars.contains { $0.ended == nil && Set([$0.attacker, $0.defender]) == Set([id, o]) }
+            if r.state == 1 && !forPlace && (p.fatigue > 0.8 || p.power < q.power * 0.5) && (time - r.since) / MP.daySeconds > 4 { makePeace(id, o) }
         }
         // a giant among its neighbours makes the others stand together
         let near = relations.values.filter { $0.a == id || $0.b == id }.map { $0.a == id ? $0.b : $0.a }.compactMap { polities[$0] }.filter { $0.status == .active }

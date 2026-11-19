@@ -192,6 +192,14 @@ final class GameModel: ObservableObject {
     @Published var mapPick: TilePos?
     @Published var mapPickText = ""
     @Published var mapZoom = 1.0
+    /// The map shows the nations (国土) rather than the land (地形).
+    @Published var mapPolitical = false
+    func setMapPolitical(_ on: Bool) {
+        guard on != mapPolitical else { return }
+        mapPolitical = on
+        worldMap.political = on
+        rebuildMap()
+    }
     /// Zoom the map: 1x, 2x and 4x enlarge the whole map; 8x is the detailed map of the land round you.
     func setMapZoom(_ z: Double) {
         let wasDetail = mapZoom >= 8
@@ -622,7 +630,7 @@ final class GameModel: ObservableObject {
         loadSettings()
         w.diskLimitBytes = limitBytes
         recipe = index?.recipe ?? (load ? nil : newRecipe)
-        if let r = recipe { w.gen.tempBias = r.tempBias; w.gen.moistBias = r.moistBias; w.gen.elevBias = r.elevBias }
+        if let r = recipe { w.gen.tempBias = r.tempBias; w.gen.moistBias = r.moistBias; w.gen.elevBias = r.elevBias; w.gen.oceans = r.oceans ?? false }
         w.open(store: st)
         storeDiskBytes = st.diskBytes()
         lastSavedGen = st.headGen

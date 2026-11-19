@@ -615,6 +615,17 @@ struct HUDView: View {
             }
         case .army:
             Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+        case .nation:
+            // Nations view: the nation's name over its land (kept even when the map is small)
+            Text(m.name).font(.system(size: 12, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+                .shadow(color: col, radius: 0, x: 1, y: 1).shadow(color: .black, radius: 2)
+                .fixedSize().position(at).allowsHitTesting(false).accessibilityIdentifier("map-nation-" + m.name)
+        case .occupied:
+            Image(systemName: "flag.2.crossed.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+        case .port:
+            if model.mapZoom >= 2 { Image(systemName: "ferry.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false) }
+        case .pass:
+            Image(systemName: "mountain.2.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .airport:
             if model.mapZoom >= 2 { Image(systemName: "airplane").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false) }
         default:
@@ -657,6 +668,16 @@ struct HUDView: View {
                 gridPill("2×", "magnifyingglass") { model.setMapZoom(2) }
                 gridPill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }
                 gridPill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }
+            }
+            // 地形｜国土: the land as it is, or as the nations hold it
+            Picker("", selection: Binding(get: { model.mapPolitical }, set: { model.setMapPolitical($0) })) {
+                Text(L("地形", "Terrain")).tag(false)
+                Text(L("国土", "Nations")).tag(true)
+            }
+            .pickerStyle(.segmented).accessibilityIdentifier("map-mode")
+            if model.mapPolitical {
+                Text(L("半透明国色＝实际控制方；实线＝法定国界；斜纹＝被他国占领；公海保持蓝色。", "Tint: who holds it · line: the border by right · hatch: held by another nation · open sea stays blue."))
+                    .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
             }
             if model.mapPick != nil {
                 Text(model.mapPickText).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit().fixedSize(horizontal: false, vertical: true)

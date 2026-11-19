@@ -272,7 +272,7 @@ extension Society {
         for n in old.builtStoreys() { old.storeyWorld(n).wipe() }      // and every storey built above it
         let w = OpenWorld(seed: plan.newSeed, budget: old.world.budget)
         w.diskLimitBytes = old.world.diskLimitBytes
-        w.gen.tempBias = old.world.gen.tempBias; w.gen.moistBias = old.world.gen.moistBias; w.gen.elevBias = old.world.gen.elevBias
+        w.gen.tempBias = old.world.gen.tempBias; w.gen.moistBias = old.world.gen.moistBias; w.gen.elevBias = old.world.gen.elevBias; w.gen.oceans = old.world.gen.oceans
         if let st = old.world.store { w.open(store: st) } else if let d = dir { w.open(directory: d) }
         let s = Society(world: w, seed: plan.newSeed)
         s.zh = old.zh

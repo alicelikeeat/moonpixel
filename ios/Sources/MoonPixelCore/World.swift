@@ -57,6 +57,9 @@ public final class Generator {
     /// Climate shifts chosen when the world was created (see WorldRecipe).
     public var tempBias = 0.0, moistBias = 0.0, elevBias = 0.0
     public var depth = 0
+    /// Oceans and continents (worlds made from v2.16 on; WorldRecipe.oceans): a slow continental swell is added
+    /// to the land's height, so open seas join up between continents. Off, the land is as it always was.
+    public var oceans = false
     /// Ground levelled for monuments (set from the realm's monuments: Society.syncFlats).
     public struct Flat: Equatable { public let x0: Int, y0: Int, x1: Int, y1: Int, e: Double }
     /// The 3D view builds terrain on background threads (reading the ground's height) while the game, on the
@@ -71,6 +74,7 @@ public final class Generator {
     public static let flatBlend = 24
     let content = Content.shared
     let nElev, nTemp, nMoist, nRiver, nForest, nDetail, nHill: Noise
+    let nCont: Noise
     var ground = [UInt8](), alt = [UInt8](), altCh = [Double](), density = [Double]()
     var trees = [[(UInt8, Double)]](), objects = [[(UInt8, Double)]](), decor = [[(UInt8, Double)]]()
     let tDeep, tWater, tShallow, tIce, tSand, tMud, tSnow, tCliff, tReeds, tLily: UInt8
@@ -84,6 +88,7 @@ public final class Generator {
         nForest = Noise(seed: seed + 5, frequency: 0.035, octaves: 2)
         nDetail = Noise(seed: seed + 6, frequency: 0.09, octaves: 1)
         nHill = Noise(seed: seed + 7, frequency: 0.011, octaves: 3)
+        nCont = Noise(seed: seed + 11, frequency: 0.00022, octaves: 3)
         let c = Content.shared
         tDeep = c.tid("deep_water"); tWater = c.tid("water"); tShallow = c.tid("shallow_water"); tIce = c.tid("ice")
         tSand = c.tid("sand"); tMud = c.tid("mud"); tSnow = c.tid("snow"); tCliff = c.tid("cliff"); tReeds = c.tid("reeds"); tLily = c.tid("lily_pad")
@@ -97,10 +102,24 @@ public final class Generator {
         }
     }
 
+    /// The continental swell at a place (0 when the world has no oceans): seas where it is low, continents
+    /// where it is high (land is lifted only a little, so continents look like the land always did). Within
+    /// 300 tiles of the start there is no swell at all (the land there is exactly as in any world), and it
+    /// comes in over the next 400 tiles.
+    @inline(__always) public func continental(_ x: Double, _ y: Double) -> Double {
+        guard oceans else { return 0 }
+        let fade = Swift.min(1, Swift.max(0, ((x * x + y * y).squareRoot() - 300) / 400))
+        guard fade > 0 else { return 0 }
+        var c = Generator.oceanAmp * nCont.get(x, y) + Generator.oceanBias
+        if c > 0 { c *= 0.35 }
+        return c * fade
+    }
+    static let oceanAmp = 0.55, oceanBias = -0.1
+
     /// (elevation, temperature, moisture)
     public func climate(_ wx: Int, _ wy: Int) -> (Double, Double, Double) {
         let x = Double(wx), y = Double(wy)
-        return (0.5 + elevBias + 0.62 * nElev.get(x, y), min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y))), min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y))))
+        return (0.5 + elevBias + 0.62 * nElev.get(x, y) + continental(x, y), min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y))), min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y))))
     }
 
     public func biome(_ wx: Int, _ wy: Int) -> Int {
@@ -176,7 +195,7 @@ public final class Generator {
                 let wx = bx + tx
                 let x = Double(wx), y = Double(wy)
                 let dn = nDetail.get(x, y)
-                let e = 0.5 + elevBias + 0.62 * nElev.get(x, y) + dn * 0.006
+                let e = 0.5 + elevBias + 0.62 * nElev.get(x, y) + continental(x, y) + dn * 0.006
                 let t = min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y) + dn * 0.012))
                 let m = min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y) + dn * 0.012))
                 let fo = nForest.get(x, y)

@@ -16,6 +16,9 @@ extension Society {
         let c = Civ(seed: world.seed)
         c.time = world.time; c.day = Int(world.time / MP.daySeconds)
         c.nextNation = (realm.nations.map { $0.id }.max() ?? 0) + 1
+        // the coast rule is for worlds made now, not for old saves meeting this layer for the first time
+        c.coastRule = world.gen.oceans && world.time < MP.daySeconds
+        c.envoys = c.coastRule
         realm.civBox = c
         mirrorNations()
         return c
@@ -73,6 +76,7 @@ extension Society {
         for t in settlements.values.filter({ !$0.abandoned }).sorted(by: { $0.id < $1.id }) { c.discover(around: t.center, radius: 2, gen: world.gen, detailed: detailed) }
         if let t = explorer { c.discover(around: t, radius: 3, gen: world.gen, detailed: detailed) }
         syncDetailed(c)
+        c.applyCoastRule(gen: world.gen)
         if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t) }
         syncShownOwners(c)
         // towers with real elevators get their food by them, and only while they stand
