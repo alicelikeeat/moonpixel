@@ -30,7 +30,7 @@ extension GameScene {
 
     /// A block hit by a tool (Damage.swift): wood chips, earth and stone crumbs, metal sparks, glass shards, a few
     /// leaves; more when it breaks. Within the effect budget like everything else.
-    func breakFX(at p: CGPoint, material: Material, broke: Bool) {
+    func breakFX(at p: CGPoint, material: MoonPixelCore.Material, broke: Bool) {
         let color: UIColor
         switch material {
         case .wood: color = UIColor(red: 0.62, green: 0.42, blue: 0.24, alpha: 1)

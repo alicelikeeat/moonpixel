@@ -193,7 +193,7 @@ extension GameModel {
         if selectedID != 0 && society.agents[selectedID] == nil { deselect() }
     }
 
-    func materialName(_ m: Material) -> String {
+    func materialName(_ m: MoonPixelCore.Material) -> String {
         switch m {
         case .wood: return L("木头", "Wood"); case .earth: return L("泥土", "Earth"); case .stone: return L("石头", "Stone")
         case .metal: return L("金属", "Metal"); case .glass: return L("玻璃", "Glass"); case .plant: return L("植物", "Plant"); case .cloth: return L("布", "Cloth")
