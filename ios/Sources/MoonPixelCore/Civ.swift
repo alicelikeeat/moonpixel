@@ -167,7 +167,7 @@ public final class Civ: Codable {
     public var time = 0.0                                   // game seconds, as the world's clock
     public var day = 0
     public var hourAcc = 0.0
-    public var regions: [Int64: CivRegion] = [:]
+    public var regions: [Int64: CivRegion] = [:] { didSet { geoCache.clear() } }
     public var cities: [Int: CivCity] = [:]
     public var trips: [Int: CivTrip] = [:]
     public var polities: [Int: CivPolity] = [:]
@@ -216,9 +216,11 @@ public final class Civ: Codable {
     public var nextDrop = 1, nextGiant = 1
     /// Passes without a town held by an enemy force standing in them (region -> nation): held at once, given
     /// back the moment the force leaves (TwinPorts.swift).
-    public var heldPasses: [Int64: Int] = [:]
+    public var heldPasses: [Int64: Int] = [:] { didSet { if heldPasses != oldValue { geoCache.clear() } } }
     /// What happened, in order, with the ids involved: the record a war can be replayed and checked from.
     public var chronicle: [CivEvent] = []
+    /// Geography worked out from the regions, kept between asks (Geography.swift; never saved).
+    public let geoCache = CivGeoCache()
     public init(seed: Int) { self.seed = seed; rng = RNG(seed: seed &* 7919 &+ 17) }
 
     // Saving. The rules (`cfg`) are not saved: they belong to the version of the game. Every field is

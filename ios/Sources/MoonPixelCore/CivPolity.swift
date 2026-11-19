@@ -332,6 +332,7 @@ extension Civ {
 
     /// A city changes hands. Its people keep their loyalties; armies inside go with whoever they serve.
     func transfer(_ c: CivCity, to n: Int) {
+        geoCache.clear()
         let old = c.nation
         c.nation = n
         c.occupier = nil; c.occupyHours = 0

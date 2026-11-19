@@ -57,6 +57,15 @@ public struct CivGeoTrait: Equatable, Codable {
     }
 }
 
+/// What the geography keeps between asks (not saved: it is worked out again from the regions).
+public final class CivGeoCache {
+    var water: (regions: Int, of: [Int64: Int64], size: [Int64: Int])?
+    var traits: [Int: (hour: Int, regions: Int, list: [CivGeoTrait])] = [:]
+    public init() {}
+    /// Something changed: the land, who holds a pass, who holds a city.
+    public func clear() { water = nil; traits = [:] }
+}
+
 extension Civ {
     // MARK: - sea
 
@@ -70,6 +79,8 @@ extension Civ {
     /// The bodies of water among the known regions: region -> body id (the smallest region key in it), and
     /// each body's size. Open sea is a body of `openSeaRegions` regions or more.
     public func waterBodies() -> (of: [Int64: Int64], size: [Int64: Int]) {
+        // the sea changes only when regions are found: kept until then (panels ask every second)
+        if let w = geoCache.water, w.regions == regions.count { return (w.of, w.size) }
         var of: [Int64: Int64] = [:], size: [Int64: Int] = [:]
         for k in regions.keys.sorted() {
             guard of[k] == nil, let r = regions[k], isSea(r) else { continue }
@@ -88,6 +99,7 @@ extension Civ {
             for m in members { of[m] = id }
             size[id] = members.count
         }
+        geoCache.water = (regions.count, of, size)
         return (of, size)
     }
 
@@ -289,6 +301,15 @@ extension Civ {
 
     /// What the ground makes of a nation, judged by real routes. The first four kinds of the task book.
     public func traits(of n: Int, bodies given: (of: [Int64: Int64], size: [Int64: Int])? = nil) -> [CivGeoTrait] {
+        // read once a game hour per nation (the ground changes with captures, which are hourly at most)
+        let hour = Int(time / (MP.daySeconds / 24))
+        if let t = geoCache.traits[n], t.hour == hour, t.regions == regions.count { return t.list }
+        let out = computeTraits(n, given)
+        geoCache.traits[n] = (hour, regions.count, out)
+        return out
+    }
+
+    func computeTraits(_ n: Int, _ given: (of: [Int64: Int64], size: [Int64: Int])?) -> [CivGeoTrait] {
         let bodies = given ?? waterBodies()
         let own = Set(territory(of: n, legal: true))
         guard !own.isEmpty else { return [] }
