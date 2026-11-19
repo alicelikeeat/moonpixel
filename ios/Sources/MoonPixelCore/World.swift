@@ -14,6 +14,8 @@ public final class Chunk {
     public var layers: [[UInt8]]
     public var timers: [GrowTimer] = []
     public var props: [Prop] = []
+    /// How worn each block is (Damage.swift): layer and cell -> 0 ... 1 (gone at 1). Saved with the chunk.
+    public var wear: [Int: Float] = [:]
     public var modified = false
     public var dirty = false
     public var revision = 0
@@ -29,11 +31,12 @@ public final class Chunk {
 
     struct Saved: Codable {
         var v: Int, cx: Int, cy: Int, l0: Data, l1: Data, l2: Data, l3: Data, timers: [GrowTimer], props: [Prop], revision: Int
+        var wear: [Int: Float]?
     }
 
     public func encoded() -> Data {
         let s = Saved(v: 1, cx: cx, cy: cy, l0: Data(layers[0]), l1: Data(layers[1]), l2: Data(layers[2]), l3: Data(layers[3]),
-                      timers: timers, props: props, revision: revision)
+                      timers: timers, props: props, revision: revision, wear: wear.isEmpty ? nil : wear)
         return (try? JSONEncoder().encode(s)) ?? Data()
     }
 
@@ -45,6 +48,7 @@ public final class Chunk {
         c.layers = [[UInt8](s.l0), [UInt8](s.l1), [UInt8](s.l2), [UInt8](s.l3)]
         c.timers = s.timers
         c.props = s.props
+        c.wear = s.wear ?? [:]
         c.revision = s.revision
         c.modified = true
         return c

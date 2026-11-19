@@ -92,6 +92,8 @@ extension Society {
         public var spared = 0                  // allies in the way: no friendly fire
         public var gained = "", amount = 0.0   // harvested resource
         public var demolished = ""
+        /// A block worn or broken by the tool (anything can be broken: Damage.swift).
+        public var hit: HitResult?
         public var impact = Vec2.zero
     }
 
@@ -161,6 +163,11 @@ extension Society {
             realm.player.food += 3; out.gained = "food"; out.amount = 3
         } else if weapon == "pick" || weapon == "axe" {
             out.demolished = playerDemolish(at: t)
+            // anything else in front wears down a hit at a time: a pick bites stone, an axe wood
+            if out.demolished.isEmpty {
+                let h = hitTile(t, power: 3, by: .player)
+                if h.refused == nil { out.hit = h; if let (g, n) = h.gained.first { out.gained = g; out.amount = Double(n) } }
+            }
         }
         return out
     }
