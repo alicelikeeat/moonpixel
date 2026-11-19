@@ -219,7 +219,17 @@ extension Society {
         // underground city there are built over)
         let ways: Set<UInt8> = Set(["path", "cobble_road", "road_asphalt", "highway", "rail", "rail_hsr", "runway", "taxiway", "apron", "quay",
                                     "parking", "platform", "bridge_road", "bridge_rail", "bridge_lift", "bridge_foot", "bridge_wood", "bridge_stone"].map { content.tid($0) })
-        for y in o.y...(o.y + d) { for x in o.x...(o.x + w) where ways.contains(world.tile(0, x, y)) { return false } }
+        // only land already made can have a road on it: chunks never generated are skipped (looking would make
+        // them, thousands of them for a palace's search, and stall the game)
+        for cy in OpenWorld.floorDiv(o.y, 32)...OpenWorld.floorDiv(o.y + d, 32) { for cx in OpenWorld.floorDiv(o.x, 32)...OpenWorld.floorDiv(o.x + w, 32) {
+            guard let c = world.peekStored(MP.chunkKey(cx, cy)) else { continue }
+            let g = c.layers[0]
+            for ly in 0..<32 { for lx in 0..<32 {
+                let x = cx * 32 + lx, y = cy * 32 + ly
+                guard x >= o.x, x <= o.x + w, y >= o.y, y <= o.y + d else { continue }
+                if ways.contains(g[ly * 32 + lx]) { return false }
+            } }
+        } }
         return true
     }
 

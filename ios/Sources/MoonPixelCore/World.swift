@@ -59,7 +59,15 @@ public final class Generator {
     public var depth = 0
     /// Ground levelled for monuments (set from the realm's monuments: Society.syncFlats).
     public struct Flat: Equatable { public let x0: Int, y0: Int, x1: Int, y1: Int, e: Double }
-    public var flats: [Flat] = []
+    /// The 3D view builds terrain on background threads (reading the ground's height) while the game, on the
+    /// main thread, may level ground for a monument or load a saved world: the list is only ever read and
+    /// replaced whole, under a lock.
+    public var flats: [Flat] {
+        get { flatLock.lock(); defer { flatLock.unlock() }; return _flats }
+        set { flatLock.lock(); _flats = newValue; flatLock.unlock() }
+    }
+    private var _flats: [Flat] = []
+    private let flatLock = NSLock()
     public static let flatBlend = 24
     let content = Content.shared
     let nElev, nTemp, nMoist, nRiver, nForest, nDetail, nHill: Noise

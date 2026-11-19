@@ -127,7 +127,8 @@ extension GameScene {
         guard model.depth == 0, viewPos.x.isFinite, viewPos.y.isFinite else {
             for ns in monumentNodes.values { for n in ns { n.removeFromParent() } }; monumentNodes = [:]; return
         }
-        let reach = Int(900.0 / Double(max(0.3, zoom)) * 1.4 / 16) + 200
+        let z = zoom.isFinite ? Double(max(0.3, zoom)) : 1
+        let reach = Int(900.0 / z * 1.4 / 16) + 200
         var seen = Set<Int>()
         for m in society.monuments(near: viewPos.tile, reach: reach) {
             seen.insert(m.id)

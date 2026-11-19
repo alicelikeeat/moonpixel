@@ -142,7 +142,11 @@ final class SolidRenderer {
             guard e!.isEnabled else { continue }
             // each is drawn with its face on the local -z side (the near half of the ring too): turn that to the eye
             e!.position = eye + b.dir * Sky.distance
-            e!.orientation = simd_quatf(from: SIMD3<Float>(0, 0, -1), to: simd_normalize(-b.dir))
+            let to = simd_normalize(-b.dir)
+            // (straight along the axis the turn is undefined: keep it simple there)
+            if simd_dot(to, SIMD3<Float>(0, 0, -1)) > 0.9999 { e!.orientation = simd_quatf(angle: 0, axis: [0, 1, 0]) }
+            else if simd_dot(to, SIMD3<Float>(0, 0, -1)) < -0.9999 { e!.orientation = simd_quatf(angle: .pi, axis: [0, 1, 0]) }
+            else { e!.orientation = simd_quatf(from: SIMD3<Float>(0, 0, -1), to: to) }
         }
     }
     private var skyStars: ModelEntity?
@@ -1027,7 +1031,8 @@ final class SolidRenderer {
         }
         var seen = Set<Int>()
         // the tall ones are seen from far off
-        for m in society.monuments(near: vp.tile, reach: Int(reach / 16) + 600) {
+        guard reach.isFinite else { return }
+        for m in society.monuments(near: vp.tile, reach: Int(min(1e6, reach / 16)) + 600) {
             seen.insert(m.id)
             if monumentEntities[m.id] != nil { continue }
             var es: [ModelEntity] = []

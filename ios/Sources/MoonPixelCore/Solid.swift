@@ -227,9 +227,10 @@ extension Generator {
     /// neighbouring tiles do not jitter by one step).
     public func elevation(_ wx: Int, _ wy: Int) -> Double {
         let e = naturalElevation(wx, wy)
-        guard !flats.isEmpty else { return e }
+        let fl = flats                         // one consistent copy (another thread may replace the list)
+        guard !fl.isEmpty else { return e }
         // ground levelled for a monument: flat on its ground, easing back to the land round it over 24 tiles
-        for f in flats {
+        for f in fl {
             let dx = Swift.max(f.x0 - wx, 0, wx - f.x1), dy = Swift.max(f.y0 - wy, 0, wy - f.y1)
             let d = Swift.max(dx, dy)
             guard d < Generator.flatBlend else { continue }

@@ -136,3 +136,31 @@ extension Anime3DPreviewTests {
         try data.write(to: URL(fileURLWithPath: dir).appendingPathComponent("monuments-c.rgba"))
     }
 }
+
+final class MonumentSafetyTests: XCTestCase {
+    /// Looking for a palace's site must not make the land it looks at (a search over kilometres would generate
+    /// thousands of chunks on the main thread): only the chunks it is finally built on are made.
+    func testSearchingForASiteGeneratesNoLand() {
+        let s = makeSociety(7)
+        let t = s.settlements.values.min { $0.id < $1.id }!
+        let before = Set(s.world.cache.keys)
+        guard let m = s.raiseMonument(.palace, near: t, nation: 1) else { return XCTFail("no room") }
+        let made = Set(s.world.cache.keys).subtracting(before)
+        let under = (OpenWorld.floorDiv(m.x, 32)...OpenWorld.floorDiv(m.x + m.w, 32)).count * (OpenWorld.floorDiv(m.y, 32)...OpenWorld.floorDiv(m.y + m.d, 32)).count
+        XCTAssertLessThanOrEqual(made.count, under + 4, "only the palace's own ground was made (\(made.count) chunks, \(under) under it)")
+    }
+
+    /// The 3D view reads the ground's height on other threads while the game levels ground or loads a world.
+    func testGroundHeightCanBeReadWhileTheLevelledGroundChanges() {
+        let g = Generator(seed: 3)
+        let flats = (0..<20).map { i in Generator.Flat(x0: i * 50, y0: 0, x1: i * 50 + 40, y1: 40, e: 0.6) }
+        DispatchQueue.concurrentPerform(iterations: 8) { k in
+            for i in 0..<4000 {
+                if k == 0 && i % 10 == 0 { g.flats = i % 20 == 0 ? flats : [] }
+                else { _ = g.elevation((i * 7 + k) % 1000, i % 60) }
+            }
+        }
+        g.flats = flats
+        XCTAssertEqual(g.elevation(20, 20), 0.6, accuracy: 1e-9)
+    }
+}
