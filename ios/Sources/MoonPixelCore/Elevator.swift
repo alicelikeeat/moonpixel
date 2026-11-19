@@ -499,7 +499,8 @@ extension Society {
 extension Society {
     /// Auto-fitted lifts serve at most this many levels (a taller tower keeps its stairs above; every level a
     /// lift serves gets a landing door, so a lift up a 400-floor tower would stamp 400 storeys).
-    public static let autoLiftLevels = 16
+    /// Lifts fitted to towers and tall houses stop at every floor (a tower of 120 floors gets a lift to the top).
+    public static let autoLiftLevels = 200
 
     /// Every building of three levels or more that has no lift gets one, up its outside wall, once a day at most
     /// one per town: a standing tower's own shaft (its floor plans have one, built with its floors) gets its car;

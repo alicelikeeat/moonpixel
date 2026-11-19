@@ -183,6 +183,12 @@ final class GameModel: ObservableObject {
     @Published var mapPick: TilePos?
     @Published var mapPickText = ""
     @Published var mapZoom = 1.0
+    /// Zoom the map: 1x, 2x and 4x enlarge the whole map; 8x is the detailed map of the land round you.
+    func setMapZoom(_ z: Double) {
+        let wasDetail = mapZoom >= 8
+        mapZoom = z
+        if (z >= 8) != wasDetail { rebuildMap() }
+    }
     /// Places on the map: towns, capitals, cities, districts, airports, mazes, armies, you.
     @Published var mapMarkers: [MapMarker] = []
     let worldMap = WorldMap()
@@ -805,7 +811,10 @@ final class GameModel: ObservableObject {
         for (k, r) in w.regions { for i in 0..<r.count where r[i] != 0 { ext = max(ext, abs(k.x * R + i % R - pc.x) + 2, abs(k.y * R + i / R - pc.y) + 2) } }
         let civ = society.civ, rcs = civ.cfg.regionTiles / 32
         for city in civ.cities.values where city.detail == nil { ext = max(ext, abs(city.rx * rcs + rcs / 2 - pc.x) + rcs, abs(city.ry * rcs + rcs / 2 - pc.y) + rcs) }
-        let (bmp, marks) = worldMap.render(society, centre: sc.player.tile, reach: min(ext, 80), zh: GameModel.zh)
+        // 8x: the detailed map, the land round you at three pixels a tile, every building named
+        let detail = mapZoom >= 8
+        let (bmp, marks) = detail ? worldMap.render(society, centre: sc.player.tile, reach: 6, ppc: 96, zh: GameModel.zh)
+                                  : worldMap.render(society, centre: sc.player.tile, reach: min(ext, 80), zh: GameModel.zh)
         mapImage = bmp.uiImage
         mapMarkers = marks
         mapCaption = String(format: L("已探明 %d 个区块 · 每个像素 %.0f 格 · 存档 %@ / %@", "%d chunks mapped · %.0f tiles a pixel · %@ of %@ on disk"), w.surveyed, worldMap.tilesPerPixel, GameModel.sizeText(mapBytes()), limitText)

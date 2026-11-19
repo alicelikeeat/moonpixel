@@ -881,17 +881,46 @@ public enum Figure3D {
 
     /// An outside elevator's car: a floor, four corner posts, a roof and glass sides, its corner at the
     /// origin, w x d tiles, 1.7 tall. The glass is a pale blue frame: you see the car going up and down.
+    /// A glass lift car's frame: a polished floor with a light strip round it, slim steel posts at the corners,
+    /// a roof with a ring of light under it, and a hand rail inside at waist height. (The glass is `liftGlass`.)
     public static func liftCar(w: Float, d: Float) -> Mesh3D {
         var m = Mesh3D()
-        let steel = RGBA(150, 156, 170), glass = RGBA(170, 215, 240), deck = RGBA(110, 96, 80)
+        let steel = RGBA(196, 202, 214), deck = RGBA(230, 226, 214), light = RGBA(250, 246, 220), dark = RGBA(80, 86, 98)
         m.box(0, -0.12, 0, w, 0, d, deck, faces: .all)
-        m.box(0, 1.6, 0, w, 1.72, d, steel, faces: .all)
-        for (x, z) in [(Float(0), Float(0)), (w - 0.1, 0), (0, d - 0.1), (w - 0.1, d - 0.1)] { m.box(x, 0, z, x + 0.1, 1.6, z + 0.1, steel, faces: .all) }
-        // glass rails at waist and head height on every side
-        for y in [Float(0.9), Float(1.5)] {
-            m.box(0, y, 0, w, y + 0.05, 0.05, glass, faces: .all); m.box(0, y, d - 0.05, w, y + 0.05, d, glass, faces: .all)
-            m.box(0, y, 0, 0.05, y + 0.05, d, glass, faces: .all); m.box(w - 0.05, y, 0, w, y + 0.05, d, glass, faces: .all)
-        }
+        m.box(-0.03, -0.16, -0.03, w + 0.03, -0.12, d + 0.03, dark, faces: .all)
+        m.box(0, 2.0, 0, w, 2.14, d, steel, faces: .all)                                // the roof
+        m.box(0.12, 1.96, 0.12, w - 0.12, 2.0, d - 0.12, light, faces: .all)             // its light panel
+        for (x, z) in [(Float(0), Float(0)), (w - 0.08, 0), (0, d - 0.08), (w - 0.08, d - 0.08)] { m.box(x, 0, z, x + 0.08, 2.0, z + 0.08, steel, faces: .all) }
+        // a steel hand rail inside, at waist height, on three sides
+        m.box(0.08, 0.95, 0.08, w - 0.08, 1.0, 0.13, steel, faces: .all)
+        m.box(0.08, 0.95, 0.08, 0.13, 1.0, d - 0.08, steel, faces: .all)
+        m.box(w - 0.13, 0.95, 0.08, w - 0.08, 1.0, d - 0.08, steel, faces: .all)
+        return m
+    }
+
+    /// The glass of a lift car: a pane on each side from the floor to the roof, seen from outside and from
+    /// inside (each face twice, once each way), so a rider looks out through it.
+    public static func liftGlass(w: Float, d: Float, h: Float = 2.0) -> Mesh3D {
+        var m = Mesh3D()
+        let g = RGBA(200, 236, 250)
+        func pane(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ dd: SIMD3<Float>) { m.face(a, b, c, dd, g); m.face(dd, c, b, a, g) }
+        pane([0, 0, 0], [w, 0, 0], [w, h, 0], [0, h, 0])
+        pane([w, 0, d], [0, 0, d], [0, h, d], [w, h, d])
+        pane([0, 0, d], [0, 0, 0], [0, h, 0], [0, h, d])
+        pane([w, 0, 0], [w, 0, d], [w, h, d], [w, h, 0])
+        return m
+    }
+
+    /// The glass shaft a lift runs in, one tile high (scaled to the shaft's height), a little wider than the car.
+    public static func liftShaft(w: Float, d: Float) -> Mesh3D {
+        let k: Float = 0.12
+        var m = Mesh3D()
+        let g = RGBA(190, 226, 244)
+        func pane(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ dd: SIMD3<Float>) { m.face(a, b, c, dd, g); m.face(dd, c, b, a, g) }
+        pane([-k, 0, -k], [w + k, 0, -k], [w + k, 1, -k], [-k, 1, -k])
+        pane([w + k, 0, d + k], [-k, 0, d + k], [-k, 1, d + k], [w + k, 1, d + k])
+        pane([-k, 0, d + k], [-k, 0, -k], [-k, 1, -k], [-k, 1, d + k])
+        pane([w + k, 0, -k], [w + k, 0, d + k], [w + k, 1, d + k], [w + k, 1, -k])
         return m
     }
 

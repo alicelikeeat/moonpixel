@@ -41,6 +41,8 @@ final class GameScene: SKScene {
     var lastTime: TimeInterval = 0
     /// The saved body is checked once, when the world is first shown (a bad place is put right, with a reason).
     var bodyChecked = false
+    /// Where the traveller came off a stairway: stairs there are not taken again until they step off them.
+    var stairLock: TilePos?
     /// Touches the 2D scene counts as held (for the hidden test state).
     var heldTouches = 0
     private var lastTile = TilePos(Int.max, 0)
@@ -140,6 +142,23 @@ final class GameScene: SKScene {
             society.realm.player.depth = b.depth
             resetLayer()
         }
+    }
+
+    /// Stairs are taken by walking onto them (a tap still works too): up a stair going up, down one going down.
+    /// Where one comes out, the stairs there wait until one has stepped off them, so nobody bounces back.
+    func walkStairs(_ society: Society, _ model: GameModel) {
+        guard society.playerVehicle == nil, let b = society.realm.player.body, b.platform == nil else { return }
+        let t = player.tile
+        let key = Content.shared.tile(society.layer(model.depth).tile(2, t.x, t.y))?.key
+        guard key == "stairs_up" || key == "stairs_down" else { stairLock = nil; return }
+        if stairLock == t { return }
+        let before = model.depth
+        guard let r = society.useStairs(at: t.center) else { stairLock = t; return }
+        model.switchLayer(to: r.pos)
+        stairLock = r.pos.tile
+        let after = society.realm.player.depth ?? 0
+        let name = after == 1 ? L("地下", "underground") : (after == 0 ? L("地面", "the ground") : String(format: L("%d 楼", "floor %d"), after - OpenWorld.storeyBase + 1))
+        model.showToast((after > before || (before == 1 && after == 0) ? L("上楼：", "Up to ") : L("下楼：", "Down to ")) + name)
     }
 
     override func didMove(to view: SKView) {
@@ -260,6 +279,7 @@ final class GameScene: SKScene {
             if society.playerVehicle != nil { rideFrame(society, model, wish: wish, dt: dt) }
             else {
                 moveBody(society, world, model, wish: wish, dt: dt)
+                walkStairs(society, model)
                 if model.drive != nil { model.refreshDrive() }
             }
         }

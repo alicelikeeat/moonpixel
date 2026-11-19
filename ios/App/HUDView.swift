@@ -466,6 +466,16 @@ struct HUDView: View {
             EmptyView()
         case .ufo:
             Image(systemName: "circle.circle.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.cyan).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+        case .building:
+            // on the detailed map: the building's name at its door; a tap goes there
+            if model.mapZoom >= 8 {
+                Button { model.teleport(to: m.tile, name: m.name) } label: {
+                    Text(m.name).font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.black)
+                        .padding(.horizontal, 3).padding(.vertical, 1).background(Color(uiColor: UIColor(hex: m.color)).opacity(0.85), in: Capsule())
+                }
+                .buttonStyle(.plain).fixedSize().position(x: at.x, y: at.y - 6)
+                .accessibilityIdentifier("map-building-" + m.name)
+            }
         case .volcano:
             Image(systemName: "flame.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.orange).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .army:
@@ -495,9 +505,10 @@ struct HUDView: View {
             Text(L("点一下选中格子，双击直接瞬移；点地名立刻前往。", "Tap to pick a tile, double-tap to go there at once; tap a name to go to that place."))
                 .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
-                pill("1×", "minus.magnifyingglass") { model.mapZoom = 1 }
-                pill("2×", "magnifyingglass") { model.mapZoom = 2 }
-                pill("4×", "plus.magnifyingglass") { model.mapZoom = 4 }
+                pill("1×", "minus.magnifyingglass") { model.setMapZoom(1) }
+                pill("2×", "magnifyingglass") { model.setMapZoom(2) }
+                pill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }
+                pill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }
             }
             if model.mapPick != nil {
                 Text(model.mapPickText).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit().fixedSize(horizontal: false, vertical: true)

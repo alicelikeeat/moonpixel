@@ -236,7 +236,7 @@ final class SolidRenderer {
         for e in chunks.values { e.entity.model?.materials = materials(for: e) }
         func paint(_ e: Entity) {
             // chunks and the other layers have a ground picture and a palette part each: they are redone below
-            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.name != "card", m.model != nil { m.model?.materials = [solidMaterial] }
+            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.name != "card", m.name != "glass", m.model != nil { m.model?.materials = [solidMaterial] }
             for c in e.children { paint(c) }
         }
         for c in root.children where c.name != "chunk" && c.name != "layer" { paint(c) }
@@ -306,7 +306,22 @@ final class SolidRenderer {
             cabHeading = v.heading
             if !first { distance *= max(1, Float(v.spec.length) / 3) }
         } else { cabHeading = nil }
-        if first, let v = car, let b = body, b.seat == 0 {
+        let ride = ridingLift
+        if let e = ride {
+            // riding a lift: the view from inside its glass car, at eye height, first looking out from the
+            // building (away from the landing); a drag looks round. The building's own floors near the shaft are
+            // not drawn meanwhile (`updateLayers`), so from a lift inside a tower one sees the town outside too.
+            let cx = Float(e.x) + Float(e.w) / 2, cz = Float(e.y) + Float(e.d) / 2
+            if liftViewFor != e.id, let door = e.stops.first?.door {
+                liftViewFor = e.id
+                let ox = cx - (Float(door.x) + 0.5), oz = cz - (Float(door.y) + 0.5)
+                if abs(ox) + abs(oz) > 0.01 { yaw = atan2(-ox, -oz) }
+                lookPitch = -0.12
+            }
+            let eye = SIMD3<Float>(cx, Float(e.z) + 1.5, cz)
+            let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
+            camera.look(at: eye + dir, from: eye, relativeTo: nil)
+        } else if first, let v = car, let b = body, b.seat == 0 {
             // the driver's seat: forward in the cab, at eye height above its floor
             let seat = v.world(v.spec.length * 0.3, -0.15)
             let eye = SIMD3<Float>(Float(seat.x / 16), Float(b.z) + 1.15, Float(seat.y / 16))
@@ -323,12 +338,14 @@ final class SolidRenderer {
             if eye.y < under { eye.y = under }
             camera.look(at: target + SIMD3<Float>(0, 0.6, 0), from: eye, relativeTo: nil)
         }
-        player.isEnabled = !first                     // through your own eyes your head is not in the way
-        playerRing.isEnabled = !first
+        if ride == nil { liftViewFor = nil }
+        player.isEnabled = !first && ride == nil      // through your own eyes your head is not in the way
+        playerRing.isEnabled = !first && ride == nil
         cameraState = String(format: "%@ yaw %.2f pitch %.2f", first ? "first" : "third", yaw, first ? lookPitch : pitch)
 
         updateChunks(world, model)
         updateLayers(model)
+        hideAroundRide()
         updateSkyline(model)
         let reach = Double(distance) * 1.5 * 16 + 64
         updateActors(world, society, model, scene, reach: reach, dt: dt)
@@ -559,6 +576,26 @@ final class SolidRenderer {
         for (k, e) in layerChunks where !wanted.contains(k) { e.entity.removeFromParent(); layerChunks[k] = nil }
     }
 
+    /// While riding a lift: the storeys of its building round the shaft are not drawn (one sees out from a lift
+    /// inside a tower as from one outside it); everything comes back when the ride ends.
+    private func hideAroundRide() {
+        let e = ridingLift
+        var box: (Int, Int, Int, Int)?
+        if let e = e {
+            if let s = model?.society, let d = s.net.districts.first(where: { $0.id == e.district }), let b = d.building(e.building ?? -1) {
+                box = (b.x - 2, b.y - 2, b.x + b.w + 2, b.y + b.d + 2)
+            } else { box = (e.x - 10, e.y - 10, e.x + e.w + 10, e.y + e.d + 10) }
+        }
+        for (lk, l) in layerChunks {
+            var hide = false
+            if let (x0, y0, x1, y1) = box, lk.depth >= OpenWorld.storeyBase {
+                let cx = MP.keyCX(lk.chunk), cy = MP.keyCY(lk.chunk)
+                hide = cx * 32 < x1 && x0 < cx * 32 + 32 && cy * 32 < y1 && y0 < cy * 32 + 32
+            }
+            l.entity.isEnabled = !hide
+        }
+    }
+
     // MARK: the skyline: tall district towers drawn whole
 
     private let skyline = ModelEntity()
@@ -583,10 +620,13 @@ final class SolidRenderer {
         let r = min(3, Int(distance * 1.3 / 32) + 1)
         let ccx = Int((target.x / 32).rounded(.down)), ccy = Int((target.z / 32).rounded(.down))
         let anime = Bitmap.animeStyle
-        let key = "\(blocks.count):\(blocks.map { $0.building &* 31 &+ $0.to }.reduce(0, &+)):\(n):\(ccx):\(ccy):\(r):\(anime)"
+        let riding = ridingLift
+        let key = "\(blocks.count):\(blocks.map { $0.building &* 31 &+ $0.to }.reduce(0, &+)):\(n):\(ccx):\(ccy):\(r):\(anime):\(riding?.id ?? -1)"
         if key == skylineKey { return }
         skylineKey = key
         let mesh = Mesh3D.skyline(blocks, skip: { b in
+            // the tower one is riding a lift in is not drawn round one
+            if let e = riding, b.district == e.district, b.building == e.building { return [0..<b.to] }
             // the street floor is always the real one; near you, the storeys around yours are too
             let bx = (b.x + b.w / 2) >> 5, by = (b.y + b.d / 2) >> 5
             let near = abs(bx - ccx) <= r && abs(by - ccy) <= r
@@ -872,6 +912,18 @@ final class SolidRenderer {
 
     /// Every elevator in reach: rails up the outside from the lowest landing to above the highest, and
     /// the car at the height the elevator really has now.
+    /// Glass: pale blue, mostly see-through, tinted by the light like everything else.
+    private var glassMaterial: UnlitMaterial {
+        var m = UnlitMaterial()
+        m.color = UnlitMaterial.BaseColor(tint: UIColor(red: 0.78, green: 0.93, blue: 1.0, alpha: 1))
+        m.blending = .transparent(opacity: .init(scale: 0.26))
+        return m
+    }
+
+    /// The lift the traveller is riding, if any (the riding view is from inside its glass car).
+    private var ridingLift: Elevator? { model?.society.flatMap { s in s.realm.player.body?.platform.flatMap { s.lift($0) } } }
+    private var liftViewFor: Int?
+
     private func updateLifts(_ society: Society, _ model: GameModel, reach: Double) {
         var seen = Set<Int>()
         if model.depth != 1 {
@@ -885,6 +937,10 @@ final class SolidRenderer {
                     if let old = entry { old.car.removeFromParent(); for r in old.rails { r.removeFromParent() } }
                     let car = ModelEntity()
                     car.model = model3D(key: "lift-car-\(e.w)x\(e.d)") { Figure3D.liftCar(w: Float(e.w), d: Float(e.d)) }
+                    // the car's glass walls, and the glass shaft it runs in (both see-through, from in and out)
+                    let glass = ModelEntity(); glass.name = "glass"
+                    if let r = resource(Figure3D.liftGlass(w: Float(e.w), d: Float(e.d))) { glass.model = ModelComponent(mesh: r, materials: [glassMaterial]) }
+                    car.addChild(glass)
                     root.addChild(car)
                     var rails: [ModelEntity] = []
                     for (dx, dz) in [(Float(-0.14), Float(-0.14)), (Float(e.w), Float(-0.14)), (Float(-0.14), Float(e.d)), (Float(e.w), Float(e.d))] {
@@ -894,6 +950,11 @@ final class SolidRenderer {
                         r.scale = SIMD3(1, max(0.1, top - bottom), 1)
                         root.addChild(r); rails.append(r)
                     }
+                    let shaft = ModelEntity(); shaft.name = "glass"
+                    if let r = resource(Figure3D.liftShaft(w: Float(e.w), d: Float(e.d))) { shaft.model = ModelComponent(mesh: r, materials: [glassMaterial]) }
+                    shaft.position = SIMD3(Float(e.x), bottom, Float(e.y))
+                    shaft.scale = SIMD3(1, max(0.1, top - bottom), 1)
+                    root.addChild(shaft); rails.append(shaft)
                     entry = (car, rails, top)
                     liftEntities[e.id] = entry
                 }
@@ -903,7 +964,6 @@ final class SolidRenderer {
         for (id, v) in liftEntities where !seen.contains(id) { v.car.removeFromParent(); for r in v.rails { r.removeFromParent() }; liftEntities[id] = nil }
     }
 
-    /// Vehicles in reach at their real place, height and heading; bridge decks at their height over the water or road below.
     /// The saucers: the modelled ship (metal hull, glass dome, rim lights, legs) turning as it flies, and a
     /// pale beam under it while it lifts off or lands.
     private func updateUfos(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
@@ -931,6 +991,7 @@ final class SolidRenderer {
         for (id, e) in ufoEntities where !seen.contains(id) { e.ship.removeFromParent(); e.beam.removeFromParent(); ufoEntities[id] = nil }
     }
 
+    /// Vehicles in reach at their real place, height and heading; bridge decks at their height over the water or road below.
     private func updateVehicles(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
         guard society.realm.transportBox != nil, model.depth == 0, let vp = model.scene?.viewPos else {
             for e in vehicleEntities.values { e.removeFromParent() }; vehicleEntities = [:]; return
