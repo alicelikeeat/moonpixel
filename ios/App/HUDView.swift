@@ -664,10 +664,10 @@ struct HUDView: View {
                 .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
             Text(model.mapCaption).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)      // for tests and voice-over
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 6)], alignment: .leading, spacing: 6) {
-                gridPill("1×", "minus.magnifyingglass") { model.setMapZoom(1) }
-                gridPill("2×", "magnifyingglass") { model.setMapZoom(2) }
-                gridPill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }
-                gridPill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }
+                gridPill("1×", "minus.magnifyingglass") { model.setMapZoom(1) }.accessibilityIdentifier("map-zoom-1")
+                gridPill("2×", "magnifyingglass") { model.setMapZoom(2) }.accessibilityIdentifier("map-zoom-2")
+                gridPill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }.accessibilityIdentifier("map-zoom-4")
+                gridPill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }.accessibilityIdentifier("map-zoom-8")
             }
             // 地形｜国土: the land as it is, or as the nations hold it
             Picker("", selection: Binding(get: { model.mapPolitical }, set: { model.setMapPolitical($0) })) {

@@ -26,7 +26,7 @@ final class MoonPixelUITests: XCTestCase {
     }
 
     private func text(_ app: XCUIApplication, containing s: String) -> XCUIElement {
-        app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", s)).firstMatch
+        app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", s)).firstMatch
     }
 
     func testMenuWorldsAndHUDButtons() {
@@ -82,12 +82,18 @@ final class MoonPixelUITests: XCTestCase {
         shot("05h-storm")
         // the map: zoom, pick a place, teleport
         map.tap(); sleep(2)
-        app.buttons["2×"].tap(); sleep(1)
+        app.buttons["map-zoom-2"].tap(); sleep(1)
         app.images["map-image"].tap(); sleep(1)
+        // a name label or a landmark may sit where the tap lands: try another spot of open map
+        if !app.buttons["teleport"].waitForExistence(timeout: 2) && !text(app, containing: "Teleported").exists && app.images["map-image"].exists {
+            app.images["map-image"].coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.47)).tap(); sleep(1)
+        }
         shot("05i-map-pick")
         // the middle of the map is often a town whose name label sits on top: tapping a name goes there at once
         if app.buttons["teleport"].waitForExistence(timeout: 3) {
-            app.buttons["teleport"].tap(); sleep(2)
+            let go = app.buttons["teleport"]
+            for _ in 0..<3 where !go.isHittable { app.scrollViews.element(boundBy: app.scrollViews.count - 1).swipeUp(); sleep(1) }
+            go.tap(); sleep(2)
         } else {
             XCTAssertTrue(text(app, containing: "Teleported").waitForExistence(timeout: 3), "a place was picked on the map, or a name tapped went there")
         }
@@ -152,7 +158,7 @@ final class MoonPixelUITests: XCTestCase {
         let following = text(app, containing: "Following").waitForExistence(timeout: 8)
         print("UITEST war: following \(following) last-toast '\(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "missing")'")
         XCTAssertTrue(following, "the camera follows the army")
-        app.buttons["4×"].tap(); sleep(6)
+        speed(app, "4×"); sleep(6)
         shot("15-war-march")
         more(app, "War"); sleep(2)
         shot("16-war-panel")
@@ -573,7 +579,12 @@ final class MoonPixelUITests: XCTestCase {
         let opener = app.buttons["speed"]
         if opener.waitForExistence(timeout: 3) { opener.tap(); sleep(1) }
         let b = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
-        if b.waitForExistence(timeout: 3) { b.tap() }
+        guard b.waitForExistence(timeout: 3) else { return }
+        // the bar slides open: wait until the button can be tapped (open it again if it folded meanwhile)
+        let until = Date().addingTimeInterval(4)
+        while !b.isHittable && Date() < until { usleep(250_000) }
+        if !b.isHittable, opener.exists { opener.tap(); sleep(1) }
+        if b.isHittable { b.tap() }
     }
 
 }
