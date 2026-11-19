@@ -25,7 +25,7 @@ brew install xcodegen && xcodegen generate          # 生成 Xcode 工程（仅 
 | `ios/App` | SpriteKit 场景、RealityKit 3D 视角（`Solid3D.swift`）与 SwiftUI 界面 |
 | `ios/Tests`、`ios/UITests` | 核心测试与模拟器界面测试 |
 | `content/` + `tools/gen_swift_content.py` | 地块与群系数据（JSON），生成 `ContentData.swift` |
-| `docs/` | [大都市与现代交通](docs/TRANSPORT.md)、[身体、背包、高楼与电梯](docs/PLAYER3D.md)、[迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、多种子运行记录（[v1.6](docs/runs/seeds-v1.6.txt)、[v1.3](docs/runs/seeds-v1.3.txt)） |
+| `docs/` | [海洋国家与陆海空战争](docs/WARFARE.md)、[大都市与现代交通](docs/TRANSPORT.md)、[身体、背包、高楼与电梯](docs/PLAYER3D.md)、[迁移说明](docs/MIGRATION.md)、[参数表](docs/PARAMETERS.md)（`tools/gen_params.py` 生成）、[测试结果与未验证事项](docs/TESTING.md)、多种子运行记录（[v1.6](docs/runs/seeds-v1.6.txt)、[v1.3](docs/runs/seeds-v1.3.txt)） |
 
 ## 功能
 
