@@ -95,7 +95,8 @@ final class NewYorkTests: XCTestCase {
         XCTAssertEqual(s.nextKind(d, commerce, 3000), "supertall", "a big city builds its tallest first")
         XCTAssertEqual(s.nextKind(d, commerce, 1200), "crown")
         XCTAssertEqual(s.nextKind(d, commerce, 200), "shops", "a small one builds low")
-        XCTAssertEqual(s.nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], 200), "brownstone")
+        XCTAssertEqual(s.nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], 120), "brownstone")
+        XCTAssertEqual(s.nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], 250), "tower", "apartment towers from 200 people")
         XCTAssertEqual(Society.facade("brownstone").wall, "wall_brownstone")
     }
 

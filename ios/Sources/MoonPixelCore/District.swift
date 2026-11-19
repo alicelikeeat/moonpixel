@@ -64,6 +64,9 @@ public struct CityKind: Equatable {
         CityKind(key: "highrise", en: "High-rise flats", zh: "超高层住宅", use: .residential, w: 10, d: 10, storeys: 20, homesPerFloor: 20, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 9, money: 1400, goods: ["stone": 26, "iron": 6, "parts": 5], inputs: [:], outputs: [:]),
         CityKind(key: "skyscraper", en: "Skyscraper", zh: "摩天大楼", use: .commercial, w: 12, d: 12, storeys: 30, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 14, money: 2500, goods: ["stone": 30, "iron": 8, "parts": 6], inputs: [:], outputs: [:]),
         CityKind(key: "mall", en: "Shopping mall", zh: "购物中心", use: .commercial, w: 16, d: 12, storeys: 3, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 8, money: 1200, goods: ["stone": 30, "planks": 10, "iron": 4], inputs: ["wares": 0.6], outputs: [:]),
+        // food on a large scale: big fields of grain and vegetables, and ranches with cattle and sheep
+        CityKind(key: "bigfarm", en: "Large farm", zh: "大型农场", use: .agricultural, w: 22, d: 16, storeys: 1, homesPerFloor: 0, jobsPerFloor: 40, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 600, goods: ["planks": 24, "stone": 8, "iron": 2], inputs: [:], outputs: ["food": 6.5]),
+        CityKind(key: "ranch", en: "Ranch", zh: "牧场", use: .agricultural, w: 20, d: 14, storeys: 1, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 700, goods: ["planks": 30, "stone": 6], inputs: [:], outputs: ["food": 8.0]),
         // New York-style towers (see NewYork.swift): setbacks, crowns and spires; and brownstone rows
         CityKind(key: "brownstone", en: "Brownstone row", zh: "褐石联排", use: .residential, w: 12, d: 7, storeys: 4, homesPerFloor: 8, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 500, goods: ["stone": 16, "planks": 8], inputs: [:], outputs: [:]),
         CityKind(key: "pencil", en: "Slim residential tower", zh: "纤细住宅塔", use: .residential, w: 9, d: 9, storeys: 60, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 16, money: 3200, goods: ["stone": 8, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
@@ -146,6 +149,8 @@ public final class District: Codable {
     public var fromMetro: Int?
     public var day = 0
     public var foodEaten = 0.0, foodShort = 0.0
+    /// Food harvested yesterday by its farms and ranches.
+    public var foodMade: Double? = nil
     public var gridCap = 0.0, gridUsed = 0.0
     public var taxes = 0.0, upkeep = 0.0
     public var autoBuild = true
@@ -323,12 +328,49 @@ extension Society {
             for y in 0..<b.d { for x in 0..<b.w {
                 let t = TilePos(b.x + x, b.y + y)
                 if b.def.use == .agricultural && level == 0 {
-                    // a farm is fields, fenced; the door is the gate
                     if lw.tile(2, t.x, t.y) != 0, content.tile(lw.tile(2, t.x, t.y))?.natural == true { lw.setTile(2, t.x, t.y, 0) }
                     let edge = x == 0 || y == 0 || x == b.w - 1 || y == b.d - 1
-                    lw.setTile(0, t.x, t.y, edge ? floor : content.tid("farmland"))
-                    if edge { lw.setTile(2, t.x, t.y, t == b.entrance ? content.tid("fence_gate") : content.tid("fence")) }
-                    else if (x + y) % 2 == 0 { lw.setTile(2, t.x, t.y, content.tid("wheat_1")) }
+                    if edge {
+                        // fenced all round; the door is the gate
+                        lw.setTile(0, t.x, t.y, floor)
+                        lw.setTile(2, t.x, t.y, t == b.entrance ? content.tid("fence_gate") : content.tid("fence"))
+                        continue
+                    }
+                    switch b.kind {
+                    case "ranch":
+                        // pasture: grass, a barn in the north-west corner, a well to drink from, the herd inside
+                        let barn = x >= 1 && x <= 5 && y >= 1 && y <= 4
+                        lw.setTile(0, t.x, t.y, barn ? content.tid("wood_floor") : content.tid("grass"))
+                        if barn {
+                            let wallEdge = x == 1 || x == 5 || y == 1 || y == 4
+                            lw.setTile(2, t.x, t.y, wallEdge ? (x == 3 && y == 4 ? content.tid("door_wood") : content.tid("wall_wood")) : 0)
+                        } else if x == b.w / 2 && y == b.d / 2 {
+                            lw.setTile(2, t.x, t.y, content.tid("well"))
+                        } else {
+                            lw.setTile(2, t.x, t.y, 0)
+                        }
+                    case "bigfarm":
+                        // long strips of grain and vegetables, a farm track down the middle, a barn by the gate
+                        let track = x == b.w / 2
+                        let barn = x >= b.w / 2 + 1 && x <= b.w / 2 + 5 && y >= b.d - 5 && y <= b.d - 2
+                        if barn {
+                            lw.setTile(0, t.x, t.y, content.tid("wood_floor"))
+                            let wallEdge = x == b.w / 2 + 1 || x == b.w / 2 + 5 || y == b.d - 5 || y == b.d - 2
+                            lw.setTile(2, t.x, t.y, wallEdge ? (x == b.w / 2 + 1 && y == b.d - 3 ? content.tid("door_wood") : content.tid("wall_wood")) : content.tid("crate"))
+                        } else if track {
+                            lw.setTile(0, t.x, t.y, floor); lw.setTile(2, t.x, t.y, 0)
+                        } else {
+                            lw.setTile(0, t.x, t.y, content.tid("farmland"))
+                            // strips three rows wide, wheat and carrots in turn, every other row planted
+                            let strip = (y - 1) / 3
+                            let crop = strip % 2 == 0 ? "wheat_2" : "carrot_2"
+                            lw.setTile(2, t.x, t.y, (y - 1) % 3 != 2 ? content.tid(crop) : 0)
+                        }
+                    default:
+                        // a small farm: a field, fenced
+                        lw.setTile(0, t.x, t.y, content.tid("farmland"))
+                        lw.setTile(2, t.x, t.y, (x + y) % 2 == 0 ? content.tid("wheat_1") : 0)
+                    }
                     continue
                 }
                 lw.setTile(0, t.x, t.y, floor)
@@ -340,7 +382,10 @@ extension Society {
                 if edge { lw.setTile(2, t.x, t.y, level == 0 && t == b.entrance ? door : (glazed ? window : wall)) }
                 else if lw.tile(2, t.x, t.y) != content.tid("stairs_down") { lw.setTile(2, t.x, t.y, 0) }
             } }
-            if b.def.use == .agricultural { break }
+            if b.def.use == .agricultural {
+                if b.kind == "ranch" { stockRanch(b) }
+                break
+            }
             if b.w > 3 && b.d > 3 { lw.setTile(2, b.x + 1, b.y + 1, thing) }
             if b.w > 4 && b.d > 3 { lw.setTile(2, b.x + b.w - 2, b.y + 1, thing) }
             // a big floor is split into rooms: a wall down the middle of the north half (the rooms open onto the
@@ -471,7 +516,14 @@ extension Society {
         // a district grown out of a town: most of the town's grown-ups (eighty at most) work there too, until it
         // has people of its own to staff it (the power station and the waterworks come before the first homes)
         if let tid = d.fromTown, let town = settlements[tid], !town.abandoned { pool += min(80, Double(town.members.count) * 0.8) }
-        for b in d.buildings.sorted(by: { ($0.def.service != nil ? 0 : 1, $0.id) < ($1.def.service != nil ? 0 : 1, $1.id) }) where b.state == .open && b.jobs > 0 {
+        // the first building of each service first (one power station and one waterworks staffed before a
+        // second power station), then the farms and ranches (people must eat), then the other services, then the rest
+        var firstOf: Set<Int> = []
+        for svc in CityKind.services {
+            if let b = d.buildings.filter({ $0.state == .open && $0.def.service == svc }).min(by: { $0.id < $1.id }) { firstOf.insert(b.id) }
+        }
+        func rank(_ b: CityBuilding) -> Int { firstOf.contains(b.id) ? 0 : (b.def.outputs["food"] != nil ? 1 : (b.def.service != nil ? 2 : 3)) }
+        for b in d.buildings.sorted(by: { (rank($0), $0.id) < (rank($1), $1.id) }) where b.state == .open && b.jobs > 0 {
             let inc = Double(commutersIn.filter { $0.workB == b.id }.count)
             let fill = min(Double(b.jobs), pool + inc)
             pool = max(0, pool - max(0, fill - inc))
@@ -490,6 +542,7 @@ extension Society {
         }
         if power.ratio < 1 { d.note("power short: \(Int(power.capacity)) of \(Int(power.demand))") }
         // 3. work: farms, wells, refineries and factories turn inputs into outputs, as staffed and powered
+        var foodMade = 0.0
         for b in d.buildings where b.state == .open && !b.def.outputs.isEmpty {
             let staff = Double(b.jobs) * (staffing[b.id] ?? 0) * (b.powered || b.def.use == .agricultural ? 1 : 0)
             var can = staff * educationBoost(d)
@@ -497,7 +550,9 @@ extension Society {
             guard can > 1e-9 else { continue }
             for (k, v) in b.def.inputs { d.add(k, -v * can) }
             for (k, v) in b.def.outputs { d.add(k, v * can) }
+            if let f = b.def.outputs["food"] { foodMade += f * can }
         }
+        d.foodMade = foodMade
         // power stations burn fuel for what they give
         for b in d.buildings where b.state == .open && b.def.service == "power" {
             let fuel = (b.def.inputs["fuel"] ?? 0) * Double(b.jobs) * (staffing[b.id] ?? 0)
@@ -551,9 +606,9 @@ extension Society {
         for (k, v) in died where v > 0 { d.ledger.deaths[k, default: 0] += v }
         d.foodEaten = eaten; d.foodShort = short
         if short > 0 { d.note("food short by \(Int(short))") }
-        // births: couples with homes and food
-        let fed = d.population > 0 ? eaten / Double(max(1, d.population)) : 0
-        let births = Int(Double(d.population) * 0.0012 * fed * (0.5 + d.happiness))
+        // births: couples with homes and food; plenty of food (stores and harvests beyond what is eaten) makes
+        // more children, until the world's people pass the growth target, when it slows right down
+        let births = birthsToday(d, eaten: eaten, short: short)
         if births > 0 { settle(d, births, source: nil) }
         // fire: without cover a building may burn (its residents get out: they move to the free homes, or leave)
         if d.services["fire"]!.ratio < 1 {
@@ -597,18 +652,26 @@ extension Society {
     func distributeFood(_ d: District) {
         for bi in d.buildings.indices where d.buildings[bi].state == .open {
             let b = d.buildings[bi]
+            let car = b.lift.flatMap { lift($0) }.flatMap { liftPowered($0) ? $0 : nil }
             for (fi, f) in b.floors.enumerated() where f.residents > 0 {
                 let want = Double(f.residents) * 3 - f.food
                 guard want > 0.5 else { continue }
-                let liftUp = b.lift.flatMap { lift($0) }.map { liftPowered($0) } ?? false
-                if fi == 0 || (fi <= 3 && !liftUp) {
-                    let got = min(want, d.store["food"] ?? 0)
-                    if got > 0 { d.add("food", -got); d.buildings[bi].floors[fi].food += got; record([("food", got)], from: d.holding.name, to: "building \(b.id) floor \(fi)", note: fi == 0 ? "carried in" : "carried upstairs") }
-                } else if let lid = b.lift, let e = lift(lid), let k = e.stops.firstIndex(where: { $0.level == fi }) {
-                    let pending = e.jobs.filter { $0.dest == .cityFloor(d.id, b.id, fi) }.reduce(0.0) { $0 + $1.amount - $1.delivered }
+                func carry(_ n: Double, _ note: String) {
+                    let got = min(n, d.store["food"] ?? 0)
+                    if got > 0.5 { d.add("food", -got); d.buildings[bi].floors[fi].food += got; record([("food", got)], from: d.holding.name, to: "building \(b.id) floor \(fi)", note: note) }
+                }
+                // up to the fourth floor it is carried up the stairs (a lift or not)
+                if fi <= 3 { carry(want, fi == 0 ? "carried in" : "carried upstairs"); continue }
+                // higher: three days' food by the lift; and whenever the lift is missing, unpowered or behind (less
+                // than a day's food up there), the residents carry a day's worth up the stairs themselves
+                var pending = 0.0
+                if let e = car, let k = e.stops.firstIndex(where: { $0.level == fi }) {
+                    pending = e.jobs.filter { $0.dest == .cityFloor(d.id, b.id, fi) }.reduce(0.0) { $0 + $1.amount - $1.delivered }
                     let send = min(want - pending, d.store["food"] ?? 0)
                     if send > 0.5 { sendByLift(e, key: "food", amount: send, from: 0, to: k, source: .district(d.id), dest: .cityFloor(d.id, b.id, fi)) }
                 }
+                let short = Double(f.residents) - f.food - pending
+                if short > 0 { carry(short, car == nil ? "carried up the stairs (no lift)" : "carried up the stairs (the lift was behind)") }
             }
         }
     }
@@ -653,9 +716,10 @@ extension Society {
         guard free > 0 else { return }
         let jobsFree = d.jobs + jobsElsewhere(d) - Int(Double(d.population) * 0.6)
         let foodDays = (d.store["food"] ?? 0) / Double(max(1, d.population))
-        guard jobsFree > 0, foodDays >= 3 || d.population == 0 && (d.store["food"] ?? 0) > 30,
+        guard jobsFree > -d.population / 5, foodDays >= 3 || d.population == 0 && (d.store["food"] ?? 0) > 30,
               d.services["power"]!.ratio >= 0.95, d.services["water"]!.ratio >= 0.95 else { return }
-        let want = min(free, jobsFree, max(5, d.population / 50))
+        // food draws people: a district with harvests to spare takes many more settlers than one just getting by
+        let want = settlersWanted(d, free: free, jobsFree: jobsFree)
         guard want > 0 else { return }
         guard let c = realm.civBox else {
             // a world without the regional layer: a district grown from a town takes settlers from beyond the map
@@ -672,6 +736,8 @@ extension Society {
             d.note("\(placed) moved in from \(city.nameEn)")
             return
         }
+        // no regional city can spare anyone: a district grown from a town draws settlers from the countryside
+        if d.fromTown != nil { let placed = settle(d, want, source: "countryside"); if placed > 0 { d.note("\(placed) settlers arrived from the countryside") } }
     }
 
     /// Jobs a district's people can reach by the lines (in other districts).
@@ -695,18 +761,22 @@ extension Society {
         // a district that grew out of a town lays its main street before anything else (sites need a street)
         if d.fromTown != nil, let id = d.works?["spine"], realm.transport.sites.first(where: { $0.id == id })?.finished == nil { return }
         if d.fromTown != nil && d.works?["spine"] == nil && !(d.tried ?? []).contains("spine") { return }
-        // finish what is under way
-        if let bi = d.buildings.firstIndex(where: { [.planned, .clearing, .road, .waiting, .building].contains($0.state) }) {
-            advanceProject(d, bi)
-            return
+        // finish what is under way: several projects at once as the district grows (each takes its next step)
+        let busy: [CityState] = [.planned, .clearing, .road, .waiting, .building]
+        for id in d.buildings.filter({ busy.contains($0.state) }).map({ $0.id }) {
+            if let bi = d.buildings.firstIndex(where: { $0.id == id }) { advanceProject(d, bi) }
         }
+        if d.buildings.filter({ busy.contains($0.state) }).count >= Society.parallelProjects(d.population) { return }
         // what is short? a service under strain first, then homes, then work, then food
         let pop = Double(d.population)
         var key: String?
         for s in ["power", "water", "sewage", "garbage", "health", "fire", "education"] {
             let st = d.services[s]!
             // short because its building lacks staff, not capacity: another building would lack staff too
-            if d.buildings.contains(where: { $0.state == .open && $0.def.service == s && staffShare($0, d) < 0.9 }) { continue }
+            // (one that has not had its first day of staffing yet counts as short too: wait and see)
+            if d.buildings.contains(where: { $0.state == .open && $0.def.service == s && (d.staffing[$0.id] ?? 0) < 0.9 }) { continue }
+            // nor while one is being built
+            if d.buildings.contains(where: { $0.state != .open && $0.state != .burnt && $0.def.service == s }) { continue }
             // a young town that grew out of a village: power and water first, the rest when it has 150 people
             if d.fromTown != nil && pop < 150 && s != "power" && s != "water" { continue }
             if s == "fire" { if st.capacity < 1 && d.buildings.count >= 4 { key = "firehall"; break }; continue }
@@ -717,18 +787,23 @@ extension Society {
                 break
             }
         }
+        // food before anything else when the harvests (with what is being built) cannot feed the people to come
+        if let f = foodToBuild(d), key == nil || (d.store["food"] ?? 0) < pop * 2 { key = f }
         if key == nil {
             let occupancy = d.homes > 0 ? pop / Double(d.homes) : 1
             let jobs = Double(d.jobs)
-            if (d.store["food"] ?? 0) < pop * 4 && d.buildings.filter({ $0.kind == "farm" }).count < Int(pop / 300) + 1 { key = "farm" }
-            else if occupancy > 0.85 { key = nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], pop) }
+            if occupancy > 0.85 { key = nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], pop) }
             else if jobs < pop * 0.6 {
                 key = d.buildings.filter({ ["shops", "mall"].contains($0.kind) }).count <= d.buildings.filter({ $0.kind == "factory" }).count
                     ? nextKind(d, ["shops", "offices", "mall", "skyscraper", "crown", "deco", "supertall"], pop) : "factory"
             }
         }
         guard let k = key, let def = CityKind.byKey[k] else { return }
-        guard let site = findSite(d, w: def.w, h: def.d) else { d.note("no room for a \(def.en)"); return }
+        guard let site = findSite(d, w: def.w, h: def.d, outskirts: def.use == .agricultural) else {
+            // no room left: the district spreads out (farther fields, new blocks), up to 200 tiles
+            if d.radius < 200 { d.radius = min(200, d.radius + 16); d.note("spreads out to \(d.radius) tiles") } else { d.note("no room for a \(def.en)") }
+            return
+        }
         var b = CityBuilding()
         b.id = d.nextB; d.nextB += 1; b.kind = k
         b.x = site.x; b.y = site.y; b.w = def.w; b.d = def.d
@@ -743,8 +818,8 @@ extension Society {
     /// thousands builds towers), taking the one it has fewest of, so streets do not repeat one building.
     func nextKind(_ d: District, _ group: [String], _ pop: Double) -> String {
         // what each kind needs: people already living in the district
-        let needs: [String: Double] = ["flats": 0, "terrace": 0, "shops": 0, "offices": 300, "tower": 400, "mall": 800, "highrise": 900, "skyscraper": 1500,
-                                     "brownstone": 150, "pencil": 1300, "crown": 1100, "deco": 1600, "supertall": 2400]
+        let needs: [String: Double] = ["flats": 0, "terrace": 0, "shops": 0, "offices": 300, "tower": 200, "mall": 800, "highrise": 500, "skyscraper": 1500,
+                                     "brownstone": 100, "pencil": 900, "crown": 1100, "deco": 1600, "supertall": 2400]
         let open = group.filter { pop >= needs[$0] ?? 0 }
         let pool = open.isEmpty ? [group[0]] : open
         return pool.min { a, b in
@@ -803,6 +878,8 @@ extension Society {
             var cost = def.goods.mapValues { $0 * Double(def.storeys) }
             cost = cost.filter { $0.value > 0 }
             guard d.money >= def.money else { d.note("not enough money for building \(b.id)"); return }
+            // materials it lacks are bought in for this building (at the import price), if its money stretches
+            buyShortfall(d, cost, keep: def.money)
             guard Goods.take(cost, from: d.holding) == nil else { d.note("materials short for building \(b.id)"); return }
             d.money -= def.money
             record(cost.map { ($0.key, $0.value) }, from: d.holding.name, to: "building \(b.id)", note: "construction")
@@ -834,7 +911,7 @@ extension Society {
 
     /// Free land for a building: dry, flat to build on, nothing anyone built, not on a way or another
     /// building (a tile of gap), not in a town, and near a street.
-    func findSite(_ d: District, w: Int, h: Int) -> TilePos? {
+    func findSite(_ d: District, w: Int, h: Int, outskirts: Bool = false) -> TilePos? {
         let r = d.radius
         var cands: [(Int, TilePos)] = []
         for y in stride(from: d.center.y - r, through: d.center.y + r - h, by: 2) {
@@ -844,6 +921,8 @@ extension Society {
                 cands.append((dist, o))
             }
         }
+        // buildings as near the centre as they fit; fields and pastures out at the edge
+        if outskirts { cands = cands.map { (-$0.0, $0.1) } }
         cands.sort { $0.0 != $1.0 ? $0.0 < $1.0 : ($0.1.y != $1.1.y ? $0.1.y < $1.1.y : $0.1.x < $1.1.x) }
         let towns = settlements.values.filter { !$0.abandoned }
         for (_, o) in cands {

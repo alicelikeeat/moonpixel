@@ -92,11 +92,16 @@ extension Society {
         let cities = realm.civBox.map { c in c.cities.values.filter { $0.nation == d.nation }.sorted { $0.id < $1.id } } ?? []
         // a young town is paid for by its nation until it can pay its own way (400 people): what the treasury
         // can give, the rest as development bonds (money; the game's goods are never made from nothing)
-        if d.population < 400 && d.money < 6000 {
+        // a well-fed town whose homes are full is growing faster than its taxes can build for: the nation lends it
+        // money to build with (growth bonds, scaled to its size) until the world nears its growth target
+        let pop = Double(d.population)
+        let growing = Society.growthBrake(totalPopulation) > 0.5 && plenty(d) > 0.5 && d.population + 10 >= d.homes
+        if (d.population < 400 && d.money < 6000) || (growing && d.money < 3000 + pop * 4) {
             var paid = 0.0
             if let c = realm.civBox, var p = c.polities[d.nation] { paid = max(0, min(400, p.treasury * 0.1)); p.treasury -= paid; c.polities[d.nation] = p }
-            d.money += 400
-            d.note(paid >= 399 ? "development grant from the treasury" : "development bonds")
+            let bond = growing ? pop * 3 : 0
+            d.money += 400 + bond
+            d.note(bond > 0 ? "growth bonds: \(Int(400 + bond))" : (paid >= 399 ? "development grant from the treasury" : "development bonds"))
         }
         feed(d, cities)
         if let tid = d.fromTown, let town = settlements[tid], !town.abandoned {
