@@ -16,10 +16,16 @@ public struct Canvas {
     /// The colour of ink lines (nil: the dark plum ink). Soft styles ink each part in a deeper tone of its own colour.
     public var inkColor: RGBA?
     public let w: Int, h: Int
+    /// Output pixels per drawing unit: a figure drawn on a 64 x 80 plan with `k` 2 comes out 128 x 160, every
+    /// line and highlight at twice the detail (the drawing code is the same; only the output is finer).
+    public let k: Int
     static let ss = 3
     var sub: [UInt32]                 // RGBA8 per sub-pixel, 0 = empty
 
-    public init(_ w: Int, _ h: Int) { self.w = w; self.h = h; sub = [UInt32](repeating: 0, count: w * h * Canvas.ss * Canvas.ss) }
+    public init(_ w: Int, _ h: Int, scale: Int = 1) {
+        self.w = w; self.h = h; k = max(1, scale)
+        sub = [UInt32](repeating: 0, count: w * h * k * k * Canvas.ss * Canvas.ss)
+    }
 
     @inline(__always) static func pack(_ c: RGBA) -> UInt32 { UInt32(c.r) | UInt32(c.g) << 8 | UInt32(c.b) << 16 | UInt32(c.a) << 24 }
     @inline(__always) static func unpack(_ v: UInt32) -> RGBA { RGBA(UInt8(v & 255), UInt8((v >> 8) & 255), UInt8((v >> 16) & 255), UInt8(v >> 24)) }
@@ -27,9 +33,9 @@ public struct Canvas {
     /// Paint every sub-pixel inside the shape (with the colour the colour function gives there; nil leaves it).
     /// Colours with alpha below 255 are mixed over what is there.
     public mutating func paint(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double, inside: (Double, Double) -> Bool, color: (Double, Double) -> RGBA?) {
-        let s = Double(Canvas.ss), sw = w * Canvas.ss
-        let ax = max(0, Int((x0 * s).rounded(.down))), bx = min(w * Canvas.ss - 1, Int((x1 * s).rounded(.up)))
-        let ay = max(0, Int((y0 * s).rounded(.down))), by = min(h * Canvas.ss - 1, Int((y1 * s).rounded(.up)))
+        let s = Double(Canvas.ss * k), sw = w * Canvas.ss * k
+        let ax = max(0, Int((x0 * s).rounded(.down))), bx = min(sw - 1, Int((x1 * s).rounded(.up)))
+        let ay = max(0, Int((y0 * s).rounded(.down))), by = min(h * Canvas.ss * k - 1, Int((y1 * s).rounded(.up)))
         guard ax <= bx, ay <= by else { return }
         for sy in ay...by {
             let y = (Double(sy) + 0.5) / s
@@ -128,9 +134,10 @@ public struct Canvas {
 
     /// Averaged down to the output pixels: colour by mean of the covered sub-pixels, alpha by coverage.
     public func image() -> Bitmap {
-        var out = Bitmap(w, h)
-        let s = Canvas.ss, sw = w * s
-        for y in 0..<h { for x in 0..<w {
+        let ow = w * k, oh = h * k
+        var out = Bitmap(ow, oh)
+        let s = Canvas.ss, sw = ow * s
+        for y in 0..<oh { for x in 0..<ow {
             var r = 0, g = 0, b = 0, a = 0, n = 0
             for dy in 0..<s { for dx in 0..<s {
                 let v = sub[(y * s + dy) * sw + x * s + dx]
@@ -164,6 +171,9 @@ public enum AnimeArt {
     public static let ink = RGBA(46, 30, 42)
     public static let cell = PixelArt.cell * 2
     public static let charW = PixelArt.charW * 2, charH = PixelArt.charH * 2
+    /// Figures are drawn on the 64 x 80 plan and come out this many times finer (2: 128 x 160 pixels). The app
+    /// shows them at the plan's size, so they are as big as before with twice the detail in every line.
+    public static var figureScale = 2
 
     /// Anime shadows lean cool and saturated rather than just darker.
     static func shadowed(_ c: RGBA, _ k: Double) -> RGBA {
@@ -183,13 +193,17 @@ public enum AnimeArt {
     /// pixel figure (dir "down" | "up" | "side"; frame 0 stand, 1 and 2 walk, 3 acting), painted.
     public static func character(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
         // by the setting: the soft moe figure or the hero figure (the first chibi figure stays as `chibi`)
-        figure == .hero ? hero(look, dir: dir, frame: frame, held: held, child: child, female: female)
-                        : moe(look, dir: dir, frame: frame, held: held, child: child, female: female)
+        switch figure {
+        case .hero: return hero(look, dir: dir, frame: frame, held: held, child: child, female: female)
+        case .moe: return moe(look, dir: dir, frame: frame, held: held, child: child, female: female)
+        // the celestial costume is for grown-ups; a child keeps the moe clothes
+        case .angel: return moe(look, dir: dir, frame: frame, held: held, child: child, female: female, angel: !child)
+        }
     }
 
     /// The round-headed chibi figure (the first anime look).
     public static func chibi(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
-        var c = Canvas(charW, charH)
+        var c = Canvas(charW, charH, scale: figureScale)
         let skin = pastel(RGBA(hex: look.skin)), hair = pastel(RGBA(hex: look.hair)), shirt = pastel(RGBA(hex: look.shirt))
         let pants = pastel(RGBA(hex: look.pants)), shoes = pastel(RGBA(hex: look.shoes))
         let hairLight = hair.lightened(0.28), hairDark = shadowed(hair, 0.28)
@@ -980,7 +994,7 @@ extension AnimeArt {
     /// heads tall, a face with almond eyes, layered hair with a gloss, a jacket over an inner layer, a belt,
     /// gloves and boots, painted with soft light and a rim of cool light. Directions and frames as `character`.
     public static func hero(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
-        var c = Canvas(charW, charH)
+        var c = Canvas(charW, charH, scale: figureScale)
         let skin = pastel(RGBA(hex: look.skin)), hair = pastel(RGBA(hex: look.hair)), coat = pastel(RGBA(hex: look.shirt))
         let pants = pastel(RGBA(hex: look.pants)), boots = pastel(RGBA(hex: look.shoes)).darkened(0.15)
         let inner = shadowed(coat, 0.45), leather = RGBA(74, 58, 52), metal = RGBA(214, 206, 180)
@@ -1168,7 +1182,7 @@ extension AnimeArt {
 extension AnimeArt {
     /// How people are drawn in the anime look: the soft moe figure (large glossy eyes, flowing hair, frills and
     /// ornaments, coloured line art) or the hero figure (modern JRPG proportions). A setting of the game.
-    public enum Figure: String, Codable, CaseIterable { case moe, hero }
+    public enum Figure: String, Codable, CaseIterable { case moe, hero, angel }
     nonisolated(unsafe) public static var figure: Figure = .moe
 
     /// The soft moe figure on the 64 x 80 canvas (feet at y 76): a large head; big glossy eyes with a gradient
@@ -1176,13 +1190,17 @@ extension AnimeArt {
     /// locks with strand lines, a broken ring of gloss, long side locks and an ahoge; by the person's style a
     /// frilled flower headband, twin tails with ribbons, small horns or a flower clip; puffed sleeves, a bow or
     /// a choker, a frilled hem, long gloves; soft gradient light; every line in a deeper tone of its own colour.
-    public static func moe(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
-        var c = Canvas(charW, charH)
+    public static func moe(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool, angel: Bool = false) -> Bitmap {
+        var c = Canvas(charW, charH, scale: figureScale)
         let skin = pastel(RGBA(hex: look.skin)).lightened(0.04), hair = pastel(RGBA(hex: look.hair)).lightened(0.06)
-        let cloth = pastel(RGBA(hex: look.shirt)), pants = pastel(RGBA(hex: look.pants)), shoes = pastel(RGBA(hex: look.shoes))
+        // the celestial costume: an ivory robe with gold filigree, sheer dark stockings with lace bands, gold heels
+        let cloth = angel ? RGBA(250, 246, 236) : pastel(RGBA(hex: look.shirt))
+        let pants = angel ? RGBA(78, 70, 78) : pastel(RGBA(hex: look.pants))
+        let shoes = angel ? RGBA(226, 190, 96) : pastel(RGBA(hex: look.shoes))
+        let gold = RGBA(222, 178, 70), goldDeep = RGBA(160, 112, 36)
         let white = RGBA(250, 250, 255), frill = RGBA(244, 246, 255)
         let hairInk = shadowed(hair, 0.5).darkened(0.15), skinInk = RGBA(176, 112, 104), clothInk = shadowed(cloth, 0.55)
-        let iris = irisColor(hair).lightened(0.05)
+        let iris = angel ? RGBA(236, 184, 60) : irisColor(hair).lightened(0.05)
         let style = look.style % 4
         let walk = frame == 1 ? 1.0 : (frame == 2 ? -1.0 : 0)
         let bob = frame == 1 || frame == 2 ? -1.2 : 0
@@ -1194,7 +1212,22 @@ extension AnimeArt {
         let side = dir == "side", back = dir == "up"
         let long = female || style == 2
         c.ellipse(X(0), foot - 1, 12 * k, 2.8 * k, RGBA(0, 0, 0, 55))
+        // the wings behind (seen from behind they are drawn over the back, further down)
+        if angel && !back { angelWings(&c, X: X, Y: Y, k: k, side: side, gold: gold, goldDeep: goldDeep) }
+        // the train of the robe, sweeping behind to the ground
+        if angel {
+            c.inkColor = RGBA(206, 196, 176)
+            let tr: [(Double, Double)] = side ? [(X(-3), Y(48)), (X(4), Y(48)), (X(-6), Y(70)), (X(-20), Y(77)), (X(-14), Y(64))]
+                                              : [(X(-9), Y(48)), (X(9), Y(48)), (X(17), Y(74)), (X(10), Y(77)), (X(0), Y(75.5)), (X(-10), Y(77)), (X(-17), Y(74))]
+            soft(&c, tr, RGBA(244, 238, 226, 235), ink: 0.8, light: 0.1, shadow: 0.16, rim: false)
+            // gold thread down its edges
+            c.inkColor = nil
+            for e in side ? [[(X(-3), Y(50)), (X(-10), Y(66)), (X(-19), Y(76))]] : [[(X(-9), Y(50)), (X(-14), Y(64)), (X(-16.5), Y(74))], [(X(9), Y(50)), (X(14), Y(64)), (X(16.5), Y(74))]] {
+                c.curve(e, 0.45 * k, gold)
+            }
+        }
 
+        if angel { angelHalo(&c, X: X, hy: Y(26), k: k, side: side, gold: gold, goldDeep: goldDeep) }
         // the hair behind: long and flowing, curling at the ends
         c.inkColor = hairInk
         if long {
@@ -1225,6 +1258,19 @@ extension AnimeArt {
         for (x, lift) in side ? [(-1 - walk * 4, 0.0), (4 + walk * 4, 0.0)] : [(-4.5, frame == 1 ? 1.6 : 0), (4.5, frame == 2 ? 1.6 : 0)] {
             c.ellipse(X(x), Y(73.5 - lift), 4 * k, 2.6 * k, shoes, ink: 1.0, shade: Shade(shadow: 0.15, light: 0.25))
             c.ellipse(X(x - 1), Y(72.6 - lift), 1.2 * k, 0.7 * k, RGBA(255, 255, 255, 170))
+            // a strap across the instep with a little gold buckle, and the sole's edge
+            c.line(X(x - 2.6), Y(72.2 - lift), X(x + 2.6), Y(72.2 - lift), 0.55 * k, shadowed(shoes, 0.4))
+            c.ellipse(X(x + (side ? 1.6 : 0)), Y(72.2 - lift), 0.55 * k, 0.45 * k, RGBA(240, 200, 90))
+            c.line(X(x - 3.4), Y(75.4 - lift), X(x + 3.4), Y(75.4 - lift), 0.4 * k, shadowed(shoes, 0.55))
+        }
+        if female {
+            // stockings to the thigh, a band of lace at the top (it shows under the hem when walking)
+            c.inkColor = nil
+            for x in side ? [-2 - walk * 3.4, 2 + walk * 3.4] : [-4.0, 4.0] {
+                c.line(X(x - 2.1), Y(64.2), X(x + 2.1), Y(64.2), 0.9 * k, frill)
+                for i in 0..<4 { c.ellipse(X(x - 1.6 + Double(i) * 1.07), Y(64.9), 0.42 * k, 0.42 * k, frill) }
+                c.line(X(x + 1.2), Y(65.5), X(x + 1.0), Y(70.5), 0.45 * k, RGBA(255, 255, 255, 90))      // the sheen down the shin
+            }
         }
 
         // the dress: a soft bell with a frilled hem; the bodice; a bow or a choker
@@ -1238,7 +1284,34 @@ extension AnimeArt {
         } else {
             soft(&c, side ? [(X(-6), Y(48)), (X(6), Y(48)), (X(7), Y(hem)), (X(-6.5), Y(hem))] : [(X(-9), Y(48)), (X(9), Y(48)), (X(10), Y(hem)), (X(-10), Y(hem))], cloth, ink: 1.1)
         }
+        // the folds of the skirt: soft lines from the waist, a lighter crest beside each
+        c.inkColor = nil
+        let folds: [Double] = side ? [-3, 1.5, 5] : (female ? [-8.5, -4, 0.5, 5, 9] : [-5, 0, 5])
+        for f in folds {
+            let spread = female ? 1.45 : 1.08
+            c.curve([(X(f * 0.75), Y(51)), (X(f * 0.95), Y(55)), (X(f * spread), Y(hem - 0.8))], 0.5 * k, shadowed(cloth, 0.32))
+            c.curve([(X(f * 0.75 + 0.9), Y(51.5)), (X(f * 0.95 + 1.0), Y(55)), (X(f * spread + 1.1), Y(hem - 1.4))], 0.45 * k, cloth.lightened(0.18))
+        }
+        if female {
+            // a second, finer row of lace under the frill
+            let w2 = side ? 9.0 : 12.0
+            var x2 = -w2
+            while x2 < w2 { c.ellipse(X(x2 + 0.7), Y(hem + 2.0), 0.7 * k, 0.6 * k, frill.darkened(0.06)); x2 += 1.4 }
+        }
+        c.inkColor = clothInk
         soft(&c, side ? [(X(-5), Y(43)), (X(5.5), Y(43)), (X(6), Y(50)), (X(-5.5), Y(50))] : [(X(-8.5), Y(43)), (X(8.5), Y(43)), (X(8), Y(51)), (X(-8), Y(51))], cloth.lightened(0.05), ink: 1.1)
+        // the sash at the waist; seen from behind, its bow
+        c.inkColor = nil
+        let sash = shadowed(cloth, 0.28)
+        c.rect(side ? X(-5.4) : X(-8.2), Y(49.6), (side ? 11.2 : 16.4) * k, 1.5 * k, sash)
+        if back {
+            c.poly([(X(0), Y(50.3)), (X(-5), Y(47.8)), (X(-5), Y(53))], sash.lightened(0.1), ink: 0.5, shade: Shade(shadow: 0.2))
+            c.poly([(X(0), Y(50.3)), (X(5), Y(47.8)), (X(5), Y(53))], sash.lightened(0.1), ink: 0.5, shade: Shade(shadow: 0.2))
+            c.line(X(-1), Y(51), X(-3), Y(57), 1.2 * k, sash); c.line(X(1), Y(51), X(3), Y(57), 1.2 * k, sash)
+        } else if !side {
+            // two small buttons down the bodice, below the collar
+            for y in [48.6, 50.6] where !female || y > 49 { c.ellipse(X(0), Y(y), 0.65 * k, 0.65 * k, white); c.ellipse(X(-0.2), Y(y - 0.2), 0.25 * k, 0.25 * k, RGBA(255, 255, 255)) }
+        }
         if !back && !side {
             c.poly([(X(-6), Y(43)), (X(6), Y(43)), (X(0), Y(48))], white, ink: 0.7)                      // the collar
             if female {
@@ -1251,6 +1324,17 @@ extension AnimeArt {
             }
         }
 
+        if angel && !side {
+            // gold filigree on the robe: a line down the front, branching scrolls, a jewel at the waist
+            c.inkColor = nil
+            c.curve([(X(0), Y(43.5)), (X(0.3), Y(50)), (X(0), Y(hem))], 0.5 * k, gold)
+            for sgn in [-1.0, 1.0] {
+                c.curve([(X(0), Y(51)), (X(sgn * 3), Y(53.5)), (X(sgn * 5.5), Y(52.5)), (X(sgn * 6), Y(55))], 0.4 * k, gold)
+                c.curve([(X(sgn * 1.5), Y(56)), (X(sgn * 5), Y(59)), (X(sgn * 8.5), Y(hem - 0.5))], 0.4 * k, gold)
+                c.curve([(X(sgn * 2), Y(44)), (X(sgn * 5), Y(46)), (X(sgn * 7.5), Y(44.5))], 0.4 * k, gold)
+            }
+            c.ellipse(X(0), Y(50.2), 1.0 * k, 1.2 * k, RGBA(200, 226, 255), ink: 0.4)
+        }
         // arms: puffed sleeves, long white gloves
         func arm(_ s: Double, swing: Double, raised: Bool) {
             let sx = side ? X(s * 1) : X(s * 8.5), sy = Y(45)
@@ -1258,19 +1342,57 @@ extension AnimeArt {
             c.ellipse(sx, sy, 3.8 * k, 3.2 * k, cloth.lightened(0.08), ink: 1.0, shade: Shade(shadow: 0.18, light: 0.2))
             let hx = raised ? X(s * 15) : X(s * (side ? 2 : 11) + swing * 2.5), hy = raised ? Y(34) : Y(56 - abs(swing))
             c.inkColor = RGBA(180, 184, 206)
-            c.line(sx + s * 1.5, sy + 2, hx, hy, 3.4 * k, female ? white : skin, ink: 0.9)
-            c.ellipse(hx, hy + 0.5, 2.2 * k, 2.2 * k, female ? white : skin, ink: 0.8)
+            let glove = angel ? RGBA(70, 60, 70) : (female ? white : skin)
+            c.line(sx + s * 1.5, sy + 2, hx, hy, 3.4 * k, glove, ink: 0.9)
+            c.ellipse(hx, hy + 0.5, 2.2 * k, 2.2 * k, glove, ink: 0.8)
+            if angel {
+                // a lattice of lace on the dark glove and a gold cuff at the elbow
+                c.inkColor = nil
+                for t in stride(from: 0.25, through: 0.85, by: 0.2) {
+                    let mx = sx + s * 1.5 + (hx - sx - s * 1.5) * t, my = sy + 2 + (hy - sy - 2) * t
+                    c.line(mx - 1.3 * k, my - 0.6 * k, mx + 1.3 * k, my + 0.6 * k, 0.3 * k, RGBA(140, 128, 140))
+                    c.line(mx - 1.3 * k, my + 0.6 * k, mx + 1.3 * k, my - 0.6 * k, 0.3 * k, RGBA(140, 128, 140))
+                }
+                let cx0 = sx + (hx - sx) * 0.2, cy0 = sy + (hy - sy) * 0.2
+                c.ellipse(cx0, cy0, 2.0 * k, 1.0 * k, gold, ink: 0.4)
+                c.ellipse(cx0, cy0, 0.6 * k, 0.6 * k, RGBA(255, 240, 200))
+            }
+            c.inkColor = nil
+            c.curve([(sx - 1.6 * k, sy - 0.6 * k), (sx, sy + 0.8 * k), (sx + 1.6 * k, sy - 0.4 * k)], 0.45 * k, shadowed(cloth, 0.3))   // the puff's gather
+            if female && !angel {
+                // the glove's lace cuff, a third of the way down
+                let mx = sx + (hx - sx) * 0.38, my = sy + (hy - sy) * 0.38
+                for i in -1...1 { c.ellipse(mx + Double(i) * 1.1 * k, my, 0.75 * k, 0.65 * k, frill.darkened(0.05)) }
+                c.line(sx + s * 1.5 + (hx - sx) * 0.2, sy + 2 + (hy - sy) * 0.2, hx - (hx - sx) * 0.1, hy - (hy - sy) * 0.1, 0.4 * k, RGBA(205, 208, 228))
+            }
         }
         if side { arm(1, swing: act ? 0 : walk * 2, raised: act) }
         else { arm(-1, swing: walk, raised: false); arm(1, swing: -walk, raised: act) }
 
+        if angel && back { angelWings(&c, X: X, Y: Y, k: k, side: false, gold: gold, goldDeep: goldDeep) }
         // the head: large and soft, a small chin
         let hy = Y(26)
         c.inkColor = skinInk
         if !back && !side && female { c.rect(X(-5), Y(39.5), 10 * k, 1.8 * k, RGBA(70, 90, 170), ink: 0.5) }          // a choker
-        c.ellipse(X(side ? 1 : 0), hy, 15 * k, 14.2 * k, skin, ink: 1.2, shade: Shade(shadow: 0.1, light: 0.05, cut: 0.5, glint: -0.9))
+        // the face: a soft warm shade growing toward the lower right edge (no hard diagonal cut, no grey)
+        let fx = X(side ? 1 : 0), frx = 15 * k, fry = 14.2 * k
+        c.ellipse(fx, hy, frx, fry, skin, ink: 1.2)
+        let warm = mix(skin, RGBA(236, 156, 150), 0.55)
+        c.paint(fx - frx, hy - fry, fx + frx, hy + fry, inside: { px, py in let u = (px - fx) / frx, v = (py - hy) / fry; return u * u + v * v <= 1 },
+                color: { px, py in
+                    let u = (px - fx) / frx, v = (py - hy) / fry, r = (u * u + v * v).squareRoot()
+                    let t = max(0, min(1, (u * 0.45 + v * 0.65 + r * 0.7 - 0.95) / 0.45))
+                    return t <= 0.01 ? nil : RGBA(warm.r, warm.g, warm.b, UInt8(t * 120))
+                })
+        c.ellipse(fx - 6 * k, hy - 5 * k, 5 * k, 3.4 * k, RGBA(255, 255, 255, 40))                 // the light on the brow
         if !back {
+            // the fringe's soft shadow on the forehead
+            c.inkColor = nil
+            c.ellipse(X(side ? 3 : 0), hy - 4.2 * k, (side ? 11 : 13) * k, 3.2 * k, RGBA(150, 90, 110, 46))
             if side {
+                c.ellipse(X(-4), hy + 3 * k, 2.4 * k, 3.2 * k, skin, ink: 0.7)                              // the ear
+                c.curve([(X(-4.6), hy + 1.4 * k), (X(-3.4), hy + 3 * k), (X(-4.4), hy + 4.6 * k)], 0.4 * k, skinInk)
+                c.line(X(13.6), hy + 7.6 * k, X(14.4), hy + 8.6 * k, 0.5 * k, skinInk)                       // the tip of the nose
                 moeEye(&c, X(8), hy + 4 * k, k, iris, hairInk, side: true)
                 c.ellipse(X(8.5), hy + 8.5 * k, 2.8 * k, 1.3 * k, RGBA(255, 130, 160, 120))
                 c.line(X(11.5), hy + 10.5 * k, X(12.8), hy + 10.3 * k, 0.9, RGBA(200, 100, 110))
@@ -1281,8 +1403,14 @@ extension AnimeArt {
                     c.ellipse(X(s * 9.8), hy + 9 * k, 3.2 * k, 1.6 * k, RGBA(255, 130, 160, 110))
                     for i in 0..<3 { let x = X(s * 9.8) + (Double(i) - 1) * 1.6 * k; c.line(x - 0.5, hy + 9.6 * k, x + 0.5, hy + 8.4 * k, 0.5, RGBA(245, 130, 160, 150)) }
                 }
-                if act { c.ellipse(X(0), hy + 10.6 * k, 1.5 * k, 1.3 * k, RGBA(200, 90, 100), ink: 0.5) }
-                else { c.curve([(X(-1.1), hy + 10.6 * k), (X(0), hy + 11.2 * k), (X(1.1), hy + 10.6 * k)], 0.8, RGBA(200, 100, 110)) }
+                c.ellipse(X(0.4), hy + 8.3 * k, 0.4 * k, 0.3 * k, RGBA(220, 140, 140, 150))                    // a hint of a nose
+                if act {
+                    c.ellipse(X(0), hy + 10.6 * k, 1.5 * k, 1.3 * k, RGBA(200, 90, 100), ink: 0.5)
+                    c.ellipse(X(0), hy + 11.2 * k, 0.8 * k, 0.5 * k, RGBA(255, 150, 160))                     // the tongue
+                } else {
+                    c.curve([(X(-1.1), hy + 10.6 * k), (X(0), hy + 11.2 * k), (X(1.1), hy + 10.6 * k)], 0.8, RGBA(200, 100, 110))
+                    c.ellipse(X(0.3), hy + 11.6 * k, 0.5 * k, 0.22 * k, RGBA(255, 220, 225, 170))                // a shine on the lower lip
+                }
             }
         }
 
@@ -1298,6 +1426,19 @@ extension AnimeArt {
                 ? [(X(-15.5), hy + 8 * k), (X(-15), hy - 8 * k), (X(-5), hy - 15.5 * k), (X(7), hy - 14.5 * k), (X(14.5), hy - 7 * k), (X(9), hy - 5 * k), (X(1), hy - 5.5 * k), (X(-3), hy + 1 * k), (X(-6), hy + 9 * k)]
                 : [(X(-15.5), hy + 2 * k), (X(-15), hy - 8 * k), (X(-6), hy - 15.5 * k), (X(6), hy - 15.5 * k), (X(15), hy - 8 * k), (X(15.5), hy + 2 * k), (X(12), hy - 7.5 * k), (X(-12), hy - 7.5 * k)]
             soft(&c, cap, hair, ink: 1.1)
+            // fine strand lines from the crown over the cap, and a few flyaway hairs at the sides
+            c.inkColor = nil
+            let crown = (X(side ? 1 : 0), hy - 15 * k)
+            for i in 0..<(side ? 6 : 10) {
+                let t = (Double(i) + 0.5) / Double(side ? 6 : 10)
+                let ex = side ? X(-14 + t * 26) : X(-14 + t * 28)
+                let ey = hy - 7.8 * k - sin(t * .pi) * 1.5 * k
+                c.curve([crown, ((crown.0 + ex) / 2 + (ex - crown.0) * 0.12, (crown.1 + ey) / 2 - 1.2 * k), (ex, ey)], 0.35 * k, hairInk.lightened(0.12))
+            }
+            for s in side ? [-1.0] : [-1.0, 1.0] {
+                c.curve([(X(s * 14.5), hy - 9 * k), (X(s * 17.5), hy - 11.5 * k), (X(s * 18.5), hy - 9.5 * k)], 0.4 * k, hair.darkened(0.08))
+            }
+            c.inkColor = hairInk
             // the fringe: many thin pointed locks, with a strand line down each
             // (they end above the brows: the eyes are never covered)
             let tips: [(Double, Double)] = side ? [(-3, 6), (0.5, 7.5), (4, 6)] : [(-12, 7.5), (-8.5, 6), (-5, 7), (-2, 5.5), (1.5, 7), (5, 5.5), (8.5, 6.5), (11.5, 7.5)]
@@ -1322,9 +1463,9 @@ extension AnimeArt {
             c.curve([(X(1), hy - 15 * k), (X(3), hy - 21 * k), (X(7), hy - 22 * k), (X(5.5), hy - 18 * k)], 1.6, hair)
         }
 
-        // ornaments by style
+        // ornaments by style (an angel wears the crown instead)
         c.inkColor = RGBA(150, 150, 180)
-        switch style {
+        switch angel ? -1 : style {
         case 0 where female && !back:                    // a frilled headband with small flowers
             for i in 0..<9 { let a = Double.pi * (1.1 + Double(i) * 0.1); c.ellipse(X(cos(a) * 14.5), hy + sin(a) * 14 * k + 1, 2 * k, 1.6 * k, frill, ink: 0.6) }
             for x in [-8.0, 0, 8] { c.ellipse(X(x), hy - 14.2 * k + abs(x) * 0.35, 1.7 * k, 1.7 * k, white, ink: 0.6); c.ellipse(X(x), hy - 14.2 * k + abs(x) * 0.35, 0.6 * k, 0.6 * k, RGBA(255, 214, 90)) }
@@ -1348,12 +1489,109 @@ extension AnimeArt {
         default: break
         }
 
+        if angel { angelCrown(&c, X: X, hy: hy, k: k, side: side, gold: gold, goldDeep: goldDeep, female: female) }
         c.inkColor = nil
         if !held.isEmpty {
             let hx = act ? X(15) : (side ? X(2 + walk * 2.5) : X(11))
             heldItem(&c, held, hx, act ? Y(34) : Y(56), k * 0.9)
         }
         return c.image()
+    }
+
+    /// Two great feathered wings from the shoulder blades, spread wide past the hair: a white wing shape lit
+    /// from above, rows of long flight feathers with scalloped tips and pale quills fanning to the lower outer
+    /// edge, shorter feathers over them, and gold covert feathers like scales along the top. From the side, one.
+    static func angelWings(_ c: inout Canvas, X: (Double) -> Double, Y: (Double) -> Double, k: Double, side: Bool, gold: RGBA, goldDeep: RGBA) {
+        let feather = RGBA(252, 250, 244), shade = RGBA(216, 208, 196), quill = RGBA(226, 212, 184), line = RGBA(186, 174, 158)
+        for s in side ? [-1.0] : [-1.0, 1.0] {
+            func P(_ x: Double, _ y: Double) -> (Double, Double) { (X(s * x + (side ? -3 : 0)), Y(y)) }
+            // the whole wing first: shoulder, up over the wrist to the high tip, down the outer edge to the long tips
+            let outline = [P(6, 45), P(12, 34), P(21, 27), P(29.5, 24), P(31, 33), P(31, 46), P(29, 58), P(25, 68), P(19, 70), P(14, 63), P(9, 54)]
+            c.inkColor = line
+            soft(&c, outline, feather, ink: 0.7, light: 0.12, shadow: 0.14, rim: false)
+            c.inkColor = nil
+            // flight feathers: from points along the arm out to the lower outer edge, each a long blade with a
+            // shadowed trailing side, a quill and a rounded tip
+            let roots = [P(10, 42), P(13, 38), P(16, 35), P(19, 32), P(22, 30), P(25, 28)]
+            let tips = [P(16.5, 67), P(20.5, 69), P(24.5, 66.5), P(28, 61), P(30.5, 53), P(31, 44)]
+            for i in (0..<roots.count).reversed() {
+                let r = roots[i], t = tips[i]
+                let dx = t.0 - r.0, dy = t.1 - r.1, len = max(1e-6, (dx * dx + dy * dy).squareRoot())
+                let nx = -dy / len, ny = dx / len, wdt = 2.6 * k
+                c.inkColor = line
+                c.poly([(r.0 + nx * wdt, r.1 + ny * wdt), (t.0 + nx * wdt * 0.7, t.1 + ny * wdt * 0.7), (t.0 + dx / len * 1.4 * k, t.1 + dy / len * 1.4 * k), (t.0 - nx * wdt * 0.7, t.1 - ny * wdt * 0.7), (r.0 - nx * wdt, r.1 - ny * wdt)], feather, ink: 0.5)
+                c.inkColor = nil
+                c.poly([(r.0, r.1), (t.0, t.1), (t.0 - nx * wdt * 0.7, t.1 - ny * wdt * 0.7), (r.0 - nx * wdt, r.1 - ny * wdt)], RGBA(shade.r, shade.g, shade.b, 140))
+                c.line(r.0, r.1, t.0 - dx / len * 1.0 * k, t.1 - dy / len * 1.0 * k, 0.35 * k, quill)
+                // fine barbs along the lit side
+                for j in 1..<5 {
+                    let u = Double(j) / 5
+                    let mx = r.0 + dx * u, my = r.1 + dy * u
+                    c.line(mx, my, mx + nx * wdt * 0.8 + dx / len * 0.8 * k, my + ny * wdt * 0.8 + dy / len * 0.8 * k, 0.2 * k, RGBA(220, 212, 200))
+                }
+            }
+            // shorter feathers over the middle of the wing, scalloped
+            for j in 0..<7 {
+                let t = Double(j) / 6
+                let cx = X(s * (9 + t * 19) + (side ? -3 : 0)), cy = Y(48 - t * 14 + sin(t * .pi) * 2)
+                c.inkColor = line
+                c.ellipse(cx, cy, 2.6 * k, 3.8 * k, feather, ink: 0.45, shade: Shade(shadow: 0.1, light: 0.08))
+            }
+            // gold coverts: three rows of scale-like feathers along the top edge, brightest in the top row
+            for row in 0..<3 {
+                let m = 7 - row
+                for j in 0..<m {
+                    let t = Double(j) / Double(max(1, m - 1))
+                    let x = 7 + t * (20 - Double(row) * 2.5), y = 43 - t * (14.5 - Double(row)) + Double(row) * 2.6
+                    let (px, py) = P(x, y)
+                    c.inkColor = goldDeep
+                    c.ellipse(px, py, 2.0 * k, 1.5 * k, row == 0 ? gold.lightened(0.18) : (row == 1 ? gold : gold.darkened(0.08)), ink: 0.4, shade: Shade(shadow: 0.24, light: 0.32))
+                    c.inkColor = nil
+                    c.ellipse(px - s * 0.5 * k, py - 0.5 * k, 0.6 * k, 0.4 * k, RGBA(255, 244, 210, 200))
+                }
+            }
+            c.inkColor = nil
+        }
+    }
+
+    /// The gold halo, behind the head and above it (drawn first, so the head and hair cover its lower part).
+    static func angelHalo(_ c: inout Canvas, X: (Double) -> Double, hy: Double, k: Double, side: Bool, gold: RGBA, goldDeep: RGBA) {
+        c.inkColor = nil
+        let hx = X(side ? -3 : 0), hcy = hy - 15 * k, ry = 10 * k, rx = side ? ry * 0.36 : ry
+        var prev: (Double, Double)?
+        for i in 0...56 {
+            let a = Double(i) / 56 * 2 * .pi
+            let p = (hx + cos(a) * rx, hcy + sin(a) * ry)
+            if let q = prev { c.line(q.0, q.1, p.0, p.1, 1.2 * k, goldDeep); c.line(q.0, q.1, p.0, p.1, 0.65 * k, gold.lightened(0.22)) }
+            prev = p
+        }
+        for i in 0..<(side ? 3 : 8) {
+            let a = Double(i) / Double(side ? 3 : 8) * 2 * .pi - .pi / 2
+            let px = hx + cos(a) * rx, py = hcy + sin(a) * ry
+            let ox = cos(a) * (side ? 0.36 : 1), oy = sin(a)
+            c.poly([(px - oy * 0.9 * k, py + ox * 0.9 * k), (px + ox * 3.2 * k, py + oy * 3.2 * k), (px + oy * 0.9 * k, py - ox * 0.9 * k)], gold, ink: 0.3)
+            c.ellipse(px, py, 0.7 * k, 0.7 * k, gold.lightened(0.3))
+        }
+    }
+
+    /// A small crown of gold spikes on the head with a pale jewel, and a gold mark on the brow.
+    static func angelCrown(_ c: inout Canvas, X: (Double) -> Double, hy: Double, k: Double, side: Bool, gold: RGBA, goldDeep: RGBA, female: Bool) {
+        c.inkColor = goldDeep
+        // the crown on the head: a band and five spikes, a pale jewel in the middle
+        let by = hy - 12.5 * k, w = (side ? 6.0 : 9.0) * k
+        let cxm = X(side ? 2 : 0)
+        c.rect(cxm - w, by, 2 * w, 1.6 * k, gold, ink: 0.4)
+        for i in 0..<5 {
+            let t = Double(i) / 4, x = cxm - w + t * 2 * w
+            let tall = (i == 2 ? 5.5 : (i == 1 || i == 3 ? 3.8 : 2.6)) * k
+            c.poly([(x - 1.0 * k, by), (x, by - tall), (x + 1.0 * k, by)], gold, ink: 0.35, shade: Shade(shadow: 0.25, light: 0.3))
+            c.ellipse(x, by - tall, 0.45 * k, 0.45 * k, gold.lightened(0.35))
+        }
+        c.ellipse(cxm, by + 0.8 * k, 1.0 * k, 1.1 * k, RGBA(196, 226, 255), ink: 0.4)
+        if female && !side {
+            // a gold mark on the brow
+            c.line(cxm, hy - 6.4 * k, cxm, hy - 4.8 * k, 0.4 * k, gold)
+        }
     }
 
     /// A big glossy eye: a pale sclera, the iris dark above and bright below with a ring of light, a tall
@@ -1372,6 +1610,14 @@ extension AnimeArt {
                     if r > 0.78 && t > 0.45 { col = mix(col, iris.lightened(0.6), 0.5) }
                     return col
                 })
+        // fine streaks in the iris, from the pupil out, and a darker rim
+        for i in 0..<10 {
+            let a = Double(i) / 10 * 2 * .pi
+            let r0 = 0.35, r1 = 0.78
+            c.line(x + cos(a) * w * 0.84 * r0, y + 0.4 * k + sin(a) * h * 0.9 * r0, x + cos(a) * w * 0.84 * r1, y + 0.4 * k + sin(a) * h * 0.9 * r1, 0.22 * k, RGBA(255, 255, 255, 46))
+        }
+        c.paint(x - w, y - h, x + w, y + h, inside: { px, py in let u = (px - x) / (w * 0.84), v = (py - y - 0.4 * k) / (h * 0.9), r = u * u + v * v; return r <= 1 && r > 0.82 },
+                color: { _, _ in shadowed(iris, 0.65) })
         c.ellipse(x, y + 0.8 * k, w * 0.32, h * 0.42, shadowed(iris, 0.75))                          // the pupil
         c.ellipse(x - w * 0.36, y - h * 0.32, w * 0.34, w * 0.3, .white)                               // catchlights
         c.ellipse(x + w * 0.34, y + h * 0.3, w * 0.17, w * 0.17, RGBA(255, 255, 255, 230))
@@ -1384,5 +1630,9 @@ extension AnimeArt {
         c.line(x + w + 0.2, y - h * 0.1, x + w + 1.7 * k, y - h * 0.15, 0.8 * k, lash.darkened(0.25))
         c.curve([(x - w * 0.6, y - h - 2.0 * k), (x, y - h - 2.6 * k), (x + w * 0.6, y - h - 2.0 * k)], 0.6, lash)          // the crease
         c.curve([(x - w * 0.55, y + h + 0.3), (x, y + h + 0.8), (x + w * 0.55, y + h + 0.3)], 0.7, lash.lightened(0.15))   // the lower lash
+        // the upper lid's shadow on the white of the eye, and three short lower lashes
+        c.paint(x - w, y - h, x + w, y - h * 0.45, inside: { px, py in let u = (px - x) / w, v = (py - y) / h; return u * u + v * v <= 1 },
+                color: { _, _ in RGBA(120, 110, 170, 60) })
+        for i in [-1.0, 0, 1] { c.line(x + i * w * 0.4, y + h + 0.6, x + i * w * 0.48, y + h + 1.6 * k, 0.35 * k, lash.lightened(0.1)) }
     }
 }

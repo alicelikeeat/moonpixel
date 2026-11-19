@@ -557,8 +557,9 @@ struct MorePanel: View {
                     Chip(title: model.artStyle == .anime ? L("像素风格", "Pixel style") : L("动漫风格", "Anime style"), icon: "paintbrush.pointed.fill", id: "ArtStyle") {
                         model.showMore = false; model.artStyle = model.artStyle == .anime ? .pixel : .anime
                     }
-                    Chip(title: model.figureStyle == .moe ? L("人物：萌系", "People: moe") : L("人物：英雄比例", "People: hero"), icon: "person.crop.artframe", id: "FigureStyle") {
-                        model.showMore = false; model.figureStyle = model.figureStyle == .moe ? .hero : .moe
+                    Chip(title: model.figureStyle == .moe ? L("人物：萌系", "People: moe") : (model.figureStyle == .hero ? L("人物：英雄比例", "People: hero") : L("人物：天使", "People: angel")), icon: "person.crop.artframe", id: "FigureStyle") {
+                        // moe -> hero -> angel (wings, halo and crown, an ivory robe with gold) -> moe
+                        model.showMore = false; model.figureStyle = model.figureStyle == .moe ? .hero : (model.figureStyle == .hero ? .angel : .moe)
                     }
                 }
                 group(L("日夜", "Day and night")) {

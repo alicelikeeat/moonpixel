@@ -26,6 +26,13 @@ extension Bitmap {
     }
 
     /// A texture from an image made in the current style: crisp pixels, or smooth at double resolution.
+    /// An anime figure: drawn `AnimeArt.figureScale` times finer than the rest of the anime art, shown at the same size.
+    static func figureTexture(_ cg: CGImage) -> SKTexture {
+        let t = SKTexture(image: UIImage(cgImage: cg, scale: CGFloat(2 * AnimeArt.figureScale), orientation: .up))
+        t.filteringMode = .linear
+        return t
+    }
+
     static func skTexture(_ cg: CGImage) -> SKTexture {
         if animeStyle {
             let t = SKTexture(image: UIImage(cgImage: cg, scale: 2, orientation: .up))

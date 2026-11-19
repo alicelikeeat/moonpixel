@@ -422,7 +422,7 @@ final class GameScene: SKScene {
         if let t = texCache[key] { return t }
         // the anime look is drawn by hand in code (twice the pixels), not converted from the pixel sprite
         let t = Bitmap.animeStyle
-            ? (AnimeArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).cgImage.map { Bitmap.skTexture($0) } ?? SKTexture())
+            ? (AnimeArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).cgImage.map { Bitmap.figureTexture($0) } ?? SKTexture())
             : PixelArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).texture
         texCache[key] = t
         return t

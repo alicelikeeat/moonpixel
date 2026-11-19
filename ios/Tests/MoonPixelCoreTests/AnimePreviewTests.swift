@@ -15,7 +15,7 @@ final class AnimePreviewTests: XCTestCase {
             var l = Look(); l.skin = skin; l.hair = hair; l.shirt = shirt; l.pants = pants; l.style = i; looks.append(l)
         }
         // a sheet: rows = looks (female, male alternating), columns = down, side, up, walk, act; pixel above anime
-        let cw = AnimeArt.charW, ch = AnimeArt.charH
+        let cw = AnimeArt.charW * AnimeArt.figureScale, ch = AnimeArt.charH * AnimeArt.figureScale
         var sheet = Bitmap(cw * 5 * 2 + 20, ch * 4 + 10, fill: RGBA(200, 220, 235))
         for (r, l) in looks.enumerated() {
             let female = r % 2 == 1
@@ -28,6 +28,20 @@ final class AnimePreviewTests: XCTestCase {
             }
         }
         write(sheet, "characters", dir)
+        // the celestial costume, every look and pose (a child keeps the moe clothes: last column)
+        AnimeArt.figure = .angel
+        defer { AnimeArt.figure = .moe }
+        var angels = Bitmap(cw * 6, ch * 4, fill: RGBA(236, 232, 226))
+        for (r, l) in looks.enumerated() {
+            let female = r % 2 == 1 || r == 0
+            for (k, p) in [("down", 0), ("side", 0), ("up", 0), ("down", 1), ("side", 3)].enumerated() {
+                let a = AnimeArt.character(l, dir: p.0, frame: p.1, held: "", child: false, female: female)
+                angels.blit(a, sx: 0, sy: 0, sw: a.w, sh: a.h, dx: k * cw, dy: r * ch, blend: true)
+            }
+            let kid = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: true, female: female)
+            angels.blit(kid, sx: 0, sy: 0, sw: kid.w, sh: kid.h, dx: 5 * cw, dy: r * ch, blend: true)
+        }
+        write(angels, "characters-angel", dir)
         write(AnimeArt.atlas, "atlas-anime", dir)
         write(PixelArt.atlas, "atlas-pixel", dir)
         let s = makeSociety(7)
@@ -46,18 +60,20 @@ final class AnimePreviewTests: XCTestCase {
 
 /// The anime look is drawn in code: sizes the renderers rely on, every pose drawn, ground without holes, and the same picture every time.
 final class AnimeArtTests: XCTestCase {
-    func testCharactersAreDrawnInEveryPoseAtTwiceThePixels() {
+    func testCharactersAreDrawnInEveryPoseAtFourTimesThePixels() {
+        let fw = AnimeArt.charW * AnimeArt.figureScale, fh = AnimeArt.charH * AnimeArt.figureScale
+        XCTAssertEqual(AnimeArt.figureScale, 2, "figures are drawn twice as fine as the rest of the anime art")
         var l = Look(); l.hair = "#f0a0c0"
         for dir in ["down", "side", "up"] { for f in 0...3 { for female in [false, true] {
             let a = AnimeArt.character(l, dir: dir, frame: f, held: f == 3 ? "sword" : "", child: false, female: female)
-            XCTAssertEqual(a.w, AnimeArt.charW); XCTAssertEqual(a.h, AnimeArt.charH)
+            XCTAssertEqual(a.w, fw); XCTAssertEqual(a.h, fh)
             let p = PixelArt.character(l, dir: dir, frame: f, held: "", child: false, female: female)
-            XCTAssertEqual(a.w, p.w * 2); XCTAssertEqual(a.h, p.h * 2)
+            XCTAssertEqual(a.w, p.w * 4); XCTAssertEqual(a.h, p.h * 4)
             let opaque = stride(from: 3, to: a.px.count, by: 4).filter { a.px[$0] > 200 }.count
             XCTAssertGreaterThan(opaque, a.w * a.h / 8, "\(dir) \(f) drawn")
         } } }
         let c = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: true, female: true)
-        XCTAssertEqual(c.w, AnimeArt.charW)
+        XCTAssertEqual(c.w, fw)
         // drawn, not converted: deterministic, and different from the scaled pixel sprite
         let a1 = AnimeArt.character(l, dir: "down", frame: 1, held: "", child: false, female: true)
         let a2 = AnimeArt.character(l, dir: "down", frame: 1, held: "", child: false, female: true)
@@ -72,7 +88,7 @@ final class AnimeArtTests: XCTestCase {
             AnimeArt.figure = f
             for dir in ["down", "side", "up"] {
                 let a = AnimeArt.character(l, dir: dir, frame: 0, held: "", child: false, female: true)
-                XCTAssertEqual(a.w, AnimeArt.charW)
+                XCTAssertEqual(a.w, AnimeArt.charW * AnimeArt.figureScale)
                 XCTAssertGreaterThan(stride(from: 3, to: a.px.count, by: 4).filter { a.px[$0] > 200 }.count, a.w * a.h / 10, "\(f) \(dir)")
             }
         }
@@ -81,6 +97,29 @@ final class AnimeArtTests: XCTestCase {
         AnimeArt.figure = .hero
         let h = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: false, female: true)
         XCTAssertNotEqual(m.px, h.px)
+    }
+
+    func testAngelsHaveWingsAHaloAndGoldWhileChildrenKeepTheirClothes() {
+        var l = Look(); l.hair = "#f0e0b0"; l.style = 0
+        defer { AnimeArt.figure = .moe }
+        AnimeArt.figure = .moe
+        let moe = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: false, female: true)
+        let moeKid = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: true, female: true)
+        AnimeArt.figure = .angel
+        let angel = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: false, female: true)
+        let kid = AnimeArt.character(l, dir: "down", frame: 0, held: "", child: true, female: true)
+        func opaque(_ b: Bitmap, x0: Int, x1: Int, y0: Int = 0, y1: Int? = nil) -> Int {
+            var n = 0
+            for y in y0..<(y1 ?? b.h) { for x in x0..<x1 where b.px[(y * b.w + x) * 4 + 3] > 200 { n += 1 } }
+            return n
+        }
+        let edge = angel.w / 6
+        XCTAssertGreaterThan(opaque(angel, x0: 0, x1: edge), opaque(moe, x0: 0, x1: edge) + 200, "wings spread out to the sides")
+        XCTAssertGreaterThan(opaque(angel, x0: angel.w / 3, x1: angel.w * 2 / 3, y0: 0, y1: angel.h / 10), opaque(moe, x0: angel.w / 3, x1: angel.w * 2 / 3, y0: 0, y1: angel.h / 10), "a halo above the head")
+        var goldPx = 0
+        for i in stride(from: 0, to: angel.px.count, by: 4) where angel.px[i + 3] > 200 && angel.px[i] > 200 && angel.px[i + 1] > 150 && angel.px[i + 1] < 200 && angel.px[i + 2] < 120 { goldPx += 1 }
+        XCTAssertGreaterThan(goldPx, 300, "gold: coverts, halo, crown, filigree")
+        XCTAssertEqual(kid.px, moeKid.px, "a child keeps the moe clothes")
     }
 
     func testRoofsAreTwiceThePixelSizeOpaqueAndDifferByNation() {
