@@ -47,7 +47,12 @@ public struct CivGeoTrait: Equatable, Codable {
             return zh ? "\(n[min(places.count, 6)])关仍控制\(n[min(held, 6)])关" : "holds \(held) of its \(places.count) passes"
         case .delta: return zh ? "河洲 \(places.count) 处，仍控制 \(held) 处" : "\(held) of \(places.count) river isles held"
         case .islands: return zh ? "岛链 \(places.count) 岛，最长一跳 \(Int(value)) 个区域" : "a chain of \(places.count) islands, longest hop \(Int(value)) regions"
-        default: return kind.rawValue
+        case .innerSea: return zh ? "环抱内海，港口 \(held)/\(places.count) 在手" : "round an inner sea, \(held) of \(places.count) ports held"
+        case .plateau: return zh ? "高原水塔，河谷 \(held)/\(places.count) 在手" : "a high plateau, \(held) of \(places.count) valleys held"
+        case .terraces: return zh ? "瀑布台地，\(places.count) 层仍连通 \(held) 层" : "terraced land, \(held) of \(places.count) steps joined"
+        case .longBay: return zh ? "长湾双港，港口 \(held)/\(places.count) 在手" : "a long bay, \(held) of \(places.count) ports held"
+        case .atoll: return zh ? "环礁泻湖，\(places.count) 处礁岛" : "an atoll of \(places.count) reef islands"
+        case .blackSoil: return zh ? String(format: "背山黑土，平原肥力 %.0f%%", value * 100) : String(format: "black soil under the mountains, %.0f%% fertile", value * 100)
         }
     }
 }
@@ -291,11 +296,49 @@ extension Civ {
         if let t = basinTrait(n, own) { out.append(t) }
         if let t = deltaTrait(n, own) { out.append(t) }
         if let t = islandTrait(n, own) { out.append(t) }
+        out += formTraits(n, own, bodies)
         return out
     }
 
     /// The most telling line for a nation's card: its first trait, or nil.
     public func groundLine(of n: Int, zh: Bool) -> String? { traits(of: n).first?.line(zh: zh) }
+
+    /// The six later kinds, where the world made them (the region's landform), each with a check on the ground
+    /// as it is: ports for the seas and bays, valleys for a plateau, steps still joined for terraces, rich
+    /// soil for black-soil land.
+    func formTraits(_ n: Int, _ own: Set<Int64>, _ bodies: (of: [Int64: Int64], size: [Int64: Int])) -> [CivGeoTrait] {
+        var by: [String: [Int64]] = [:]
+        for k in own.sorted() { if let f = regions[k]?.form { by[f, default: []].append(k) } }
+        var out: [CivGeoTrait] = []
+        for kind in [CivGeoTrait.Kind.innerSea, .plateau, .terraces, .longBay, .atoll, .blackSoil] {
+            guard let land = by[kind.rawValue], !land.isEmpty else { continue }
+            let held = { (ks: [Int64]) in ks.filter { self.controller($0) == n }.count }
+            switch kind {
+            case .innerSea, .longBay:
+                let ports = land.filter { portSite($0, bodies: bodies) != nil || (regions[$0].map { r in Civ.four.contains { d in bodies.of[MP.chunkKey(r.rx + d.0, r.ry + d.1)] != nil } } ?? false) }
+                guard ports.count >= (kind == .longBay ? 2 : 1) else { continue }
+                out.append(CivGeoTrait(kind: kind, places: ports, held: held(ports), value: Double(ports.count)))
+            case .plateau:
+                let valleys = land.filter { (regions[$0]?.mountain ?? 1) < cfg.passMountain }
+                out.append(CivGeoTrait(kind: kind, places: valleys, held: held(valleys), value: Double(valleys.count)))
+            case .terraces:
+                // steps joined: land regions of the form reachable from the first by ground
+                let start = land[0]
+                let joined = land.filter { landRoute(for: n, from: start, to: $0, size: .vehicle) != nil }
+                out.append(CivGeoTrait(kind: kind, places: land, held: joined.count, value: Double(land.count)))
+            case .atoll:
+                out.append(CivGeoTrait(kind: kind, places: land, held: held(land), value: Double(land.count)))
+            default:
+                // the plain under the mountains: its fertility, and a mountain at its back
+                let plain = land.filter { (regions[$0]?.mountain ?? 1) < cfg.passMountain }
+                let backed = land.contains { (regions[$0]?.mountain ?? 0) >= cfg.passMountain } || plain.contains { k in regions[k].map { r in Civ.four.contains { d in (regions[MP.chunkKey(r.rx + d.0, r.ry + d.1)]?.mountain ?? 0) >= cfg.passMountain } } ?? false }
+                guard !plain.isEmpty, backed else { continue }
+                let fert = plain.compactMap { regions[$0]?.fertility }.reduce(0, +) / Double(plain.count)
+                out.append(CivGeoTrait(kind: kind, places: land, held: held(land), value: fert))
+            }
+        }
+        return out
+    }
 
     /// Sea distance (regions, 4 neighbours) between two sea regions within one body; nil when apart.
     func seaDistance(_ a: Int64, _ b: Int64, bodies: (of: [Int64: Int64], size: [Int64: Int])) -> Int? {

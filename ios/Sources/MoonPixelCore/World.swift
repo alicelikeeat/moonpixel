@@ -123,7 +123,7 @@ public final class Generator {
     /// (elevation, temperature, moisture)
     public func climate(_ wx: Int, _ wy: Int) -> (Double, Double, Double) {
         let x = Double(wx), y = Double(wy)
-        return (0.5 + elevBias + 0.62 * nElev.get(x, y) + continental(x, y), min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y))), min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y))))
+        return (shaped(0.5 + elevBias + 0.62 * nElev.get(x, y) + continental(x, y), x, y), min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y))), min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y))))
     }
 
     public func biome(_ wx: Int, _ wy: Int) -> Int {
@@ -199,7 +199,7 @@ public final class Generator {
                 let wx = bx + tx
                 let x = Double(wx), y = Double(wy)
                 let dn = nDetail.get(x, y)
-                let e = 0.5 + elevBias + 0.62 * nElev.get(x, y) + continental(x, y) + dn * 0.006
+                let e = shaped(0.5 + elevBias + 0.62 * nElev.get(x, y) + continental(x, y), x, y) + dn * 0.006
                 let t = min(1, max(0, 0.5 + tempBias + 1.0 * nTemp.get(x, y) + dn * 0.012))
                 let m = min(1, max(0, 0.5 + moistBias + 0.85 * nMoist.get(x, y) + dn * 0.012))
                 let fo = nForest.get(x, y)

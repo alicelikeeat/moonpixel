@@ -76,6 +76,8 @@ public struct CivRegion: Codable, Equatable {
     public var foundAt = 0.0
     /// Who owns it by right, who holds it now, and the city it answers to (Geography.swift). Nil: no one.
     public var legal: Int?, control: Int?, claim: Int?
+    /// The landform the region lies in (Landforms.swift), when the world made one there.
+    public var form: String?
     public var key: Int64 { MP.chunkKey(rx, ry) }
     public var coast: Bool { land > 0.25 && water > 0.12 }
 }
@@ -318,12 +320,20 @@ public final class Civ: Codable {
                 land += 1
                 if e > Biome.mountainLevel { mount += 1 }
                 else { fert += max(0, 1 - abs(t - 0.55) * 1.6) * (0.4 + 0.6 * m); forest += m }
-                if gen.isRiver(x, y, e) { r.river = true }
+                if gen.isRiver(x, y, e) || gen.deltaChannel(Double(x), Double(y)) { r.river = true }
             }
         } }
         let n = Double(k * k)
         r.land = Double(land) / n; r.water = Double(water) / n; r.deep = Double(deep) / n; r.mountain = Double(mount) / n
         r.fertility = land == 0 ? 0 : fert / Double(land); r.forest = land == 0 ? 0 : forest / Double(land)
+        let mx = Double(rx * size + size / 2), my = Double(ry * size + size / 2)
+        if let f = gen.landform(near: mx, my), ((mx - f.x) * (mx - f.x) + (my - f.y) * (my - f.y)).squareRoot() < f.radius { r.form = f.kind.rawValue }
+        // a basin's ring and its passes, region by region
+        switch gen.basinPart(mx, my) {
+        case "ring"?: r.mountain = max(r.mountain, 0.85)
+        case "gate"?: r.mountain = 0.45; r.land = max(r.land, 0.6)
+        default: break
+        }
         var h = RNG(seed: gen.seed &* 31 &+ rx &* 73856093 &+ ry &* 19349663)
         r.ore = h.unit() * (0.3 + r.mountain); r.coal = h.unit() * 0.8; r.oil = h.unit() < 0.3 ? h.unit() : 0
         return r
