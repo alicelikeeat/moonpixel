@@ -28,6 +28,24 @@ extension GameScene {
         }
     }
 
+    /// A block hit by a tool (Damage.swift): wood chips, earth and stone crumbs, metal sparks, glass shards, a few
+    /// leaves; more when it breaks. Within the effect budget like everything else.
+    func breakFX(at p: CGPoint, material: Material, broke: Bool) {
+        let color: UIColor
+        switch material {
+        case .wood: color = UIColor(red: 0.62, green: 0.42, blue: 0.24, alpha: 1)
+        case .earth: color = UIColor(red: 0.5, green: 0.38, blue: 0.26, alpha: 1)
+        case .stone: color = UIColor(white: 0.62, alpha: 1)
+        case .metal: color = UIColor(red: 1, green: 0.85, blue: 0.4, alpha: 1)
+        case .glass: color = UIColor(red: 0.75, green: 0.9, blue: 1, alpha: 0.85)
+        case .plant: color = UIColor(red: 0.35, green: 0.7, blue: 0.3, alpha: 1)
+        case .cloth: color = UIColor(white: 0.9, alpha: 1)
+        }
+        sparks(at: p, color: color, count: broke ? 12 : 5, reach: broke ? 30 : 16, size: material == .metal ? 1.5 : (broke ? 3 : 2))
+        if broke { ring(at: p, radius: 14, color: color.withAlphaComponent(0.6), width: 2, time: 0.3) }
+        if material == .glass && broke { sparks(at: p, color: .white, count: 6, reach: 22, size: 2) }
+    }
+
     func explosion(at p: CGPoint, radius: CGFloat, color: UIColor) {
         ring(at: p, radius: radius, color: color, width: 3, time: 0.45, fill: color.withAlphaComponent(0.35))
         ring(at: p, radius: radius * 0.6, color: .white, width: 2, time: 0.3)

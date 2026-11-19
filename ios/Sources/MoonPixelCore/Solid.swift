@@ -881,6 +881,38 @@ public enum Figure3D {
         var m = Mesh3D()
         let dark = color.darkened(0.35), light = color.lightened(0.3), steel = RGBA(120, 126, 140), ink = RGBA(40, 42, 54), glow = RGBA(120, 220, 255)
         let def = CivUnitDef.byKey[kind]
+        if kind == "giantess" {
+            // eight tiles tall: boots, a long coat, the nation's sash, arms, head and hair (original design)
+            let skin = RGBA(240, 205, 180), hair = RGBA(70, 46, 40), coat = RGBA(236, 232, 222)
+            m.box(-0.9, 0, -0.5, -0.2, 2.2, 0.5, dark, faces: .all); m.box(0.2, 0, -0.5, 0.9, 2.2, 0.5, dark, faces: .all)
+            m.box(-1.3, 2.0, -0.8, 1.3, 4.2, 0.8, coat.darkened(0.06), faces: .all)
+            m.box(-1.2, 4.2, -0.7, 1.2, 6.2, 0.7, coat, faces: .all); m.box(-1.25, 5.2, -0.75, 1.25, 5.6, 0.75, color, faces: .all)
+            m.box(-1.8, 4.0, -0.35, -1.2, 6.1, 0.35, coat, faces: .all); m.box(1.2, 4.0, -0.35, 1.8, 6.1, 0.35, coat, faces: .all)
+            m.box(-1.75, 3.6, -0.3, -1.25, 4.0, 0.3, skin, faces: .all); m.box(1.25, 3.6, -0.3, 1.75, 4.0, 0.3, skin, faces: .all)
+            m.box(-0.55, 6.2, -0.55, 0.55, 7.4, 0.55, skin, faces: .all); m.box(-0.65, 7.0, -0.65, 0.65, 7.7, 0.65, hair, faces: .all)
+            m.box(-0.6, 4.6, -0.75, 0.6, 7.2, -0.55, hair, faces: .all)
+            return m
+        }
+        if kind.hasPrefix("drop_") {
+            // the frame under its pod, with the braking flare beneath: drawn in the air by the caller
+            m = machine(String(kind.dropFirst(5)), color: color)
+            m.box(-1.0, 4.4, -1.0, 1.0, 5.0, 1.0, steel, faces: .all); m.box(-0.4, -0.6, -0.4, 0.4, 0, 0.4, RGBA(255, 160, 70), faces: .all)
+            return m
+        }
+        if kind == "shifter_vehicle" {
+            m.box(-1.0, 0.25, -1.5, 1.0, 0.95, 1.4, dark, faces: .all); m.box(-0.75, 0.95, -0.9, 0.75, 1.35, 0.6, color, faces: .all)
+            m.box(-0.6, 0.5, 1.4, 0.6, 0.9, 1.8, light, faces: .all); m.box(-0.5, 1.2, 0.6, 0.5, 1.3, 0.62, RGBA(120, 255, 200), faces: .all)
+            for (x, z) in [(Float(-1.15), Float(-1.0)), (1.0, -1.0), (-1.15, 0.9), (1.0, 0.9)] { m.box(x, 0, z - 0.35, x + 0.15, 0.6, z + 0.35, ink, faces: .all) }
+            return m
+        }
+        if kind == "shifter" {
+            m.box(-0.6, 0, -0.3, -0.15, 1.6, 0.3, steel, faces: .all); m.box(0.15, 0, -0.3, 0.6, 1.6, 0.3, steel, faces: .all)
+            m.box(-0.7, 1.6, -0.4, 0.7, 2.6, 0.4, dark, faces: .all); m.box(-1.1, 2.4, -0.45, 1.1, 3.0, 0.45, color, faces: .all)
+            m.box(-1.5, 2.6, -0.3, -1.1, 3.1, 0.3, ink, faces: .all); m.box(1.1, 2.6, -0.3, 1.5, 3.1, 0.3, ink, faces: .all)
+            m.box(-1.4, 1.4, -0.25, -1.0, 2.5, 0.25, steel, faces: .all); m.box(1.0, 1.4, -0.25, 1.4, 2.5, 0.25, steel, faces: .all)
+            m.box(-0.35, 3.0, -0.3, 0.35, 3.6, 0.3, light, faces: .all); m.box(-0.36, 3.25, 0.3, 0.36, 3.35, 0.34, RGBA(120, 255, 200), faces: .all)
+            return m
+        }
         if def?.hangarBay != nil && def?.layer == .sea {
             m.box(-4, 0, -1.2, 4, 0.9, 1.2, steel, faces: .all); m.box(-4.4, 0.9, -1.4, 4.4, 1.05, 1.4, ink, faces: .all)
             m.box(1.5, 1.05, 0.7, 2.6, 2.2, 1.3, dark, faces: .all); m.box(-3, 1.05, -0.4, -2.2, 1.3, 0.4, color, faces: .all); m.box(-1, 1.05, -0.9, -0.2, 1.3, -0.1, color, faces: .all)

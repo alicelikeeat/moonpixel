@@ -183,7 +183,21 @@ extension GameModel {
         if !r.gained.isEmpty { showToast(String(format: L("获得 %@ +%d", "Got %@ +%d"), r.gained == "wood" ? L("木头", "wood") : (r.gained == "stone" ? L("石头", "stone") : L("食物", "food")), Int(r.amount))) }
         if !r.demolished.isEmpty { showToast(r.demolished == "depot" ? L("补给站被摧毁", "Supply depot destroyed") : (r.demolished == "bridge" ? L("桥被拆毁", "Bridge destroyed") : L("道路被破坏", "Road destroyed"))) }
         if r.spared > 0 && r.hits.isEmpty { showToast(L("不能攻击本国人", "You cannot attack your own nation")) }
+        // a block worn or broken by the tool: what it is made of, how much is left; a light tap of the hand on the
+        // last blow of a felling
+        if let h = r.hit, let m = h.material {
+            scene?.breakFX(at: scene?.pt(r.impact) ?? .zero, material: m, broke: h.broke)
+            if h.broke { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+            else if r.gained.isEmpty { showToast(String(format: L("%@ 剩余 %d%%", "%@ %d%% left"), materialName(m), Int(h.left * 100))) }
+        }
         if selectedID != 0 && society.agents[selectedID] == nil { deselect() }
+    }
+
+    func materialName(_ m: Material) -> String {
+        switch m {
+        case .wood: return L("木头", "Wood"); case .earth: return L("泥土", "Earth"); case .stone: return L("石头", "Stone")
+        case .metal: return L("金属", "Metal"); case .glass: return L("玻璃", "Glass"); case .plant: return L("植物", "Plant"); case .cloth: return L("布", "Cloth")
+        }
     }
 
     func playerDied() {

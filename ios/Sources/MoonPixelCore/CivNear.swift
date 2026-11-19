@@ -211,8 +211,20 @@ extension Society {
             for (i, uid) in f.units.sorted().enumerated() {
                 guard let u = c.units[uid] else { continue }
                 let p = TilePos(s.center.x - 14 + (i % 5) * 6, s.center.y + 14 + (i / 5) * 6 + (f.nation == city.nation ? 0 : 12))
-                out.append((uid, u.kind, col, p.center, u.layer))
+                // a shifter is drawn in the form it is in
+                let kind = u.kind == "shifter" && u.form == "vehicle" ? "shifter_vehicle" : u.kind
+                out.append((uid, kind, col, p.center, u.layer))
             }
+        }
+        // frames falling from a sky carrier, over the town they will land in
+        for d in c.drops {
+            guard let city = c.cities.values.filter({ $0.regionKey == d.region && $0.shownAs != nil }).min(by: { $0.id < $1.id }), let s = settlements[city.shownAs!], !s.abandoned, let u = c.units[d.unit] else { continue }
+            out.append((d.unit, "drop_" + u.kind, c.polities[d.nation]?.color ?? "#ffffff", TilePos(s.center.x + 4, s.center.y - 10).center, .lowAir))
+        }
+        // the giantess, standing beside the town she is in
+        for g in c.giants {
+            guard let city = c.cities.values.filter({ $0.regionKey == g.region && $0.shownAs != nil }).min(by: { $0.id < $1.id }), let s = settlements[city.shownAs!], !s.abandoned else { continue }
+            out.append((-g.id, "giantess", c.polities[g.nation]?.color ?? "#ffffff", TilePos(s.center.x + 18, s.center.y).center, .ground))
         }
         return out
     }
@@ -226,6 +238,36 @@ public extension PixelArt {
         var b = Bitmap(48, 48)
         let dark = color.darkened(0.35), light = color.lightened(0.3), steel = RGBA(120, 126, 140), ink = RGBA(30, 32, 44)
         let def = CivUnitDef.byKey[kind]
+        if kind == "giantess" {
+            // a tall woman in a long coat with her nation's sash, hair down her back (original design)
+            let skin = RGBA(240, 205, 180), hair = RGBA(70, 46, 40), coat = RGBA(236, 232, 222)
+            b.rect(20, 2, 8, 8, skin); b.rect(18, 1, 12, 4, hair); b.rect(18, 4, 3, 14, hair); b.rect(27, 4, 3, 10, hair)
+            b.rect(22, 6, 1, 1, ink); b.rect(25, 6, 1, 1, ink)
+            b.rect(16, 10, 16, 18, coat); b.rect(16, 13, 16, 3, color); b.rect(12, 11, 4, 16, coat); b.rect(32, 11, 4, 16, coat)
+            b.rect(12, 27, 4, 3, skin); b.rect(32, 27, 4, 3, skin)
+            b.rect(15, 28, 18, 12, coat.darkened(0.08)); b.rect(18, 40, 5, 7, dark); b.rect(25, 40, 5, 7, dark)
+            return b
+        }
+        if kind.hasPrefix("drop_") {
+            // a frame coming down under a pod's braking flare
+            let under = civUnit(String(kind.dropFirst(5)), color: color)
+            b.blit(under, sx: 0, sy: 0, sw: 48, sh: 48, dx: 0, dy: 4, blend: true)
+            b.rect(14, 0, 20, 4, steel); b.rect(18, 4, 12, 2, RGBA(255, 190, 90)); b.rect(21, 44, 6, 4, RGBA(255, 150, 60))
+            return b
+        }
+        if kind == "shifter_vehicle" {
+            // the shifter as a low armoured car: wedge nose, folded arm plates along the sides, a visor strip
+            b.rect(8, 20, 32, 12, dark); b.rect(12, 16, 22, 6, color); b.rect(34, 18, 6, 4, light); b.rect(14, 18, 8, 2, RGBA(120, 255, 200))
+            b.rect(8, 32, 8, 6, ink); b.rect(32, 32, 8, 6, ink); b.rect(10, 22, 4, 8, steel); b.rect(34, 22, 4, 8, steel)
+            return b
+        }
+        if kind == "shifter" {
+            // the shifter standing: lighter than the frame, wheels at its shoulders and heels, a visor band
+            b.rect(20, 6, 8, 6, light); b.rect(19, 9, 10, 2, RGBA(120, 255, 200)); b.rect(15, 12, 18, 7, color); b.rect(18, 19, 12, 10, dark)
+            b.disc(13, 14, 3, ink); b.disc(35, 14, 3, ink); b.rect(11, 17, 4, 12, steel); b.rect(33, 17, 4, 12, steel)
+            b.rect(18, 29, 5, 13, steel); b.rect(25, 29, 5, 13, steel); b.disc(20, 43, 2.5, ink); b.disc(28, 43, 2.5, ink)
+            return b
+        }
         if def?.hangarBay != nil && def?.layer == .sea {
             b.rect(6, 18, 36, 12, steel); b.rect(4, 21, 2, 6, steel); b.rect(42, 20, 3, 8, steel)
             b.rect(8, 23, 32, 1, .white); b.rect(30, 14, 6, 4, dark); b.rect(10, 19, 4, 3, color); b.rect(18, 26, 4, 3, color)
