@@ -32,6 +32,10 @@ extension Society {
         urbanize()
         guard realm.transportBox != nil else { return }
         for d in net.districts.sorted(by: { $0.id < $1.id }) where d.fromTown != nil {
+            // a growing city spreads: land for an airport may be found farther out later, so it looks again every ten days
+            if d.day % 10 == 0, var t = d.tried, t.contains("airport") { t.removeAll { $0 == "airport" }; d.tried = t }
+            // a building that opened when the money or materials for its lift were short gets it now
+            for bi in d.buildings.indices where d.buildings[bi].state == .open && d.buildings[bi].floors.count >= 3 && d.buildings[bi].lift == nil { liftFor(bi, d) }
             nationSupply(d)
             planTransport(d)
         }
@@ -302,8 +306,15 @@ extension Society {
         // 6. an airport (a runway three tiles wide, a taxiway and an apron) once it has 150 people
         if (d.population >= 150 || open >= 6) && !tried.contains("airport") && site("runway1") == nil {
             if let field = airfield(d, length: 64, avoid: nil) {
+                // all of it or nothing: a runway started alone would block every site found later. What the
+                // store lacks for the whole field is bought in first, when the money is there; else it saves up.
+                var total: [String: Double] = [:]
+                for p in field { for (k, v) in p.cost { total[k, default: 0] += v } }
+                let lack = total.reduce(0.0) { $0 + max(0, $1.value - (d.store[$1.key] ?? 0)) * (Society.importPrice[$1.key] ?? 10) }
+                guard lack <= d.money - 1000 else { d.note("saving up for the airport"); return }
+                buyShortfall(d, total, keep: 1000)
                 for (k, p) in field.enumerated() { _ = start(["runway0", "runway1", "runway2", "taxiway", "apron"][k], p) }
-            } else { tried.insert("airport"); d.note("no level ground for an airport") }
+            } else { tried.insert("airport"); d.note("no level ground for an airport (looking again in ten days)") }
             return
         }
         if done("runway1"), done("apron"), let rw = site("runway1"), airport(d) == nil {
@@ -401,7 +412,7 @@ extension Society {
     /// western end and an apron beside it; all on free level land outside the towns (nil if there is none near).
     func airfield(_ d: District, length: Int, avoid: [TilePos]?) -> [WayPlan]? {
         let live = settlements.values.filter { !$0.abandoned }
-        for r in stride(from: 30, through: 150, by: 12) {
+        for r in stride(from: 30, through: 240, by: 12) {
             for (dx, dy) in [(0, r), (0, -r), (-r, 0), (r, 0), (-r, r), (r, r), (-r, -r), (r, -r)] {
                 let x0 = d.center.x + dx - length / 2, y0 = d.center.y + dy
                 if let a = avoid, a.contains(where: { abs($0.y - y0) < 30 && $0.x > x0 - 20 && $0.x < x0 + length + 20 }) { continue }

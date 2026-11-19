@@ -92,10 +92,12 @@ final class CityGrowthTests: XCTestCase {
             XCTAssertTrue(lines.contains { $0.kind == .bus && !$0.vehicles.isEmpty }, "\(d.name) runs a bus")
             XCTAssertTrue(lines.contains { $0.kind == .train && !$0.vehicles.isEmpty } || s.realm.transport.lines.contains { l in l.kind == .train && !l.vehicles.isEmpty && l.stops.contains { s.net.stop($0)?.district == d.id } }, "\(d.name) runs a train to another district: \(d.events.suffix(12)) works \(d.works ?? [:]) tried \(d.tried ?? []) money \(Int(d.money))")
             XCTAssertGreaterThanOrEqual(s.realm.transport.vehicles.filter { $0.kind == .car && $0.owner == .district(d.id) }.count, 1, "\(d.name)'s residents own cars")
-            for b in d.buildings where b.state == .open && b.floors.count >= 3 { XCTAssertNotNil(b.lift, "\(d.name): building \(b.id) (\(b.kind), \(b.floors.count) floors) has a lift") }
+            for b in d.buildings where b.state == .open && b.floors.count >= 3 { XCTAssertNotNil(b.lift, "\(d.name): building \(b.id) (\(b.kind), \(b.floors.count) floors) has a lift: \(d.events.filter { $0.contains("lift") }.suffix(3))") }
         }
         // every line can be run: a route between its stations
-        for l in s.realm.transport.lines {
+        // (air routes fly: they need no way between their airports)
+        let air: Set<VehicleKind> = [.airliner, .cargoPlane, .turboprop, .regionalJet, .widebody, .fighter]
+        for l in s.realm.transport.lines where !air.contains(l.kind) {
             let st = l.stops.compactMap { s.net.stop($0) }
             XCTAssertNotNil(s.route(from: NetNode(st[0].tile.x, st[0].tile.y, 0), to: NetNode(st[1].tile.x, st[1].tile.y, 0), s.profile(l.kind)), "\(l.name) has a way between its stops")
         }

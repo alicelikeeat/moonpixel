@@ -164,6 +164,7 @@ extension Society {
         let core = Skyline.core(x: b.x, y: b.y, side: side)
         let levels = (0..<n).filter { Skyline.coreFits(inset: Skyline.inset(b.kind, level: $0, of: n, side: side), side: side) }
         let plan = planLift(x: core.shaft.x, y: core.shaft.y, levels: levels, landingSide: TilePos(0, 1))
+        if plan.ok { buyShortfall(d, plan.cost, keep: 0) }
         guard plan.ok, Goods.take(plan.cost, from: d.holding) == nil else { d.note("no lift yet for tower \(b.id): \(plan.reason)"); return nil }
         record(plan.cost.map { ($0.key, $0.value) }, from: d.holding.name, to: "elevator works", note: "core lift for tower \(b.id)")
         let id = makeLift(plan, x: core.shaft.x, y: core.shaft.y, w: 2, d: 2, town: 0, tower: nil)

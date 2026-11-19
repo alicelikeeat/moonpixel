@@ -415,9 +415,12 @@ extension Society {
         guard b.floors.count >= 3, b.lift == nil else { return b.lift }
         let sides: [(TilePos, Int, Int)] = [(TilePos(-1, 0), b.x + b.w + 1, b.y + b.d / 2 - 1), (TilePos(1, 0), b.x - 3, b.y + b.d / 2 - 1),
                                             (TilePos(0, 1), b.x + b.w / 2 - 1, b.y - 3)]
+        var why: [String] = []
         for (side, x, y) in sides {
             let plan = planLift(x: x, y: y, levels: Array(0..<b.floors.count), landingSide: side)
-            guard plan.ok, Goods.take(plan.cost, from: d.holding) == nil else { continue }
+            guard plan.ok else { why.append(plan.reason); continue }
+            buyShortfall(d, plan.cost, keep: 0)          // what the store lacks is bought in for it
+            guard Goods.take(plan.cost, from: d.holding) == nil else { why.append("materials short"); continue }
             record(plan.cost.map { ($0.key, $0.value) }, from: d.holding.name, to: "elevator works", note: "lift for building \(b.id)")
             let id = makeLift(plan, x: x, y: y, w: 2, d: 2, town: 0, tower: nil)
             if let e = lift(id) { e.district = d.id; e.building = b.id; e.nation = d.nation }
@@ -425,6 +428,7 @@ extension Society {
             for k in 0...1 { keepClear(TilePos(x + k, y)); keepClear(TilePos(x + k, y + 1)) }
             return id
         }
+        d.note("no lift yet for building \(b.id): \(why.joined(separator: "; "))")
         return nil
     }
 
@@ -877,9 +881,11 @@ extension Society {
             }
             var cost = def.goods.mapValues { $0 * Double(def.storeys) }
             cost = cost.filter { $0.value > 0 }
-            guard d.money >= def.money else { d.note("not enough money for building \(b.id)"); return }
+            // a building of three floors or more is begun only when the money also covers its lift
+            let liftMoney = def.storeys >= 3 ? 800.0 : 0
+            guard d.money >= def.money + liftMoney else { d.note("not enough money for building \(b.id)"); return }
             // materials it lacks are bought in for this building (at the import price), if its money stretches
-            buyShortfall(d, cost, keep: def.money)
+            buyShortfall(d, cost, keep: def.money + liftMoney)
             guard Goods.take(cost, from: d.holding) == nil else { d.note("materials short for building \(b.id)"); return }
             d.money -= def.money
             record(cost.map { ($0.key, $0.value) }, from: d.holding.name, to: "building \(b.id)", note: "construction")
@@ -926,7 +932,8 @@ extension Society {
         cands.sort { $0.0 != $1.0 ? $0.0 < $1.0 : ($0.1.y != $1.1.y ? $0.1.y < $1.1.y : $0.1.x < $1.1.x) }
         let towns = settlements.values.filter { !$0.abandoned }
         for (_, o) in cands {
-            if d.buildings.contains(where: { $0.contains(o, margin: 2) || $0.contains(TilePos(o.x + w - 1, o.y + h - 1), margin: 2) || ($0.x < o.x + w + 2 && o.x < $0.x + $0.w + 2 && $0.y < o.y + h + 2 && o.y < $0.y + $0.d + 2) }) { continue }
+            // three tiles between buildings: room for an outside lift (a 2-tile shaft and its landing) on any side
+            if d.buildings.contains(where: { $0.contains(o, margin: 3) || $0.contains(TilePos(o.x + w - 1, o.y + h - 1), margin: 3) || ($0.x < o.x + w + 3 && o.x < $0.x + $0.w + 3 && $0.y < o.y + h + 3 && o.y < $0.y + $0.d + 3) }) { continue }
             if towns.contains(where: { $0.inArea(o) || $0.inArea(TilePos(o.x + w, o.y + h)) }) { continue }
             if net.districts.contains(where: { $0.id != d.id && $0.buildings.contains { b in b.x < o.x + w + 2 && o.x < b.x + b.w + 2 && b.y < o.y + h + 2 && o.y < b.y + b.d + 2 } }) { continue }
             var ok = true

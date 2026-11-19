@@ -39,7 +39,7 @@ final class CityTransportTests: XCTestCase {
         XCTAssertEqual(sc.b.building(tower)!.floors[top].hungry, 0)
     }
 
-    func testWithTheLiftsDownTheUpperFloorsGoHungryWhileTheWarehouseIsFullThenRecover() {
+    func testWithTheLiftsDownTheResidentsCarryFoodUpTheStairsThenTheLiftTakesOverAgain() {
         var sc = TransportScene()
         sc.cities(withLinks: true)
         let s = sc.s
@@ -55,10 +55,12 @@ final class CityTransportTests: XCTestCase {
         }
         let top = sc.b.building(tower)!.floors.count - 1
         XCTAssertGreaterThan(sc.b.store["food"] ?? 0, 4000, "the warehouse is full")
-        XCTAssertGreaterThan(sc.b.building(tower)!.floors[top].hungry, 0, "but the top floor goes short: no lift")
+        // no lift: the residents carry a day's food up the stairs themselves (since v2.11; before, the top went hungry)
+        XCTAssertEqual(sc.b.building(tower)!.floors[top].hungry, 0, "the top floor is fed by the stairs")
+        XCTAssertTrue(s.realm.transport.ledger.contains { $0.note.contains("carried up the stairs") && $0.to.hasSuffix("floor \(top)") }, "carried up the stairs")
         XCTAssertEqual(sc.b.building(tower)!.floors[1].hungry, 0, "the first floor is carried up the stairs")
         XCTAssertEqual(s.lift(sc.b.building(tower)!.lift!).map { s.liftPowered($0) }, false)
-        XCTAssertTrue(sc.b.events.contains { $0.contains("power short") || $0.contains("food short") })
+        XCTAssertTrue(sc.b.events.contains { $0.contains("power short") })
         // power back: food goes up and the hunger ends
         sc.b.buildings.append(plant)
         sc.b.staffing[plant.id] = 1
