@@ -94,6 +94,8 @@ final class SolidRenderer {
     /// Outside elevators: the car (moved to its real height every frame) and the shaft's rails.
     private var liftEntities: [Int: (car: ModelEntity, rails: [ModelEntity], top: Float)] = [:]
     private var vehicleEntities: [Int: ModelEntity] = [:]
+    /// The saucers of the UFO airports in view, and their light beams.
+    private var ufoEntities: [Int: (ship: ModelEntity, beam: ModelEntity)] = [:]
     private var shownStyle = 0
     private var sky: (moon: ModelEntity, stars: ModelEntity)?
 
@@ -335,6 +337,7 @@ final class SolidRenderer {
         updateStandards(world, society, model, reach: reach)
         updateLifts(society, model, reach: reach)
         updateVehicles(world, society, model, reach: reach)
+        updateUfos(world, society, model, reach: reach)
         updateMachines(world, society, model, reach: reach)
         updateLabels(world, society, model, reach: reach)
         updatePreview(world, scene)
@@ -356,6 +359,8 @@ final class SolidRenderer {
         liftEntities = [:]
         for e in vehicleEntities.values { e.removeFromParent() }
         vehicleEntities = [:]
+        for e in ufoEntities.values { e.ship.removeFromParent(); e.beam.removeFromParent() }
+        ufoEntities = [:]
         for d in deckEntities.values { for e in d { e.removeFromParent() } }
         deckEntities = [:]
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
@@ -374,6 +379,8 @@ final class SolidRenderer {
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
         for e in vehicleEntities.values { e.removeFromParent() }
         vehicleEntities = [:]
+        for e in ufoEntities.values { e.ship.removeFromParent(); e.beam.removeFromParent() }
+        ufoEntities = [:]
         for r in roofs.values { r.entity.removeFromParent() }
         roofs = [:]
         queue.dropAll()
@@ -439,7 +446,7 @@ final class SolidRenderer {
                 // the ground picture only depends on the two flat layers: when they are the same, the old texture stays
                 var hash: UInt64 = 1469598103934665603
                 for l in 0..<2 { for v in input.layers[l] { hash = (hash ^ UInt64(v)) &* 1099511628211 } }
-                let cg = hash == oldHash ? nil : (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers) : PixelArt.bakeGround(layers: input.layers)).cgImage
+                let cg = hash == oldHash ? nil : (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers, relief: mesh.relief) : PixelArt.bakeGround(layers: input.layers, relief: mesh.relief)).cgImage
                 let sh = Mesher3D.structureHash(input.layers), eh = Mesher3D.edgeHash(input.layers)
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.built(key, mesh, cg, hash, took, structHash: sh, edgeHash: eh) }
@@ -544,7 +551,7 @@ final class SolidRenderer {
                 let anime = Bitmap.animeStyle
                 work.async { [weak self] in
                     let mesh = Mesher3D.build(input, gen: gen, anime: anime)
-                    let cg = (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers) : PixelArt.bakeGround(layers: input.layers)).cgImage
+                    let cg = (Bitmap.animeStyle ? AnimeArt.bakeGround(layers: input.layers, relief: mesh.relief) : PixelArt.bakeGround(layers: input.layers, relief: mesh.relief)).cgImage
                     DispatchQueue.main.async { self?.layerBuilt(lk, mesh, cg, rev) }
                 }
             } }
@@ -897,6 +904,33 @@ final class SolidRenderer {
     }
 
     /// Vehicles in reach at their real place, height and heading; bridge decks at their height over the water or road below.
+    /// The saucers: the modelled ship (metal hull, glass dome, rim lights, legs) turning as it flies, and a
+    /// pale beam under it while it lifts off or lands.
+    private func updateUfos(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
+        guard model.depth == 0, let vp = model.scene?.viewPos else {
+            for e in ufoEntities.values { e.ship.removeFromParent(); e.beam.removeFromParent() }; ufoEntities = [:]; return
+        }
+        var seen = Set<Int>()
+        for u in society.ufos(near: vp, reach: reach + 400) {
+            seen.insert(u.id)
+            let e = ufoEntities[u.id] ?? {
+                let ship = ModelEntity(), beam = ModelEntity()
+                ship.model = model3D(key: "ufo") { Figure3D.ufo() }
+                beam.model = model3D(key: "ufo-beam") { Figure3D.ufoBeam(height: 1) }
+                root.addChild(ship); root.addChild(beam)
+                ufoEntities[u.id] = (ship, beam)
+                return (ship, beam)
+            }()
+            let base = groundY(world, u.pos)
+            e.ship.position = SIMD3(Float(u.pos.x / 16), base + Float(u.z), Float(u.pos.y / 16))
+            e.ship.orientation = simd_quatf(angle: Float(u.spin), axis: [0, 1, 0])
+            e.beam.isEnabled = u.beam && u.z > 0.3
+            e.beam.position = SIMD3(Float(u.pos.x / 16), base, Float(u.pos.y / 16))
+            e.beam.scale = SIMD3(1, max(0.01, Float(u.z) + 0.3), 1)
+        }
+        for (id, e) in ufoEntities where !seen.contains(id) { e.ship.removeFromParent(); e.beam.removeFromParent(); ufoEntities[id] = nil }
+    }
+
     private func updateVehicles(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
         guard society.realm.transportBox != nil, model.depth == 0, let vp = model.scene?.viewPos else {
             for e in vehicleEntities.values { e.removeFromParent() }; vehicleEntities = [:]; return

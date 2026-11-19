@@ -81,6 +81,44 @@ extension GameScene {
         for (id, n) in vehicleNodes where !seen.contains(id) { n.removeFromParent(); vehicleNodes[id] = nil }
     }
 
+    /// The saucers of the UFO airports in view: a disc seen from above, lifted above its shadow by its height,
+    /// a glowing beam under it while it lifts off or lands, its lights turning.
+    func updateUfos2D(_ society: Society, _ model: GameModel) {
+        guard model.depth == 0 else { for n in ufoNodes.values { n.removeFromParent() }; ufoNodes = [:]; return }
+        let reach = 900.0 / Double(max(0.3, zoom)) * 1.4
+        var seen = Set<Int>()
+        for u in society.ufos(near: viewPos, reach: reach) {
+            seen.insert(u.id)
+            let n = ufoNodes[u.id] ?? {
+                let tex = GameScene.ufoTexture ?? {
+                    let t = UfoArt.top(size: 144).cgImage.map { SKTexture(image: UIImage(cgImage: $0, scale: 2, orientation: .up)) } ?? SKTexture()
+                    t.filteringMode = .linear
+                    GameScene.ufoTexture = t
+                    return t
+                }()
+                let s = SKSpriteNode(texture: tex, size: CGSize(width: 72, height: 72))
+                let shadow = SKShapeNode(ellipseOf: CGSize(width: 62, height: 40))
+                shadow.name = "shadow"; shadow.fillColor = UIColor(white: 0, alpha: 0.28); shadow.strokeColor = .clear; shadow.zPosition = -1
+                s.addChild(shadow)
+                let beam = SKShapeNode(ellipseOf: CGSize(width: 54, height: 34))
+                beam.name = "beam"; beam.fillColor = UIColor(red: 0.6, green: 1, blue: 1, alpha: 0.35); beam.strokeColor = .clear; beam.zPosition = -0.5
+                s.addChild(beam)
+                addChild(s)
+                ufoNodes[u.id] = s
+                return s
+            }()
+            let lift = u.z * 6
+            n.position = CGPoint(x: u.pos.x, y: -u.pos.y + lift)
+            n.zRotation = CGFloat(-u.spin * 0.25)
+            n.zPosition = u.landed ? 8.6 : 951
+            if let sh = n.childNode(withName: "shadow") { sh.position = CGPoint(x: 0, y: -lift); sh.alpha = u.landed ? 0 : 1 }
+            if let b = n.childNode(withName: "beam") { b.position = CGPoint(x: 0, y: -lift); b.isHidden = !u.beam }
+        }
+        for (id, n) in ufoNodes where !seen.contains(id) { n.removeFromParent(); ufoNodes[id] = nil }
+    }
+
+    static var ufoTexture: SKTexture?
+
     /// Car drawings by model and paint, made once.
     static var carTextures: [String: SKTexture] = [:]
 

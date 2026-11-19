@@ -153,10 +153,14 @@ public enum Terrain3D {
     /// Height of one storey in levels (2 tiles): room for a wall and a slab.
     public static let storeyLevels = 8
     public static let waterDrop: Float = 0.3
-    public static let maxLevel = 28
+    public static let maxLevel = 64
 
+    /// Height in levels: a gentle rise from the shore through the lowlands, then mountains climbing steeply
+    /// above the mountain line (to 16 tiles at the highest).
     public static func level(elevation e: Double) -> Int {
-        Swift.max(0, Swift.min(maxLevel, Int(((e - Biome.sea) * 24).rounded(.down))))
+        let low = (Swift.min(e, Biome.mountainLevel) - Biome.sea) * 34
+        let high = Swift.max(0, e - Biome.mountainLevel) * 110
+        return Swift.max(0, Swift.min(maxLevel, Int((low + high).rounded(.down))))
     }
 
     /// Top of the ground of one tile.
@@ -220,7 +224,12 @@ extension Generator {
     /// The smooth elevation the 3D heights are read from (the tile detail noise is left out, so
     /// neighbouring tiles do not jitter by one step).
     public func elevation(_ wx: Int, _ wy: Int) -> Double {
-        0.5 + elevBias + 0.62 * nElev.get(Double(wx), Double(wy))
+        let e = 0.5 + elevBias + 0.62 * nElev.get(Double(wx), Double(wy))
+        guard e > Biome.sea else { return e }
+        // rolling hills inland (none at the shore, fuller further from it), and volcanoes on top
+        let inland = Swift.min(1, Swift.max(0, (e - Biome.sea - 0.02) / 0.1))
+        let hills = 0.11 * Swift.max(0, nHill.get(Double(wx), Double(wy)) + 0.15) * inland
+        return e + hills + volcanoLift(wx, wy)
     }
 }
 
@@ -255,6 +264,9 @@ public struct ChunkMesh3D {
     public var sprites = Mesh3D()
     /// Top of the ground of every tile of the chunk (32 x 32).
     public var heights = [Float](repeating: 0, count: MP.chunkArea)
+    /// How bright each tile's ground is drawn for the lie of the land (1 flat; more on slopes facing the light
+    /// from the south-east, less on those turned away): hills, mountains and valleys read in the 3D view.
+    public var relief = [Float](repeating: 1, count: MP.chunkArea)
 }
 
 public enum Mesher3D {
@@ -357,6 +369,15 @@ public enum Mesher3D {
         } }
         func H(_ tx: Int, _ ty: Int) -> Float { h[(ty + 1) * 34 + tx + 1] }
         for ty in 0..<32 { for tx in 0..<32 { out.heights[ty * 32 + tx] = H(tx, ty) } }
+        // relief: the fall of the ground from the north-west to the south-east round each tile (water stays flat)
+        for ty in 0..<32 { for tx in 0..<32 {
+            func G(_ x: Int, _ y: Int) -> Float { let v = H(x, y); return v == Mesher3D.air ? H(tx, ty) : v }
+            let nw = (G(tx - 1, ty - 1) + G(tx - 1, ty) + G(tx, ty - 1)) / 3, se = (G(tx + 1, ty + 1) + G(tx + 1, ty) + G(tx, ty + 1)) / 3
+            // the sun is in the south-east (as for every solid): ground climbing towards the north-west faces it
+            let rise = nw - se
+            let wet = Content.shared.water[Int(g[ty * 32 + tx])]
+            out.relief[ty * 32 + tx] = wet || input.depth == 1 ? 1 : Swift.max(0.55, Swift.min(1.32, 1 + rise * 0.42))
+        } }
 
         // ground tops: runs of equal height along a row become one quad over the ground picture
         func v(_ row: Float) -> Float { flipV ? 1 - row / 32 : row / 32 }
@@ -452,9 +473,10 @@ public enum Mesher3D {
 public extension PixelArt {
     /// The flat part of a chunk as one 512 x 512 picture (ground, paths, roads, bridges): what the
     /// 3D view lays over the ground tops. Pure function of the layers.
-    static func bakeGround(layers: [[UInt8]]) -> Bitmap {
+    static func bakeGround(layers: [[UInt8]], relief: [Float]? = nil) -> Bitmap {
         let at = atlas
         var img = Bitmap(MP.chunkPx, MP.chunkPx)
+        defer { if let r = relief { img.shadeRelief(r, tilePx: 16) } }
         let g = layers[0], st = layers[1]
         let cliff = Content.shared.tid("cliff")
         for i in 0..<MP.chunkArea {

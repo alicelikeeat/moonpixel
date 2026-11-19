@@ -37,7 +37,9 @@ final class LuxuryTests: XCTestCase {
         let d = rich(s)
         XCTAssertNil(s.luxuryToBuild(d), "no villas in a small town")
         d.buildings.append({ var b = CityBuilding(); b.id = 900; b.kind = "highrise"; b.state = .open; b.floors = (0..<20).map { _ in var f = CityFloor(); f.residents = 20; return f }; return b }())
-        XCTAssertEqual(s.luxuryToBuild(d), "villa", "400 people: villas")
+        XCTAssertEqual(s.luxuryToBuild(d), "pool", "400 people: first a public swimming pool")
+        XCTAssertNotNil(nycPut(s, d, "pool"))
+        XCTAssertEqual(s.luxuryToBuild(d), "villa", "then villas")
         var ids: [Int] = []
         for _ in 0..<8 { if let id = nycPut(s, d, "villa") { ids.append(id) } }
         XCTAssertEqual(ids.count, 8)

@@ -70,6 +70,8 @@ public struct CityKind: Equatable {
         // the well-off: villas with gardens, pools and a luxury car each; a dealer's showroom of luxury cars
         CityKind(key: "villa", en: "Villa", zh: "别墅", use: .residential, w: 14, d: 12, storeys: 2, homesPerFloor: 2, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 4, money: 1600, goods: ["stone": 22, "planks": 18, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
         CityKind(key: "showroom", en: "Luxury car showroom", zh: "豪车展厅", use: .commercial, w: 18, d: 12, storeys: 1, homesPerFloor: 0, jobsPerFloor: 16, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 2600, goods: ["stone": 30, "iron": 10, "parts": 8], inputs: [:], outputs: [:]),
+        // a public swimming pool: a lane pool, a paddling pool, loungers, changing rooms
+        CityKind(key: "pool", en: "Swimming pool", zh: "游泳池", use: .commercial, w: 18, d: 13, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 1400, goods: ["stone": 30, "planks": 12, "parts": 4], inputs: [:], outputs: [:]),
         // New York-style towers (see NewYork.swift): setbacks, crowns and spires; and brownstone rows
         CityKind(key: "brownstone", en: "Brownstone row", zh: "褐石联排", use: .residential, w: 12, d: 7, storeys: 4, homesPerFloor: 8, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 500, goods: ["stone": 16, "planks": 8], inputs: [:], outputs: [:]),
         CityKind(key: "pencil", en: "Slim residential tower", zh: "纤细住宅塔", use: .residential, w: 9, d: 9, storeys: 60, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 16, money: 3200, goods: ["stone": 8, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
@@ -316,6 +318,7 @@ extension Society {
     func raiseCity(_ b: CityBuilding, _ d: District) {
         if b.kind == "villa" { raiseVilla(b, d); return }
         if b.kind == "showroom" { raiseShowroom(b, d); return }
+        if b.kind == "pool" { raisePool(b, d); return }
         if Skyline.isTower(b.kind) && b.w >= 9 && b.w == b.d { raiseTower(b, d); return }
         let face = Society.facade(b.kind)
         let wall = content.tid(face.wall), window = content.tid(face.window), floor = content.tid(face.floor), door = content.tid("door_wood")

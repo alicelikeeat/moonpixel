@@ -463,7 +463,11 @@ struct HUDView: View {
             }
             .position(at).allowsHitTesting(false).id("map-me")
         case .maze:
-            Image(systemName: "square.grid.3x3.fill").font(.system(size: 9)).foregroundStyle(Color.purple).position(at).allowsHitTesting(false)
+            EmptyView()
+        case .ufo:
+            Image(systemName: "circle.circle.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.cyan).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+        case .volcano:
+            Image(systemName: "flame.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.orange).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .army:
             Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .airport:
@@ -516,7 +520,8 @@ struct HUDView: View {
                 }
             }
             HStack(spacing: 6) {
-                pill(L("最近的迷宫", "Nearest maze"), "square.grid.3x3.fill") { model.pickNearestMaze() }
+                pill(L("最近的UFO机场", "Nearest UFO port"), "circle.circle.fill") { model.pickNearestUfoPort() }
+                pill(L("最近的火山", "Nearest volcano"), "flame.fill") { model.pickNearestVolcano() }
                 pill(L("关闭", "Close"), "xmark") { model.toggleMap() }
             }
         }

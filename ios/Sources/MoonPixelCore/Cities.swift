@@ -276,7 +276,7 @@ extension Society {
         let cfg = realm.cfg
         let n = realm.player.nation
         if n == 0 { return "nation" }
-        if world.gen.isMaze(center.x >> 5, center.y >> 5) { return "maze" }
+        if world.gen.isUfoPort(center.x >> 5, center.y >> 5) || world.gen.volcano(near: center.x, center.y, radius: 40) != nil { return "maze" }
         if settlements.values.contains(where: { !$0.abandoned && ($0.center - center).lengthSquared < cfg.cityMinGap * cfg.cityMinGap }) { return "close" }
         if livingSettlements >= world.budget.maxSettlements { return "limit" }
         var beds = 0, stores = 0

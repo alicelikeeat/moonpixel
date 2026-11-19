@@ -58,7 +58,7 @@ public final class Generator {
     public var tempBias = 0.0, moistBias = 0.0, elevBias = 0.0
     public var depth = 0
     let content = Content.shared
-    let nElev, nTemp, nMoist, nRiver, nForest, nDetail: Noise
+    let nElev, nTemp, nMoist, nRiver, nForest, nDetail, nHill: Noise
     var ground = [UInt8](), alt = [UInt8](), altCh = [Double](), density = [Double]()
     var trees = [[(UInt8, Double)]](), objects = [[(UInt8, Double)]](), decor = [[(UInt8, Double)]]()
     let tDeep, tWater, tShallow, tIce, tSand, tMud, tSnow, tCliff, tReeds, tLily: UInt8
@@ -71,6 +71,7 @@ public final class Generator {
         nRiver = Noise(seed: seed + 4, frequency: 0.005, octaves: 2)
         nForest = Noise(seed: seed + 5, frequency: 0.035, octaves: 2)
         nDetail = Noise(seed: seed + 6, frequency: 0.09, octaves: 1)
+        nHill = Noise(seed: seed + 7, frequency: 0.011, octaves: 3)
         let c = Content.shared
         tDeep = c.tid("deep_water"); tWater = c.tid("water"); tShallow = c.tid("shallow_water"); tIce = c.tid("ice")
         tSand = c.tid("sand"); tMud = c.tid("mud"); tSnow = c.tid("snow"); tCliff = c.tid("cliff"); tReeds = c.tid("reeds"); tLily = c.tid("lily_pad")
@@ -120,6 +121,11 @@ public final class Generator {
                 g[i] = lake
             } else if MP.h01(seed &+ 5, wx, wy) < 0.012 { de[i] = ct.tid("mushroom") }
         } }
+        if isUnderCity(cx, cy) {
+            carveUnderCity(cx, cy, &g, &ob, &de)
+            c.layers = [g, st, ob, de]
+            return c
+        }
         // one ruin in every 3x3 block of chunks
         let rx = Int((Double(cx) / 3).rounded(.down)), ry = Int((Double(cy) / 3).rounded(.down))
         let h = MP.h2(seed &+ 555, rx, ry)
@@ -223,54 +229,196 @@ public final class Generator {
                 }
             }
         }
-        if isMaze(cx, cy) { carveMaze(cx, cy, &g, &st, &ob, &de) }
+        // landmarks: a volcano's cone and crater, a UFO airport, the stairway down to an underground city
+        if let v = volcano(near: bx + 16, by + 16, radius: 48) { shapeVolcano(v, cx, cy, &g, &st, &ob, &de) }
+        if isUfoPort(cx, cy) { carveUfoPort(cx, cy, &g, &st, &ob, &de) }
+        else if isUnderCity(cx, cy) && volcano(near: bx + 16, by + 16, radius: 40) == nil { carveCityStair(&g, &st, &ob, &de) }
         c.layers = [g, st, ob, de]
         return c
     }
 
-    /// One chunk in every 6x6 block of chunks holds an old maze - if it stands on
-    /// land and is not near where the first villages are founded.
-    public func isMaze(_ cx: Int, _ cy: Int) -> Bool {
+    /// The old mazes are gone from the world (kept as a name: always false).
+    public func isMaze(_ cx: Int, _ cy: Int) -> Bool { false }
+
+    // MARK: landmarks
+
+    /// One chunk in every 6x6 block of chunks (where the mazes were) is a UFO airport, on land and away from
+    /// where the first villages are founded.
+    public func isUfoPort(_ cx: Int, _ cy: Int) -> Bool {
         if depth > 0 { return false }
         let rx = Int((Double(cx) / 6).rounded(.down)), ry = Int((Double(cy) / 6).rounded(.down))
         let h = MP.h2(seed &+ 77, rx, ry)
         if rx * 6 + Int(h % 6) != cx || ry * 6 + Int((h >> 8) % 6) != cy { return false }
         if abs(cx) <= 3 && abs(cy) <= 3 { return false }
         let e = climate(cx * 32 + 16, cy * 32 + 16).0
-        return e > Biome.sea + 0.03 && e < Biome.mountainLevel - 0.03
+        guard e > Biome.sea + 0.03 && e < Biome.mountainLevel - 0.03 else { return false }
+        return volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 40) == nil
     }
 
-    func carveMaze(_ cx: Int, _ cy: Int, _ g: inout [UInt8], _ st: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
-        let c = Content.shared
-        let wall = c.tid("ruin_wall"), floor = c.tid("ruin_floor"), chest = c.tid("chest"), torch = c.tid("torch"), bones = c.tid("bones")
-        var r = RNG(seed: Int(MP.h2(seed &+ 991, cx, cy)))
-        // 15 x 15 cells on odd coordinates of a 31 x 31 grid; depth-first carving
-        var open = [Bool](repeating: false, count: 31 * 31)
-        var stack = [(1, 1)]
-        open[1 * 31 + 1] = true
-        while let cur = stack.last {
-            var opts: [(Int, Int)] = []
-            for (dx, dy) in [(2, 0), (-2, 0), (0, 2), (0, -2)] {
-                let nx = cur.0 + dx, ny = cur.1 + dy
-                if nx > 0 && ny > 0 && nx < 30 && ny < 30 && !open[ny * 31 + nx] { opts.append((nx, ny)) }
-            }
-            if opts.isEmpty { stack.removeLast(); continue }
-            let n = opts[r.index(opts.count)]
-            open[((cur.1 + n.1) / 2) * 31 + (cur.0 + n.0) / 2] = true
-            open[n.1 * 31 + n.0] = true
-            stack.append(n)
-        }
-        for y in 14...16 { for x in 14...16 { open[y * 31 + x] = true } }      // treasure room
-        open[30 * 31 + 15] = true; open[29 * 31 + 15] = true                   // south gate
-        open[0 * 31 + 15] = true; open[1 * 31 + 15] = true                     // north gate
-        for y in 0..<31 { for x in 0..<31 {
-            let i = y * 32 + x
-            g[i] = floor; st[i] = 0; de[i] = 0
-            ob[i] = open[y * 31 + x] ? 0 : wall
-            if open[y * 31 + x] && r.unit() < 0.03 { de[i] = bones }
-            if open[y * 31 + x] && r.unit() < 0.02 { ob[i] = torch }
+    /// A volcano: one in every 8x8 block of chunks may have one (on land, away from the first villages), its
+    /// centre somewhere in the block's middle; the cone is `r` tiles across the base.
+    public struct Volcano: Equatable { public let x: Int, y: Int, r: Int }
+
+    /// The volcano whose centre is within `radius` tiles of (wx, wy), if any.
+    public func volcano(near wx: Int, _ wy: Int, radius: Int) -> Volcano? {
+        if depth > 0 { return nil }
+        let bxs = Int((Double(wx) / 256).rounded(.down)), bys = Int((Double(wy) / 256).rounded(.down))
+        for by in (bys - 1)...(bys + 1) { for bx in (bxs - 1)...(bxs + 1) {
+            let h = MP.h2(seed &+ 4242, bx, by)
+            guard h % 3 == 0 else { continue }                                   // a third of the blocks
+            let vx = bx * 256 + 64 + Int((h >> 4) % 128), vy = by * 256 + 64 + Int((h >> 12) % 128)
+            if abs(vx) < 200 && abs(vy) < 200 { continue }
+            let dx = vx - wx, dy = vy - wy
+            guard dx * dx + dy * dy <= radius * radius else { continue }
+            let e = climate(vx, vy).0
+            guard e > Biome.sea + 0.06 else { continue }
+            return Volcano(x: vx, y: vy, r: 26)
         } }
-        ob[15 * 32 + 15] = chest
+        return nil
+    }
+
+    /// How much a volcano raises the ground at (wx, wy): a cone rising to its rim, the crater sunk in the top.
+    func volcanoLift(_ wx: Int, _ wy: Int) -> Double {
+        guard let v = volcano(near: wx, wy, radius: 30) else { return 0 }
+        let d = Double((v.x - wx) * (v.x - wx) + (v.y - wy) * (v.y - wy)).squareRoot()
+        let R = Double(v.r)
+        guard d < R else { return 0 }
+        // a steep cone (its upper slopes past the mountain line, where the land climbs fastest)
+        var lift = 0.62 * pow(1 - d / R, 1.15)
+        if d < 5.5 { lift -= 0.24 * (1 - d / 5.5) }                                 // the crater
+        return lift
+    }
+
+    /// A volcano on the tiles of this chunk: black basalt slopes with scattered rocks, the crater a pool of lava
+    /// with a rim, two lava streams running down the sides; no trees on it.
+    func shapeVolcano(_ v: Volcano, _ cx: Int, _ cy: Int, _ g: inout [UInt8], _ st: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
+        let c = Content.shared
+        let basalt = c.tid("basalt"), lava = c.tid("lava"), rock = c.tid("rock"), pebbles = c.tid("pebbles")
+        let h0 = MP.h2(seed &+ 4243, v.x, v.y)
+        let a1 = Double(h0 % 628) / 100, a2 = a1 + 2.2 + Double((h0 >> 10) % 100) / 100
+        for ty in 0..<32 { for tx in 0..<32 {
+            let wx = cx * 32 + tx, wy = cy * 32 + ty
+            let dx = Double(wx - v.x), dy = Double(wy - v.y), d = (dx * dx + dy * dy).squareRoot()
+            guard d < Double(v.r) else { continue }
+            let i = ty * 32 + tx
+            st[i] = 0; ob[i] = 0; de[i] = 0
+            g[i] = basalt
+            if d < 3.6 { g[i] = lava; continue }
+            // the streams: lava along two directions out of the crater, narrowing as they run down
+            let ang = atan2(dy, dx)
+            for a in [a1, a2] {
+                var da = abs(ang - a).truncatingRemainder(dividingBy: 2 * .pi); if da > .pi { da = 2 * .pi - da }
+                let wob = sin(d * 0.5 + a * 3) * 0.06
+                if d < Double(v.r) * 0.75 && da < 0.11 - d * 0.0025 + wob { g[i] = lava }
+            }
+            if g[i] == basalt {
+                let r = MP.h01(seed &+ 4244, wx, wy)
+                if d > 7 && r < 0.03 { ob[i] = rock } else if r < 0.12 { de[i] = pebbles }
+            }
+        } }
+    }
+
+    /// A UFO airport: a round landing pad of glowing metal with a ring of beacon lamps, a glass control
+    /// tower with its antenna and servers, crates of supplies, and a road in from the south.
+    func carveUfoPort(_ cx: Int, _ cy: Int, _ g: inout [UInt8], _ st: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
+        let c = Content.shared
+        let pad = c.tid("ufo_pad"), lamp = c.tid("lamp_on"), stoneF = c.tid("stone_floor"), glass = c.tid("wall_glass")
+        let steel = c.tid("spire_steel"), door = c.tid("door_wood")
+        for y in 0..<32 { for x in 0..<32 {
+            let i = y * 32 + x
+            let dx = Double(x) - 15.5, dy = Double(y) - 13.5, d = (dx * dx + dy * dy).squareRoot()
+            if d < 12.5 {
+                st[i] = 0; ob[i] = 0; de[i] = 0
+                g[i] = d < 10.5 ? pad : stoneF
+                // beacons round the pad, sixteen of them
+                if d >= 10.5 && d < 11.5 {
+                    let a = atan2(dy, dx), k = (a + .pi) / (2 * .pi) * 16
+                    if abs(k - k.rounded()) < 0.18 { ob[i] = lamp }
+                }
+            }
+        } }
+        // the control tower in the south-west corner, glass with steel corners, its antenna and servers inside
+        for y in 25...30 { for x in 1...6 {
+            let i = y * 32 + x
+            st[i] = 0; de[i] = 0; g[i] = stoneF
+            let edge = x == 1 || x == 6 || y == 25 || y == 30, corner = (x == 1 || x == 6) && (y == 25 || y == 30)
+            ob[i] = edge ? (x == 3 && y == 25 ? door : (corner ? steel : glass)) : 0
+        } }
+        ob[27 * 32 + 3] = c.tid("server"); ob[27 * 32 + 4] = c.tid("desk"); ob[29 * 32 + 5] = c.tid("antenna")
+        for (x, y) in [(26, 26), (27, 26), (26, 27), (28, 28)] { st[y * 32 + x] = 0; ob[y * 32 + x] = c.tid("crate"); g[y * 32 + x] = stoneF }
+        // the road in from the south edge to the pad
+        for y in 24...31 { for x in 15...16 { let i = y * 32 + x; st[i] = 0; ob[i] = 0; de[i] = 0; g[i] = stoneF } }
+    }
+
+    /// One chunk in every 5x5 block of chunks holds an underground city (not under a ruin).
+    public func isUnderCity(_ cx: Int, _ cy: Int) -> Bool {
+        let rx = Int((Double(cx) / 5).rounded(.down)), ry = Int((Double(cy) / 5).rounded(.down))
+        let h = MP.h2(seed &+ 888, rx, ry)
+        guard rx * 5 + Int(h % 5) == cx && ry * 5 + Int((h >> 8) % 5) == cy else { return false }
+        if abs(cx) <= 2 && abs(cy) <= 2 { return false }
+        let rr = Int((Double(cx) / 3).rounded(.down)), rr2 = Int((Double(cy) / 3).rounded(.down))
+        let hr = MP.h2(seed &+ 555, rr, rr2)
+        return !(rr * 3 + Int(hr % 3) == cx && rr2 * 3 + Int((hr >> 8) % 3) == cy)
+    }
+
+    /// On the surface over an underground city: a small stone gatehouse round a stairway down, lamps at its door.
+    func carveCityStair(_ g: inout [UInt8], _ st: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
+        let c = Content.shared
+        let wall = c.tid("wall_stone"), floor = c.tid("stone_floor")
+        for y in 13...19 { for x in 13...19 {
+            let i = y * 32 + x
+            st[i] = 0; de[i] = 0; g[i] = floor
+            let edge = x == 13 || x == 19 || y == 13 || y == 19
+            ob[i] = edge && !(x == 16 && y == 19) ? wall : 0
+        } }
+        ob[16 * 32 + 16] = c.tid("stairs_down")
+        ob[20 * 32 + 15] = c.tid("lantern_post"); ob[20 * 32 + 17] = c.tid("lantern_post")
+        for y in 20...22 { for x in 15...17 where ob[y * 32 + x] == 0 { let i = y * 32 + x; st[i] = 0; g[i] = floor } }
+    }
+
+    /// An underground city filling a cave chunk: a wall round it with four gates, paved streets on a grid,
+    /// lamp posts along them, stone and brick houses with doors, beds, tables and chests, a market of stalls
+    /// on the central square round a statue and a well, banners, and the stairway up to the surface.
+    func carveUnderCity(_ cx: Int, _ cy: Int, _ g: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
+        let c = Content.shared
+        let wall = c.tid("wall_stone"), brick = c.tid("wall_brick"), street = c.tid("stone_floor"), house = c.tid("wood_floor")
+        let door = c.tid("door_wood"), lamp = c.tid("lantern_post")
+        var r = RNG(seed: Int(MP.h2(seed &+ 889, cx, cy)))
+        for y in 1...30 { for x in 1...30 {
+            let i = y * 32 + x
+            g[i] = street; de[i] = 0; ob[i] = 0
+            let edge = x == 1 || x == 30 || y == 1 || y == 30
+            let gate = (x == 15 || x == 16) && (y == 1 || y == 30) || (y == 15 || y == 16) && (x == 1 || x == 30)
+            if edge && !gate { ob[i] = wall }
+        } }
+        // blocks between the streets (streets on rows/columns 2-3, 9-10, 15-16, 21-22, 28-29): a house in each
+        let starts = [4, 11, 17, 23]
+        for by in starts { for bx in starts {
+            if (bx == 11 || bx == 17) && (by == 11 || by == 17) { continue }      // the square
+            let w = 5, h = 4
+            let mat = r.unit() < 0.5 ? wall : brick
+            for y in by..<(by + h) { for x in bx..<(bx + w) {
+                let i = y * 32 + x
+                g[i] = house
+                let edge = x == bx || x == bx + w - 1 || y == by || y == by + h - 1
+                ob[i] = edge ? mat : 0
+            } }
+            ob[(by + h - 1) * 32 + bx + 2] = door
+            ob[(by + 1) * 32 + bx + 1] = c.tid("bed")
+            ob[(by + 1) * 32 + bx + 3] = r.unit() < 0.35 ? c.tid("chest") : c.tid("table")
+            ob[(by + 2) * 32 + bx + 3] = r.unit() < 0.5 ? c.tid("barrel") : c.tid("bookshelf")
+            // a lamp at the corner of the block
+            if ob[(by - 1) * 32 + bx - 1] == 0 { ob[(by - 1) * 32 + bx - 1] = lamp }
+        } }
+        // the square: a statue, a well, market stalls, banners at its corners
+        ob[14 * 32 + 15] = c.tid("statue")
+        ob[13 * 32 + 16] = c.tid("chest")                                     // the city's vault, by the statue
+        ob[17 * 32 + 16] = c.tid("well")
+        for (x, y) in [(12, 12), (19, 12), (12, 19), (19, 19)] { ob[y * 32 + x] = c.tid("market_stall") }
+        for (x, y) in [(11, 11), (20, 11), (11, 20), (20, 20)] { ob[y * 32 + x] = c.tid("banner_1") }
+        for (x, y) in [(13, 15), (18, 16)] { de[y * 32 + x] = c.tid("fallen_leaves") }
+        // the stairway up, at the spot of the gatehouse's stairs above
+        ob[16 * 32 + 16] = c.tid("stairs_up")
     }
 }
 

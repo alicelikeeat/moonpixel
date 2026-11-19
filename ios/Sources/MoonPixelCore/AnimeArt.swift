@@ -455,6 +455,23 @@ public enum AnimeArt {
             case "ice":
                 c.rect(0, 0, g, g, c1)
                 c.line(4, 10, 14, 6, 1.0, .white); c.line(18, 24, 26, 18, 1.0, RGBA(255, 255, 255, 180))
+            case "basalt":
+                c.rect(0, 0, g, g, c1)
+                for _ in 0..<6 { c.ellipse(r.range(2, g - 2), r.range(2, g - 2), r.range(2, 4), r.range(1.2, 2.4), shadowed(c1, 0.2)) }
+                c.line(r.range(2, 10), r.range(4, 28), r.range(14, 30), r.range(4, 28), 0.7, c2.darkened(0.3))
+                if r.unit() < 0.5 { c.ellipse(r.range(4, 28), r.range(4, 28), 0.9, 0.9, c3) }
+            case "lava":
+                // a glowing pool: bright cores, crusted plates with dark cracks between, a few sparks
+                c.rect(0, 0, g, g, c1)
+                for _ in 0..<4 { c.ellipse(r.range(3, g - 3), r.range(3, g - 3), r.range(3, 6), r.range(2, 4), c3) }
+                for _ in 0..<3 { c.ellipse(r.range(4, g - 4), r.range(4, g - 4), r.range(3, 5), r.range(2.5, 4), c2.darkened(0.35)) }
+                for _ in 0..<3 { c.curve([(r.range(0, g), r.range(0, g)), (r.range(0, g), r.range(0, g)), (r.range(0, g), r.range(0, g))], 0.8, c2) }
+                c.ellipse(r.range(6, 26), r.range(6, 26), 0.8, 0.8, RGBA(255, 250, 220))
+            case "ufo_pad":
+                c.rect(0, 0, g, g, c1)
+                c.rect(0, 0, g, 1.2, c2); c.rect(0, 0, 1.2, g, c2); c.rect(0, 15.4, g, 1.2, c2); c.rect(15.4, 0, 1.2, g, c2)
+                for (x, y) in [(7.0, 7.0), (23, 23)] { c.ellipse(x, y, 2.2, 2.2, c3); c.ellipse(x, y, 1.0, 1.0, .white) }
+                c.line(2, 30, 12, 20, 0.6, RGBA(255, 255, 255, 120))
             case "asphalt", "highway":
                 c.rect(0, 0, g, g, c1)
                 for _ in 0..<14 { c.ellipse(r.range(0, g), r.range(0, g), 0.6, 0.6, shadowed(c1, 0.15)) }
@@ -827,9 +844,10 @@ public enum AnimeArt {
     }
 
     /// Ground for the 3D view in the anime style (1024 x 1024: the painted 32 x 32 ground of every tile).
-    public static func bakeGround(layers: [[UInt8]]) -> Bitmap {
+    public static func bakeGround(layers: [[UInt8]], relief: [Float]? = nil) -> Bitmap {
         let at = atlas, cl = cell
         var img = Bitmap(MP.chunkPx * 2, MP.chunkPx * 2)
+        defer { if let r = relief { img.shadeRelief(r, tilePx: 32) } }
         let g = layers[0], st = layers[1]
         let cliff = Content.shared.tid("cliff")
         for i in 0..<MP.chunkArea {

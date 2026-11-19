@@ -250,43 +250,10 @@ final class SystemsTests: XCTestCase {
         XCTAssertEqual(s2.realm.player.artifacts?.count, Power.all.count); XCTAssertEqual(s2.realm.arsenal, s.realm.arsenal)
     }
 
-    func testMazesAreDeterministicSolvableAndHoldTreasure() {
+    func testThereAreNoMazesAnyMore() {
         let w = OpenWorld(seed: 9, budget: MemoryBudget(overrideMB: 256))
         let s = Society(world: w, seed: 9)
-        s.bootstrap(origin: TilePos(0, 0), villages: 3, per: 6)
-        guard let m = s.nearestMaze(cx: 0, cy: 0) else { return XCTFail("no maze within reach") }
-        XCTAssertEqual(m.0, s.nearestMaze(cx: 0, cy: 0)!.0)
-        XCTAssertTrue(Generator(seed: 9).isMaze(m.0, m.1), "same seed, same mazes")
-        for t in s.settlements.values { XCTAssertFalse(w.gen.isMaze(t.center.x >> 5, t.center.y >> 5), "no town is founded on a maze") }
-        let ox = m.0 * 32, oy = m.1 * 32
-        let chest = TilePos(ox + 15, oy + 15)
-        XCTAssertEqual(w.tile(2, chest.x, chest.y), s.T["chest"])
-        XCTAssertTrue(w.blocked(ox, oy), "walls")
-        // breadth-first from the south gate to the tile beside the chest
-        var seen = Set<TilePos>([TilePos(ox + 15, oy + 30)])
-        var queue = [TilePos(ox + 15, oy + 30)]
-        var found = false
-        while !queue.isEmpty && !found {
-            let c = queue.removeFirst()
-            for d in [TilePos(1, 0), TilePos(-1, 0), TilePos(0, 1), TilePos(0, -1)] {
-                let n = c + d
-                if n.x < ox || n.y < oy || n.x > ox + 30 || n.y > oy + 30 || seen.contains(n) { continue }
-                if n == chest { found = true; break }
-                if w.blocked(n.x, n.y) { continue }
-                seen.insert(n); queue.append(n)
-            }
-        }
-        XCTAssertTrue(found, "the treasure can be reached from the gate")
-        XCTAssertGreaterThan(seen.count, 60, "and it takes some walking")
-        let first = s.playerOpenChest(at: chest)
-        XCTAssertTrue(first.ok); XCTAssertNotNil(first.power)
-        XCTAssertGreaterThanOrEqual(first.power!.tier, 3)
-        XCTAssertTrue(s.playerPowers().contains { $0.key == first.power!.key }, "the artifact is usable")
-        XCTAssertEqual(s.realm.player.wood, 30)
-        XCTAssertFalse(s.playerOpenChest(at: chest).ok, "a chest gives once")
-        XCTAssertFalse(s.playerOpenChest(at: s.settlements[1]!.center + TilePos(-2, -2)).ok, "a town's chest is not treasure")
-        // guardians
-        for _ in 0..<20 { _ = s.faunaTick(0.5, viewer: TilePos(ox + 15, oy + 28).center, mazeHere: true) }
-        XCTAssertTrue(s.realm.fauna.animals.contains { $0.species.key == "golem" })
+        XCTAssertNil(s.nearestMaze(cx: 0, cy: 0))
+        for y in -12...12 { for x in -12...12 { XCTAssertFalse(w.gen.isMaze(x, y)) } }
     }
 }

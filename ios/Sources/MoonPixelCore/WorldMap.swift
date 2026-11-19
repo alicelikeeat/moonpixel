@@ -10,7 +10,7 @@ import Foundation
 // they are. A pixel of the picture is a known square of tiles, so a tap on it names one tile.
 
 public struct MapMarker: Equatable {
-    public enum Kind: String { case player, town, capital, city, district, airport, maze, army }
+    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano }
     public var kind: Kind
     public var name: String
     public var color: String               // hex
@@ -179,8 +179,13 @@ public final class WorldMap {
         }
         for d in s.net.districts { add(.district, d.name, "#dfe6f2", d.center) }
         for st in s.net.stops where st.kind == .airport && st.name.contains(zh ? "机场" : "Airport") && !st.name.contains(zh ? "货运" : "Cargo") { add(.airport, st.name, "#9fd3ff", st.tile) }
-        for y in 0..<side { for x in 0..<side where world.known(origin.x + x, origin.y + y) != 0 && world.gen.isMaze(origin.x + x, origin.y + y) {
-            add(.maze, zh ? "迷宫" : "Maze", "#c86eff", TilePos((origin.x + x) * 32 + 15, (origin.y + y) * 32 + 33))
+        var volcanoes = Set<TilePos>()
+        for y in 0..<side { for x in 0..<side where world.known(origin.x + x, origin.y + y) != 0 {
+            let cx = origin.x + x, cy = origin.y + y
+            if world.gen.isUfoPort(cx, cy) { add(.ufo, zh ? "UFO 机场" : "UFO airport", "#6af0ff", TilePos(cx * 32 + 15, cy * 32 + 13)) }
+            if let v = world.gen.volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 23), volcanoes.insert(TilePos(v.x, v.y)).inserted {
+                add(.volcano, zh ? "火山" : "Volcano", "#ff5a1a", TilePos(v.x, v.y))
+            }
         } }
         for lg in s.realm.legions where lg.state != 0 { add(.army, zh ? "军队" : "Army", s.realm.nation(lg.nation)?.color ?? "#ffffff", lg.pos.tile) }
         add(.player, zh ? "你" : "You", "#7fe6ff", centre)
@@ -195,6 +200,12 @@ public final class WorldMap {
         let e = gen.elevation(t.x, t.y)
         if e < Biome.sea { return zh ? "水面（会落在最近的岸边）" : "Water (you land on the nearest shore)" }
         if gen.isRiver(t.x, t.y, e) { return zh ? "河边" : "Riverside" }
+        if let v = gen.volcano(near: t.x, t.y, radius: 26) {
+            let d = Int(Double((v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y)).squareRoot())
+            return d < 4 ? (zh ? "火山口（熔岩）" : "Volcano crater (lava)") : (zh ? "火山坡" : "Volcano slope")
+        }
+        if gen.isUfoPort(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) { return zh ? "UFO 机场" : "UFO airport" }
+        if e > Biome.mountainLevel + 0.12 { return zh ? "高山" : "High mountains" }
         if e > Biome.mountainLevel { return zh ? "山地" : "Mountains" }
         let b = Content.shared.biomes[min(Content.shared.biomes.count - 1, max(0, gen.biome(t.x, t.y)))]
         return zh ? b.nameZh : b.nameEn

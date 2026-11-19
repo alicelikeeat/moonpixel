@@ -150,6 +150,9 @@ enum ContentData {
         TileDef(id: 167, key: "wall_deco", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wall", c1: "#d8cfb8", c2: "#9a8c70", c3: "#c9a24a", stage: 0, nameEn: "Art Deco Wall", nameZh: "装饰艺术墙"),
         TileDef(id: 168, key: "wall_brownstone", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wall", c1: "#8a5a44", c2: "#6a4232", c3: "#2e2a28", stage: 0, nameEn: "Brownstone Wall", nameZh: "褐石墙"),
         TileDef(id: 169, key: "spire_steel", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wall", c1: "#d6dde4", c2: "#8e9aa6", c3: "#f2f6fa", stage: 0, nameEn: "Steel Spire", nameZh: "不锈钢尖顶"),
+        TileDef(id: 170, key: "basalt", layer: 0, solid: false, water: false, bridge: false, natural: false, big: false, built: false, walk: 0.95, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "basalt", c1: "#6a5e58", c2: "#4e4440", c3: "#8a6a52", stage: 0, nameEn: "Basalt", nameZh: "玄武岩"),
+        TileDef(id: 171, key: "lava", layer: 0, solid: true, water: false, bridge: false, natural: false, big: false, built: false, walk: 1.0, light: 10, growTo: "", growTime: 0.0, after: "", artKind: "lava", c1: "#ff6a18", c2: "#c8280c", c3: "#ffd84a", stage: 0, nameEn: "Lava", nameZh: "熔岩"),
+        TileDef(id: 172, key: "ufo_pad", layer: 0, solid: false, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 4, growTo: "", growTime: 0.0, after: "", artKind: "ufo_pad", c1: "#b8c2d0", c2: "#8a96a6", c3: "#6af0ff", stage: 0, nameEn: "UFO Landing Pad", nameZh: "UFO 停机坪"),
     ]
 
     static let biomes: [BiomeDef] = [

@@ -352,8 +352,25 @@ extension Society {
         return true
     }
 
-    // MARK: mazes
-    /// Open the treasure at the heart of a maze. Each chest gives once.
+    // MARK: treasure
+    /// The vault of an underground city (the chest by the statue on its square): food, wood and stone, and an
+    /// artifact of power the player does not have yet. Each vault gives once.
+    public func playerOpenVault(at t: TilePos) -> (ok: Bool, power: Power?) {
+        let u = underworld()
+        let lx = t.x - OpenWorld.floorDiv(t.x, 32) * 32, ly = t.y - OpenWorld.floorDiv(t.y, 32) * 32
+        guard lx == 16 && ly == 13, u.tile(2, t.x, t.y) == T["chest"], u.gen.isUnderCity(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) else { return (false, nil) }
+        u.setTile(2, t.x, t.y, content.tid("altar_pure"))
+        realm.player.food += 30; realm.player.wood += 30; realm.player.stone += 30
+        var r = RNG(seed: world.seed &+ t.x &* 31 &+ t.y)
+        let have = Set(realm.player.artifacts ?? [])
+        let pool = Power.all.filter { !have.contains($0.key) && $0.tier >= 3 }
+        guard !pool.isEmpty else { return (true, nil) }
+        let p = pool[r.index(pool.count)]
+        realm.player.artifacts = (realm.player.artifacts ?? []) + [p.key]
+        return (true, p)
+    }
+
+    /// Open the treasure at the heart of a maze (there are no mazes any more). Each chest gives once.
     public func playerOpenChest(at t: TilePos) -> (ok: Bool, power: Power?) {
         guard world.tile(2, t.x, t.y) == T["chest"], world.gen.isMaze(t.x >> 5, t.y >> 5) else { return (false, nil) }
         world.setTile(2, t.x, t.y, content.tid("altar_pure"))          // an opened chest stays opened
@@ -367,7 +384,29 @@ extension Society {
         return (true, p)
     }
 
-    /// Nearest maze to a chunk, searching outwards.
+    /// The nearest UFO airport (its chunk), searching outwards from a chunk.
+    public func nearestUfoPort(cx: Int, cy: Int, within r: Int = 24) -> (Int, Int)? {
+        var best: (Int, Int)?, bd = Int.max
+        for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where world.gen.isUfoPort(x, y) {
+            let d = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+            if d < bd { bd = d; best = (x, y) }
+        } }
+        return best
+    }
+
+    /// The nearest volcano (its centre tile) within `r` tiles.
+    public func nearestVolcano(near t: TilePos, within r: Int = 900) -> TilePos? {
+        var best: TilePos?, bd = Int.max
+        for by in stride(from: t.y - r, through: t.y + r, by: 256) { for bx in stride(from: t.x - r, through: t.x + r, by: 256) {
+            if let v = world.gen.volcano(near: bx, by, radius: 260) {
+                let d = (v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y)
+                if d < bd { bd = d; best = TilePos(v.x, v.y) }
+            }
+        } }
+        return best
+    }
+
+    /// Nearest maze to a chunk, searching outwards (there are none any more).
     public func nearestMaze(cx: Int, cy: Int, within r: Int = 24) -> (Int, Int)? {
         var best: (Int, Int)?, bestD = Int.max
         for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where world.gen.isMaze(x, y) {

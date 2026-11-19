@@ -45,6 +45,9 @@ extension Society {
     func luxuryToBuild(_ d: District) -> String? {
         let pop = d.population
         guard pop >= 300 else { return nil }
+        // a public swimming pool from 400 people, another for every 1500 more
+        let pools = d.buildings.filter { $0.kind == "pool" && $0.state != .burnt }.count
+        if pop >= 400 && pools < 1 + (pop - 400) / 1500 { return "pool" }
         let villas = d.buildings.filter { $0.kind == "villa" && $0.state != .burnt }.count
         if villas >= 8 && !d.buildings.contains(where: { $0.kind == "showroom" && $0.state != .burnt }) { return "showroom" }
         let want = min(24, 1 + (pop - 300) / 120)

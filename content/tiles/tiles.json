@@ -2783,6 +2783,56 @@
 "en": "Steel Spire",
 "zh": "不锈钢尖顶"
 }
+},
+{
+"id": 170,
+"key": "basalt",
+"layer": 0,
+"walk": 0.95,
+"art": [
+"basalt",
+"#6a5e58",
+"#4e4440",
+"#8a6a52"
+],
+"name": {
+"en": "Basalt",
+"zh": "玄武岩"
+}
+},
+{
+"id": 171,
+"key": "lava",
+"layer": 0,
+"solid": 1,
+"light": 10,
+"art": [
+"lava",
+"#ff6a18",
+"#c8280c",
+"#ffd84a"
+],
+"name": {
+"en": "Lava",
+"zh": "熔岩"
+}
+},
+{
+"id": 172,
+"key": "ufo_pad",
+"layer": 0,
+"built": 1,
+"light": 4,
+"art": [
+"ufo_pad",
+"#b8c2d0",
+"#8a96a6",
+"#6af0ff"
+],
+"name": {
+"en": "UFO Landing Pad",
+"zh": "UFO 停机坪"
+}
 }
 ]
 }

@@ -156,3 +156,22 @@ extension Mesh3D {
         }
     }
 }
+
+extension Bitmap {
+    /// Brighten or darken a chunk's ground picture by the relief of its tiles (32 x 32 values), blended smoothly
+    /// across each tile so slopes shade softly rather than in squares.
+    mutating func shadeRelief(_ r: [Float], tilePx: Int) {
+        guard r.count == MP.chunkArea else { return }
+        func R(_ x: Int, _ y: Int) -> Float { r[Swift.min(31, Swift.max(0, y)) * 32 + Swift.min(31, Swift.max(0, x))] }
+        let tp = Float(tilePx)
+        for py in 0..<h { for px in 0..<w {
+            let fx = (Float(px) + 0.5) / tp - 0.5, fy = (Float(py) + 0.5) / tp - 0.5
+            let x0 = Int(fx.rounded(.down)), y0 = Int(fy.rounded(.down))
+            let ax = fx - Float(x0), ay = fy - Float(y0)
+            let k = (R(x0, y0) * (1 - ax) + R(x0 + 1, y0) * ax) * (1 - ay) + (R(x0, y0 + 1) * (1 - ax) + R(x0 + 1, y0 + 1) * ax) * ay
+            if abs(k - 1) < 0.004 { continue }
+            let i = (py * w + px) * 4
+            for c in 0..<3 { self.px[i + c] = UInt8(Swift.max(0, Swift.min(255, Float(self.px[i + c]) * k))) }
+        } }
+    }
+}

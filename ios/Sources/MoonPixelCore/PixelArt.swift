@@ -199,6 +199,18 @@ public enum PixelArt {
             case "ice":
                 img.speck(ox, oy, 16, 16, c2, salt: salt, density: 0.08)
                 img.rect(ox + 3, oy + 5, 6, 1, .white)
+            case "basalt":
+                img.speck(ox, oy, 16, 16, c2, salt: salt, density: 0.18)
+                img.rect(ox + 2, oy + 6, 5, 1, c2.darkened(0.3)); img.rect(ox + 9, oy + 11, 4, 1, c2.darkened(0.3))
+                img.speck(ox, oy, 16, 16, c3, salt: salt + 3, density: 0.03)
+            case "lava":
+                // molten rock: dark crusted cracks over a bright glow
+                img.speck(ox, oy, 16, 16, c3, salt: salt + 1, density: 0.22)
+                for (x, y, w) in [(1, 4, 6), (8, 9, 7), (3, 13, 5), (11, 2, 4)] { img.rect(ox + x, oy + y, w, 1, c2) }
+            case "ufo_pad":
+                for x in [0, 8] { img.rect(ox + x, oy, 1, 16, c2) }
+                for y in [0, 8] { img.rect(ox, oy + y, 16, 1, c2) }
+                img.rect(ox + 3, oy + 3, 2, 2, c3); img.rect(ox + 11, oy + 11, 2, 2, c3)
             default:
                 img.speck(ox, oy, 16, 16, c2, salt: salt, density: 0.16)
             }

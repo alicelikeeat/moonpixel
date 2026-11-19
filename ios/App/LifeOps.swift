@@ -72,13 +72,23 @@ extension GameModel {
         mapPickText = String(format: L("(%d, %d) · %@ · 距你 %d 格", "(%d, %d) · %@ · %d tiles away"), t.x, t.y, WorldMap.describe(society, t, zh: GameModel.zh), d)
     }
 
-    func pickNearestMaze() {
-        guard let sc = scene, let m = society.nearestMaze(cx: Int((sc.player.x / 512).rounded(.down)), cy: Int((sc.player.y / 512).rounded(.down))) else {
-            showToast(L("附近没有迷宫", "No maze nearby")); return
+    func pickNearestUfoPort() {
+        guard let sc = scene, let m = society.nearestUfoPort(cx: Int((sc.player.x / 512).rounded(.down)), cy: Int((sc.player.y / 512).rounded(.down))) else {
+            showToast(L("附近没有 UFO 机场", "No UFO airport nearby")); return
         }
-        let t = TilePos(m.0 * 32 + 15, m.1 * 32 + 33)
+        let t = TilePos(m.0 * 32 + 16, m.1 * 32 + 30)
         mapPick = t
-        mapPickText = L("迷宫南门", "The maze's south gate") + String(format: " (%d, %d)", t.x, t.y)
+        mapPickText = L("UFO 机场入口", "The UFO airport's road in") + String(format: " (%d, %d)", t.x, t.y)
+    }
+
+    func pickNearestVolcano() {
+        guard let sc = scene, let v = society.nearestVolcano(near: sc.player.tile) else {
+            showToast(L("附近没有火山", "No volcano nearby")); return
+        }
+        // the foot of its slope, on the south side (the crater is lava)
+        let t = TilePos(v.x, v.y + 30)
+        mapPick = t
+        mapPickText = L("火山脚下", "The foot of the volcano") + String(format: " (%d, %d)", t.x, t.y)
     }
 
     func teleportToPick() { if let p = mapPick { teleport(to: p) } }

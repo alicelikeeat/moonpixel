@@ -626,7 +626,7 @@ extension Society {
     /// Chests in underground ruins: materials, and a recipe's worth of finished goods.
     public func playerOpenRuin(at t: TilePos) -> [String: Double]? {
         let u = underworld()
-        guard u.tile(2, t.x, t.y) == T["chest"], u.gen.isUnderRuin(t.x >> 5, t.y >> 5) else { return nil }
+        guard u.tile(2, t.x, t.y) == T["chest"], u.gen.isUnderRuin(t.x >> 5, t.y >> 5) || u.gen.isUnderCity(t.x >> 5, t.y >> 5) else { return nil }
         u.setTile(2, t.x, t.y, content.tid("altar_pure"))
         var r = RNG(seed: world.seed &+ t.x &* 131 &+ t.y)
         var loot: [String: Double] = ["iron": Double(r.int(3, 6)), "parts": Double(r.int(2, 4))]

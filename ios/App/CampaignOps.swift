@@ -93,6 +93,16 @@ extension GameModel {
             showToast(says[done] ?? done)
             return true
         }
+        if depth == 1 {
+            let v = s.playerOpenVault(at: t)
+            if v.ok {
+                if let p = v.power { showToast(String(format: L("地下城宝库：粮木石各 +30，并获得神器「%@」", "Underground city vault: +30 food, wood and stone, and the artifact \"%@\""), p.name(zh: GameModel.zh))) }
+                else { showToast(L("地下城宝库：粮木石各 +30", "Underground city vault: +30 food, wood and stone")) }
+                sc.firework(at: CGPoint(x: t.center.x, y: -(t.center.y - 30)))
+                refreshPowers()
+                return true
+            }
+        }
         if depth == 1, let loot = s.playerOpenRuin(at: t) {
             let list = loot.sorted { $0.key < $1.key }.map { Recipe.goodName($0.key, zh: GameModel.zh) + " +\(Int($0.value))" }.joined(separator: L("、", ", "))
             showToast(L("遗迹宝箱：", "Ruin chest: ") + list)
@@ -184,7 +194,7 @@ extension GameModel {
 
     func registerCityHere(_ name: String) {
         guard let s = society, let sc = scene, depth == 0, !worldLocked else { return }
-        let says: [String: String] = ["nation": L("先加入一个国家", "Join a nation first"), "maze": L("迷宫里不能建城", "Not inside a maze"),
+        let says: [String: String] = ["nation": L("先加入一个国家", "Join a nation first"), "maze": L("UFO 机场和火山上不能建城", "Not on a UFO airport or a volcano"),
                                       "close": String(format: L("离其他城镇太近（至少 %d 格）", "Too close to another town (at least %d tiles)"), s.realm.cfg.cityMinGap),
                                       "limit": L("城镇数量已达上限", "Too many towns already"),
                                       "beds": String(format: L("附近需要至少 %d 张铺在地板上的床", "Needs at least %d beds on floors nearby"), s.realm.cfg.cityBeds),
