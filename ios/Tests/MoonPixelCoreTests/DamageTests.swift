@@ -108,4 +108,31 @@ final class DamageTests: XCTestCase {
         c.makePeace(attacker, city.nation)
         if let t = spot { XCTAssertEqual(s.hitTile(t, by: .war(attacker: attacker, targetWar: wid)).refused, "no_war") }
     }
+
+    func testARoadThroughAWoodWithAWallOnTheWayGoesRoundTheWall() {
+        let sc = TransportScene()
+        let s = sc.s
+        let wall = sc.t(48, 30)
+        s.world.setTile(2, wall.x, wall.y, s.content.tid("wall_stone"))
+        let p = s.planWay(.street, from: sc.t(36, 30), to: sc.t(60, 30))
+        XCTAssertTrue(p.ok, p.reason)
+        XCTAssertFalse(p.fell.contains(wall), "a wall is never felled")
+        XCTAssertFalse(p.cells.contains(wall), "the way goes round it")
+        sc.give(p.cost, .pack)
+        let id = s.startWay(p, payer: .pack)!
+        s.finishSite(id)
+        XCTAssertEqual(s.world.tile(2, wall.x, wall.y), s.content.tid("wall_stone"), "the wall still stands")
+        for x in TransportScene.forest where sc.t(x, 30) != wall && p.cells.contains(sc.t(x, 30)) { XCTAssertEqual(s.world.tile(2, sc.t(x, 30).x, sc.t(x, 30).y), 0, "the trees on the way are felled") }
+    }
+
+    func testANewTownLeavesWhatThePlayerBuilt() {
+        let s = makeSociety(7)
+        let o = TilePos(7000, 7000)
+        patch(s, at: TilePos(o.x - 3, o.y - 3))
+        s.world.setTile(2, o.x + 1, o.y, s.content.tid("wall_wood"))
+        s.world.setTile(2, o.x - 1, o.y, s.content.tid("tree_oak"))
+        _ = s.foundSettlement(o)
+        XCTAssertEqual(s.world.tile(2, o.x + 1, o.y), s.content.tid("wall_wood"), "a built wall stays")
+        XCTAssertEqual(s.world.tile(2, o.x - 1, o.y), 0, "a tree is cleared for the square")
+    }
 }

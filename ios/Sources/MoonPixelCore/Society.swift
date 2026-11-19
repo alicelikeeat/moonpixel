@@ -523,6 +523,8 @@ public final class Society {
         attach(s)
         for dy in -2...2 { for dx in -2...2 {
             let x = center.x + dx, y = center.y + dy
+            // only what grows or lies there is cleared: anything built (by the player or anyone) stays (Damage.swift)
+            if let d = content.tile(world.tile(2, x, y)), d.built { continue }
             world.setTile(2, x, y, 0); world.setTile(3, x, y, 0)
             if world.isLand(x, y) && dx * dx + dy * dy <= 5 { world.setTile(1, x, y, T["cobble_road"]!) }
         } }
