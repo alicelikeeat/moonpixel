@@ -134,7 +134,7 @@ extension GameScene {
             seen.insert(m.id)
             if monumentNodes[m.id] != nil { continue }
             var ns: [SKSpriteNode] = []
-            for sp in MonumentArt.sprites(m.kind) {
+            for sp in MonumentArt.sprites(for: m) {
                 let tex = GameScene.monumentTextures[sp.key] ?? {
                     // as sharp as a texture of at most 2048 pixels allows
                     let ppt = min(16.0, 2048.0 / Double(max(sp.w, sp.h)))

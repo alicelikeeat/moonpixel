@@ -13,6 +13,12 @@ import Foundation
 
 public enum MonumentKind: String, Codable, CaseIterable {
     case palace, liberty, clock, ironTower, pyramid, pagoda
+    /// A landmark of a nation's own design: elements of the world's famous landmarks put together anew
+    /// (Fusion.swift), with floors to live on, a lift, sky farms and an airstrip.
+    case fusion
+
+    /// The six of the world's famous kinds.
+    public static let classic: [MonumentKind] = [.palace, .liberty, .clock, .ironTower, .pyramid, .pagoda]
 
     public func name(zh: Bool) -> String {
         switch self {
@@ -22,6 +28,7 @@ public enum MonumentKind: String, Codable, CaseIterable {
         case .ironTower: return zh ? "铁塔" : "Iron Tower"
         case .pyramid: return zh ? "金字塔" : "Pyramid"
         case .pagoda: return zh ? "宝塔" : "Pagoda"
+        case .fusion: return zh ? "奇观" : "Wonder"
         }
     }
     /// The ground it takes, tiles (a tile is about 2 m).
@@ -33,6 +40,7 @@ public enum MonumentKind: String, Codable, CaseIterable {
         case .ironTower: return (100, 100)
         case .pyramid: return (140, 140)
         case .pagoda: return (44, 44)
+        case .fusion: return (FusionDesign.plot, FusionDesign.plot)
         }
     }
     /// How tall it stands, units (about 2 m each).
@@ -44,6 +52,7 @@ public enum MonumentKind: String, Codable, CaseIterable {
         case .ironTower: return 165
         case .pyramid: return 73
         case .pagoda: return 34
+        case .fusion: return 60
         }
     }
     /// What it costs the capital (stone, wood).
@@ -55,6 +64,7 @@ public enum MonumentKind: String, Codable, CaseIterable {
         case .ironTower: return (40, 10)
         case .pyramid: return (100, 10)
         case .pagoda: return (30, 60)
+        case .fusion: return (80, 60)
         }
     }
     /// The order a nation builds them in (each nation its own, so capitals differ).
@@ -75,6 +85,14 @@ public struct Monument: Codable, Equatable {
     public var built = 0.0
     /// The height its ground was levelled to (elevation), so the halls, courts and walls stand level.
     public var ground: Double?
+    /// The nation that raised it (the holder, `nation`, may since have taken it).
+    public var builder: Int?
+    /// A landmark of a nation's own design: what it is made of.
+    public var design: FusionDesign?
+    /// Its name: the kind's, or its own for a landmark of a nation's design.
+    public func title(zh: Bool) -> String { design?.name(zh: zh) ?? kind.name(zh: zh) }
+    /// How tall it stands, units.
+    public var height: Double { design.map { Double($0.totalHeight) } ?? kind.height }
     public init() {}
     public var center: TilePos { TilePos(x + w / 2, y + d / 2) }
 }
@@ -139,13 +157,13 @@ extension Society {
             guard let m = raiseMonument(kind, near: s, nation: n.id) else { realm.cool["monument-\(n.id)"] = world.time + MP.daySeconds; continue }
             s.stone -= c.stone; s.wood -= c.wood
             realm.cool["monument-\(n.id)"] = world.time + 2 * MP.daySeconds
-            emit("monument", [n.name(zh: zh), s.name(zh: zh), m.kind.name(zh: zh)], m.center.center)
+            emit("monument", [n.name(zh: zh), s.name(zh: zh), m.title(zh: zh)], m.center.center)
         }
     }
 
     /// Raise a monument by a town, outside it on open land: its tiles laid now. Returns it, or nil when there is
     /// no room within reach.
-    @discardableResult public func raiseMonument(_ kind: MonumentKind, near s: Settlement, nation: Int) -> Monument? {
+    @discardableResult public func raiseMonument(_ kind: MonumentKind, near s: Settlement, nation: Int, seed: Int? = nil) -> Monument? {
         let (w, d) = kind.size
         let others = realm.monuments ?? []
         let half = Double(max(w, d)) / 2
@@ -159,7 +177,8 @@ extension Society {
                 guard monumentSiteClear(o, w, d, others: others) else { continue }
                 var m = Monument()
                 m.id = (others.map { $0.id }.max() ?? 0) + 1
-                m.kind = kind; m.nation = nation; m.town = s.id
+                m.kind = kind; m.nation = nation; m.town = s.id; m.builder = nation
+                if kind == .fusion { m.design = FusionDesign.make(seed: seed ?? Int(MP.h2(world.seed, s.id, others.count) % 1_000_000)) }
                 m.x = o.x; m.y = o.y; m.w = w; m.d = d; m.built = world.time
                 m.ground = levelFor(o, w, d)
                 carveMonument(m)
@@ -376,6 +395,8 @@ extension Society {
             fill(cx - 1, d / 2 + 9, 3, d - d / 2 - 9, ground: stone)
             for (x, y) in [(4, 4), (w - 5, 4), (4, d - 5), (w - 5, d - 5), (cx - 12, cx + 14), (cx + 12, cx + 14)] { set(x, y, obj: T("tree_pine")) }
             set(cx - 3, d - 4, obj: T("lantern_post")); set(cx + 3, d - 4, obj: T("lantern_post"))
+        case .fusion:
+            carveFusion(m)
         }
     }
 }
@@ -641,7 +662,14 @@ extension Figure3D {
         case .ironTower: return one("irontower", ironTower)
         case .pyramid: return one("pyramid", pyramid)
         case .pagoda: return one("pagoda", pagoda)
+        case .fusion: return fusionPieces(FusionDesign.make(seed: 1))
         }
+    }
+
+    /// A monument's pieces (a landmark of a nation's own design by its design).
+    public static func monumentPieces(for m: Monument) -> [MonumentPiece] {
+        if m.kind == .fusion, let d = m.design { return fusionPieces(d) }
+        return monumentPieces(m.kind)
     }
 
     /// A monument whole, every piece in place on flat ground (for previews and checks).
@@ -846,6 +874,11 @@ public enum MonumentArt {
     static let ink = RGBA(40, 30, 30)
 
     /// What of a monument is painted standing up in the flat view.
+    public static func sprites(for m: Monument) -> [MonumentSprite] {
+        if m.kind == .fusion, let d = m.design { return fusionSprites(d) }
+        return sprites(m.kind)
+    }
+
     public static func sprites(_ kind: MonumentKind) -> [MonumentSprite] {
         let (w, d) = kind.size
         switch kind {
@@ -917,6 +950,8 @@ public enum MonumentArt {
         switch kind {
         case .palace:
             return hallPicture(w: 32, base: 4, terrace: 1, col: 6.5, roof: 6.2, double: true, ppt: ppt)
+        case .fusion:
+            return fusionPicture(FusionDesign.make(seed: 1), ppt: ppt)
         case .liberty:
             let copper = RGBA(108, 176, 150), granite = RGBA(200, 192, 176)
             c.rect(cx - 25 * s, gh - 5 * s, 50 * s, 5 * s, RGBA(176, 164, 140), ink: 1)

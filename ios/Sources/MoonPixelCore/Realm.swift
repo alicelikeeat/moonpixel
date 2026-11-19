@@ -287,6 +287,8 @@ public struct Realm: Codable {
     public var favorUntil: [String: Double]?
     /// The capitals' monuments (palace cities, statues, towers...: Monuments.swift).
     public var monuments: [Monument]?
+    /// Wars of annexation under way (Annexation.swift).
+    public var annexations: [Annexation]?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
     public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
@@ -320,7 +322,7 @@ extension Society {
         "split": ("The united realm broke apart: %@ stand again", "统一王朝分裂：%@ 各自独立"),
         "revived": ("%@ rose again at %@", "%@ 在 %@ 复国"), "submitted": ("%@ submitted to %@", "%@ 归附于 %@"),
         "cooperation": ("%@ and %@ signed a cooperation agreement: open trade and mutual aid", "%@ 与 %@ 签署合作协定：开放贸易、互相援助"), "aid": ("%@ sent food to hungry %@", "%@ 向缺粮的 %@ 运送粮食援助"),
-        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "monument": ("%@ finished a great monument by %@: the %@", "%@ 在%@旁建成了%@"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
+        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "monument": ("%@ finished a great monument by %@: the %@", "%@ 在%@旁建成了%@"), "annex": ("%@ tore up its alliance and marched to annex %@", "%@ 撕毁盟约，出兵吞并 %@"), "annex_off": ("%@ called off the annexation of %@ and made the alliance again", "%@ 吞并 %@ 失利，罢兵并重新结盟"), "ally_rebuild": ("%@ helped its fallen ally %@ rise again at %@", "%@ 帮助盟友 %@ 在%@重新建国"), "monument_taken": ("%@ took the %@ landmark %@: its armies fight twice as hard", "%@ 夺取了 %@ 的地标%@，战力翻倍"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
         "harvest_good": ("Bumper harvest in %@", "%@ 喜获丰收"), "harvest_bad": ("Poor harvest in %@", "%@ 遭遇歉收"),
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
@@ -564,7 +566,9 @@ extension Society {
             let serving = adults.filter { $0.legion != nil }
             var rate = cfg.conscriptBase + cfg.conscriptPressure * min(1, n.pressure) + (realm.atWar(nid) ? cfg.conscriptWar : 0)
             if realm.era == 1 { rate = cfg.conscriptUnified }
-            let target = adults.count >= 8 ? max(2, Int(Double(adults.count) * rate)) + 2 * min(1, s.count("barracks", done: true)) + 3 * min(1, s.count("fortress", done: true)) : 0
+            var target = adults.count >= 8 ? max(2, Int(Double(adults.count) * rate)) + 2 * min(1, s.count("barracks", done: true)) + 3 * min(1, s.count("fortress", done: true)) : 0
+            // a landmark's town keeps the largest garrison
+            if target > 0 && landmarkTown(s) { target = target * 2 + 4 }
             if serving.count < target {
                 let g = garrison(s, create: true)!
                 g.nation = nid
@@ -884,7 +888,10 @@ extension Society {
         }
         // exiles come home: a town that still feels theirs rises, or their people settle anew
         for n in realm.nations {
-            guard let since = n.exileSince, now - since >= cfg.exileMax * MP.year else { continue }
+            guard let since = n.exileSince else { continue }
+            // an ally lifts it up long before it could rise alone
+            if now - since >= cfg.exileMax * 0.25 * MP.year && allyRebuild(n.id) { break }
+            guard now - since >= cfg.exileMax * MP.year else { continue }
             if restoreNation(n.id) { break }
         }
     }
@@ -898,6 +905,7 @@ extension Society {
         if let s = cand, identityShare(s, id) >= 0.34 {
             flip(s, to: id)
             emit("revived", [n.name(zh: zh), s.name(zh: zh)], s.center.center)
+            grantLandmark(id, at: s)
             return true
         }
         return secede(id)
@@ -952,6 +960,7 @@ extension Society {
         if let k = realm.ni(id) { realm.nations[k].exileSince = nil; realm.nations[k].leader = pickLeader(id) }
         stats.founded += 1
         emit("revived", [n.name(zh: zh), ns.name(zh: zh)], site.center)
+        grantLandmark(id, at: ns)
         return true
     }
 
@@ -1072,8 +1081,8 @@ extension Society {
             if realm.active("harvest_good", n.id, now) { for s in ts { s.food += cfg.harvestBonus * Double(s.count("farm", done: true)) } }
             if realm.active("harvest_bad", n.id, now) { for s in ts { s.food *= 1 - cfg.harvestLoss } }
         }
-        // an alliance only lasts while the giant is a giant
-        for r in realm.relations.indices where realm.relations[r].pact {
+        // (alliances now break only by annexation: Annexation.swift)
+        for r in realm.relations.indices where realm.relations[r].pact && false {
             let rel = realm.relations[r]
             let third = realm.nations.first { $0.id != rel.a && $0.id != rel.b }!
             let weak = powerShare(third.id) < cfg.dominanceRelease

@@ -77,6 +77,7 @@ final class GameModel: ObservableObject {
     @Published var arsenalLines: [String] = []
     @Published var showArsenal = false
     @Published var showCheats = false
+    @Published var showDiagnostics = false
     /// Frame-time diagnostics shown over the game (More → Performance).
     @Published var showPerf = false
     @Published var perfLines: [String] = []
@@ -590,10 +591,12 @@ final class GameModel: ObservableObject {
             }
         }
         if load {
+            Diagnostics.shared.phase("open:index")
             guard let data = st.readIndex() else {
                 showToast(L("找不到完整的存档，世界未打开，文件没有改动", "No complete save was found; the world was not opened and nothing was changed"))
                 worldID = ""; refreshWorlds(); return
             }
+            Diagnostics.shared.phase("open:decode")
             index = try? JSONDecoder().decode(Index.self, from: data)
             if let ix = index, (ix.format ?? 2) > GameModel.saveFormat {
                 showToast(L("这个存档来自更新的版本，请更新游戏后再打开", "This save comes from a newer version; update the game to open it"))
@@ -624,6 +627,7 @@ final class GameModel: ObservableObject {
         if let r = recipe { s.minPopulation = r.minPopulation }
         var start = Vec2(8, 8)
         playerLook = GameModel.defaultLook
+        Diagnostics.shared.phase("open:restore")
         if let ix = index {
             w.restore(ix.world)
             s.restore(ix.society)
@@ -640,6 +644,7 @@ final class GameModel: ObservableObject {
         playerPortrait = playerLook.portrait.flatMap { portraits[$0] }
         deselect()
         showMap = false
+        Diagnostics.shared.phase("open:scene")
         let sc = GameScene(size: CGSize(width: 874, height: 402))
         sc.scaleMode = .resizeFill
         sc.model = self
@@ -654,6 +659,7 @@ final class GameModel: ObservableObject {
             }
         }
         refreshHUD()
+        Diagnostics.shared.phase("play")
         if !load { save(announce: false) }
         if migrated { showToast(L("旧存档已迁移，原文件保留在世界目录中未改动", "This save was migrated; its original files are kept unchanged in the world folder")) }
         if corrupt { showToast(L("存档已损坏，原文件已另存为 index.corrupt，未被覆盖；世界已重新生成", "The save was damaged. It was kept as index.corrupt and not overwritten; the world was regenerated")) }
@@ -692,6 +698,7 @@ final class GameModel: ObservableObject {
 
     /// Called a few times per second from the scene.
     func refreshHUD() {
+        Diagnostics.shared.sample()
         guard let w = world, let s = society else { return }
         refreshHeight()
         if s.playerVehicle == nil { refreshDrive() }
@@ -808,6 +815,7 @@ final class GameModel: ObservableObject {
 
     func rebuildMap() {
         guard let w = world, let sc = scene else { return }
+        Diagnostics.shared.phase("map"); defer { Diagnostics.shared.phase("play") }
         let pc = TilePos(Int((sc.player.x / 512).rounded(.down)), Int((sc.player.y / 512).rounded(.down)))
         // as far as anything is known: explored land and the cities of the nations of the known world
         var ext = 10

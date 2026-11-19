@@ -555,6 +555,7 @@ struct MorePanel: View {
                         model.showMore = false; model.showPerf.toggle(); if !model.showPerf { model.perfLines = [] }
                     }
                     Chip(title: L("作弊", "Cheats"), icon: "wand.and.rays", id: "Cheats") { model.showMore = false; model.showCheats = true }
+                    Chip(title: L("诊断", "Diagnostics"), icon: "stethoscope", id: "Diagnostics") { model.showMore = false; model.showDiagnostics = true }
                     Chip(title: L("世界", "Worlds"), icon: "globe.asia.australia.fill", id: "Worlds") { model.showMore = false; model.exitToMenu() }
                 }
                 // (last, so the buttons above stay where they always were)

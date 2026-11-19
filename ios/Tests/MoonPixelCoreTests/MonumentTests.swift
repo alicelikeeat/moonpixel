@@ -14,7 +14,7 @@ final class MonumentTests: XCTestCase {
 
     func testEveryKindStandsOnRealTilesBesideTheCapital() {
         let (s, cap, nation) = capitalSociety()
-        for kind in MonumentKind.allCases {
+        for kind in MonumentKind.classic {
             guard let m = s.raiseMonument(kind, near: cap, nation: nation) else { XCTFail("no room for \(kind)"); continue }
             XCTAssertEqual(m.w, kind.size.w); XCTAssertEqual(m.d, kind.size.d)
             XCTAssertFalse(cap.inArea(m.center), "\(kind) stands beside the town, not on it")
@@ -29,7 +29,7 @@ final class MonumentTests: XCTestCase {
             for sp in MonumentArt.sprites(kind) { XCTAssertGreaterThan(sp.draw(4).w, 0) }
         }
         let ms = s.realm.monuments ?? []
-        XCTAssertEqual(ms.count, MonumentKind.allCases.count)
+        XCTAssertEqual(ms.count, MonumentKind.classic.count)
         XCTAssertEqual(Set(ms.map { $0.id }).count, ms.count, "ids are unique")
         // none overlaps another
         for a in ms { for b in ms where a.id < b.id {
@@ -63,7 +63,7 @@ final class MonumentTests: XCTestCase {
         // the map marks them
         let marks = WorldMap().render(s, centre: cap.center, reach: 40, zh: true).1.filter { $0.kind == .monument }
         XCTAssertGreaterThanOrEqual(marks.count, ms.count)
-        XCTAssertTrue(marks.contains { $0.name == "宫城" })
+        XCTAssertTrue(marks.contains { $0.name.hasPrefix("宫城") }, "named, with the nation that holds it")
     }
 
     func testCapitalsRaiseMonumentsInTurnFromTheirOwnStoneAndWood() {

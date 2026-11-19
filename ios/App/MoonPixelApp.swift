@@ -17,6 +17,8 @@ struct MoonPixelApp: App {
         }
         .onChange(of: phase) { _, p in
             if p != .active { model.save(announce: false); model.metro?.save(); model.command?.save() }      // iOS may kill a backgrounded app at any time
+            // (left on purpose: in the background the system may end the app; that is not a crash)
+            if p == .background { Diagnostics.shared.cleanExit() } else if p == .active { Diagnostics.shared.resumed() }
         }
     }
 }
@@ -43,7 +45,11 @@ struct RootView: View {
                 MenuView()
             }
         }
-        .onAppear { model.handleLaunchArguments() }
+        .onAppear {
+            Diagnostics.shared.start()
+            if let n = Diagnostics.shared.launchNotice { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { model.showToast(n) } }
+            model.handleLaunchArguments()
+        }
     }
 }
 

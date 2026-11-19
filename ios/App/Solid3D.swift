@@ -1050,7 +1050,7 @@ final class SolidRenderer {
             seen.insert(m.id)
             if monumentEntities[m.id] != nil { continue }
             var es: [ModelEntity] = []
-            for p in Figure3D.monumentPieces(m.kind) {
+            for p in Figure3D.monumentPieces(for: m) {
                 let e = ModelEntity()
                 e.model = model3D(key: "monument-" + p.key) { p.mesh() }
                 let mid = Vec2(Double(Float(m.x) + p.x + p.w / 2), Double(Float(m.y) + p.z + p.d / 2)) * 16

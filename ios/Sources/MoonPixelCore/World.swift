@@ -454,7 +454,7 @@ public final class Generator {
 /// Asks the device how much memory it has and derives the cache limits.
 public struct MemoryBudget {
     public var physicalMB = 0, availableMB = 0, budgetMB = 256, maxChunks = 1024, maxAgents = 300, maxSettlements = 12, overrideMB = 0
-    public static let chunkBytes = 12 * 1024, minMB = 96, maxAutoMB = 2048
+    public static let chunkBytes = 12 * 1024, minMB = 96, maxAutoMB = 768
 
     public static func deviceMemory() -> (physicalMB: Int, availableMB: Int) {
         let phys = Int(ProcessInfo.processInfo.physicalMemory / 1_048_576)
@@ -474,7 +474,8 @@ public struct MemoryBudget {
         if overrideMB > 0 {
             budgetMB = max(MemoryBudget.minMB, overrideMB)
         } else {
-            budgetMB = min(MemoryBudget.maxAutoMB, max(MemoryBudget.minMB, min(availableMB / 3, physicalMB / 6)))
+            // well under what the system allows an app: textures, the 3D scene and the save all need room too
+            budgetMB = min(MemoryBudget.maxAutoMB, max(MemoryBudget.minMB, min(availableMB / 5, physicalMB / 10)))
         }
         maxChunks = min(60000, max(256, budgetMB * 1_048_576 * 4 / 10 / MemoryBudget.chunkBytes))
         maxAgents = min(1200, max(150, budgetMB))

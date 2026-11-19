@@ -199,7 +199,7 @@ public final class WorldMap {
                 add(.volcano, zh ? "火山" : "Volcano", "#ff5a1a", TilePos(v.x, v.y))
             }
         } }
-        for m in s.realm.monuments ?? [] { add(.monument, m.kind.name(zh: zh), "#ffd25a", m.center) }
+        for m in s.realm.monuments ?? [] { add(.monument, m.title(zh: zh) + (s.realm.nation(m.nation).map { " · " + $0.name(zh: zh) } ?? ""), "#ffd25a", m.center) }
         // a detailed map (a few pixels a tile) names every building at its door: tap a name to go there
         if ppc >= 64 {
             for d in s.net.districts { for b in d.buildings where b.state == .open {
@@ -227,7 +227,7 @@ public final class WorldMap {
             let d = Int(Double((v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y)).squareRoot())
             return d < 4 ? (zh ? "火山口（熔岩）" : "Volcano crater (lava)") : (zh ? "火山坡" : "Volcano slope")
         }
-        if let m = (s.realm.monuments ?? []).first(where: { t.x >= $0.x && t.x < $0.x + $0.w && t.y >= $0.y && t.y < $0.y + $0.d }) { return m.kind.name(zh: zh) }
+        if let m = (s.realm.monuments ?? []).first(where: { t.x >= $0.x && t.x < $0.x + $0.w && t.y >= $0.y && t.y < $0.y + $0.d }) { return m.title(zh: zh) }
         let ccx = OpenWorld.floorDiv(t.x, 32), ccy = OpenWorld.floorDiv(t.y, 32)
         if gen.isUnderCity(ccx, ccy) && gen.volcano(near: ccx * 32 + 16, ccy * 32 + 16, radius: 40) == nil && !gen.isUfoPort(ccx, ccy) {
             let dx = t.x - (ccx * 32 + 16), dy = t.y - (ccy * 32 + 16)
