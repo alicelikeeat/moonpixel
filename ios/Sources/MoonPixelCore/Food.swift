@@ -62,7 +62,7 @@ extension Society {
         let pop = Double(d.population)
         guard pop >= 2, short <= pop * 0.05 else { return 0 }
         let rate = 0.004 + 0.04 * plenty(d)
-        let x = pop * rate * (0.6 + 0.6 * d.happiness) * Society.growthBrake(totalPopulation)
+        let x = pop * rate * (0.6 + 0.6 * d.happiness) * Society.growthBrake(totalPopulation) * (favored(district: d) ? 3 : 1)
         return Int(x) + (d.rng.unit() < x - Double(Int(x)) ? 1 : 0)
     }
 
@@ -72,7 +72,7 @@ extension Society {
         let pop = Double(d.population)
         let base = max(8, pop * 0.1) * (0.5 + plenty(d))
         let jobs = jobsFree + d.population / 5
-        let n = Int((base * Society.growthBrake(totalPopulation)).rounded())
+        let n = Int((base * Society.growthBrake(totalPopulation) * (favored(district: d) ? 2 : 1)).rounded())
         return max(0, min(free, jobs, n))
     }
 
@@ -87,7 +87,8 @@ extension Society {
         for k in have..<8 {
             let t = TilePos(b.x + 7 + (k % 4) * 3, b.y + 3 + (k / 4) * 5)
             guard t.x < b.x + b.w - 1, t.y < b.y + b.d - 1, world.tile(2, t.x, t.y) == 0 else { continue }
-            spawnAnimal(k % 2 == 0 ? "cow" : "sheep", at: t.center, tame: true)
+            let id = spawnAnimal(k % 2 == 0 ? "cow" : "sheep", at: t.center, tame: true)
+            if let i = realm.fauna.animals.firstIndex(where: { $0.id == id }) { realm.fauna.animals[i].home = TilePos(b.x + b.w / 2, b.y + b.d / 2).center }
         }
     }
 

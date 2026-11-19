@@ -580,7 +580,7 @@ public final class Society {
         let growDay = Int(world.time / MP.daySeconds)
         if realm.growDay == nil { realm.growDay = growDay } else if growDay > realm.growDay! { realm.growDay = growDay; cityGrowthDay() }
         let growHour = Int(world.time / (MP.daySeconds / 24))
-        if realm.growHour == nil { realm.growHour = growHour } else if growHour > realm.growHour! { realm.growHour = growHour; cityGrowthHour() }
+        if realm.growHour == nil { realm.growHour = growHour } else if growHour > realm.growHour! { realm.growHour = growHour; favorHour(); cityGrowthHour() }
         world.advance(dt)
         tickCount += 1
         // planning and resource scans are the heavy part of a town's work. When many fall due together
@@ -987,7 +987,10 @@ public final class Society {
         else { a.energy = max(0, a.energy - dt / (0.75 * MP.daySeconds)) }
         if a.hunger >= 1 {
             a.health -= dt / (0.6 * MP.daySeconds)
-            if a.health <= 0 { die(a, "hunger"); return }
+            if a.health <= 0 {
+                // near the traveller hunger weakens but does not kill
+                if favored(town: a.sid) { a.health = 0.05 } else { die(a, "hunger"); return }
+            }
         } else { a.health = min(1, a.health + dt / MP.daySeconds) }
         if a.travelling {
             let to = a.travelTo - a.pos
@@ -1399,7 +1402,8 @@ public final class Society {
             var hazard = 0.004
             if age > 55 { hazard += 0.02 * exp((age - 55) / 8) }
             if age < 3 { hazard += 0.01 }
-            if rng.unit() < hazard * dty { die(a, age > 55 ? "old" : "ill"); continue }
+            // near the traveller nobody dies of age or illness
+            if !favored(town: a.sid) && rng.unit() < hazard * dty { die(a, age > 55 ? "old" : "ill"); continue }
             if !a.female { continue }
             if a.pregnantDue > 0 { if now >= a.pregnantDue { birth(a) }; continue }
             // couples who have grown cold part ways
@@ -1410,9 +1414,11 @@ public final class Society {
                 continue
             }
             guard a.partner != 0, let p = agents[a.partner], age >= 18, age <= 43, !a.travelling, let s = settlements[a.sid] else { continue }
-            if p.sid != a.sid || now - a.lastBirth < 1.2 * MP.year || a.children.count >= 6 { continue }
-            let fed = s.food >= Double(s.members.count) * 2.5 && a.hunger < 0.7
-            let boost = agents.count < minPopulation ? 2.5 : 1.0
+            let blessed = favored(town: s.id)
+            if p.sid != a.sid || now - a.lastBirth < (blessed ? 0.6 : 1.2) * MP.year || a.children.count >= (blessed ? 8 : 6) { continue }
+            let fed = s.food >= Double(s.members.count) * (blessed ? 1.5 : 2.5) && a.hunger < 0.7
+            // near the traveller families grow three times as fast
+            let boost = (agents.count < minPopulation ? 2.5 : 1.0) * (blessed ? 3 : 1)
             if fed && rng.unit() < 0.75 * dty * crowd * boost * (a.home != -1 ? 1.0 : 0.35) {
                 a.pregnantDue = now + 0.7 * MP.year
                 a.birthFather = p.id

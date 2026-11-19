@@ -153,6 +153,9 @@ public final class CivCity: Codable {
 public struct CivBuild: Codable, Equatable { public var facility = "", daysLeft = 0.0 }
 
 public final class Civ: Codable {
+    /// The cities the traveller's presence favours this hour (set by the open world; nothing dies there of
+    /// illness, hunger or age, and births are three times as many).
+    public var favored: Set<Int>?
     public static let schemaVersion = 1
     public var schema = Civ.schemaVersion
     public var cfg = CivConfig()
@@ -538,15 +541,20 @@ public final class Civ: Codable {
         c.sick -= stochastic(Double(c.sick) * cfg.sickRecover * (c.has("clinic") > 0 ? 1.5 : 1))
         c.sick = max(0, min(c.sick, c.pop))
         let care = min(1, Double(c.has("clinic")) * 120 / Double(max(1, pop))) * cfg.careCut * (knows(c.nation, "medicine") ? 1 : 0.5)
-        die(c, stochastic(Double(c.sick) * cfg.sickDeath * (1 - care)), "illness", slots: Array(0..<18))
-        // --- hunger deaths, then old age and the like
-        for st in 4..<6 { for b in 0..<3 { die(c, stochastic(Double(c.people.n[b * 6 + st]) * cfg.starveDeath[st]), "hunger", slots: [b * 6 + st]) } }
-        for b in 0..<3 { die(c, stochastic(Double(c.people.band(b)) * cfg.deathPerYear[b] / yearDays * (1 - care)), "old", slots: (0..<6).map { b * 6 + $0 }) }
+        // a city the traveller is near (or was, lately) loses nobody to illness, hunger or age
+        let blessed = favored?.contains(c.id) == true
+        if !blessed {
+            die(c, stochastic(Double(c.sick) * cfg.sickDeath * (1 - care)), "illness", slots: Array(0..<18))
+            // --- hunger deaths, then old age and the like
+            for st in 4..<6 { for b in 0..<3 { die(c, stochastic(Double(c.people.n[b * 6 + st]) * cfg.starveDeath[st]), "hunger", slots: [b * 6 + st]) } }
+            for b in 0..<3 { die(c, stochastic(Double(c.people.band(b)) * cfg.deathPerYear[b] / yearDays * (1 - care)), "old", slots: (0..<6).map { b * 6 + $0 }) }
+        }
         // --- births: couples, how fed they are, how crowded, how well off
         let couples = (0..<6).reduce(0.0) { $0 + Double(c.people.n[6 + $1]) * cfg.fertile[$1] } / 2
         var rate = cfg.fertility / yearDays / (1 + cfg.wealthDamp * c.wealth)
         if c.crowding > 1 { rate /= c.crowding * c.crowding }
         rate *= 1 - c.thirst
+        if blessed { rate *= 3 }
         let born = stochastic(couples * rate)
         if born > 0 { c.people.n[0] += born; c.today.births += born; c.ledger.births += born; totals.births += born }
         // --- growing up and growing old (each group keeps how hungry it is)

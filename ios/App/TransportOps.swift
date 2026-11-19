@@ -145,9 +145,34 @@ extension GameModel {
             return VehicleRow(id: v.id, text: v.kind.name(zh: GameModel.zh) + " · " + v.name + String(format: L(" · %.0f 米", " · %.0f m"), v.pos.distance(to: b.pos) / 8)
                               + (v.stopped ? "" : L(" · 行驶中", " · moving")), canDrive: mine && v.stopped && !v.playerDriving, canRide: v.stopped && v.seatsFree > 0)
         }
+        let home = s.nearestAirport(to: b.pos.tile)
+        flights = s.passengerAirports().filter { $0.id != home?.id }.sorted { $0.tile.distance2(b.pos.tile) < $1.tile.distance2(b.pos.tile) }.prefix(12).map {
+            StopRow(id: $0.id, text: $0.name + String(format: L(" · %.1f 公里", " · %.1f km"), $0.tile.center.distance(to: b.pos) / 8 / 1000))
+        }
         destinations = s.net.stops.sorted { $0.tile.distance2(b.pos.tile) < $1.tile.distance2(b.pos.tile) }.prefix(40).map {
             StopRow(id: $0.id, text: $0.kind.name(zh: GameModel.zh) + " · " + $0.name + String(format: L(" · %.0f 米", " · %.0f m"), $0.tile.center.distance(to: b.pos) / 8))
         }
+    }
+
+    /// Fly to another city: a charter plane at the nearest airport, as its passenger (the autopilot flies) or
+    /// at its controls.
+    func flyTo(_ stop: Int, pilot: Bool) {
+        guard let s = society, let dest = s.net.stop(stop) else { return }
+        let r = s.charterFlight(to: dest, pilot: pilot)
+        guard let v = r.plane, r.why == nil else {
+            let why = r.why ?? ""
+            let says = ["no airport": L("还没有机场：城市长到 150 人会自己修机场", "No airport yet: a town builds one at 150 people"),
+                        "already there": L("你已经在这座机场附近了", "You are already at that airport"),
+                        "the runway is busy": L("跑道上正忙，稍后再试", "The runway is busy: try again in a moment"),
+                        "already aboard": L("先下车", "Get out of the vehicle first")]
+            showToast(L("飞不了：", "Cannot fly: ") + (says[why] ?? why)); return
+        }
+        switchLayer(to: v.pos)
+        driveInput = Controls(); topKmh = 0
+        showTravel = false
+        refreshDrive()
+        showToast(pilot ? String(format: L("你在 %@ 的驾驶舱里：推油门滑跑，到速度后拉杆起飞；也可以交给自动驾驶", "You are at the controls of %@: throttle up, and pull up at speed; or hand it to the autopilot"), v.name)
+                        : String(format: L("你登上了 %@：自动驾驶会滑行、起飞，飞到 %@ 降落", "You are aboard %@: the autopilot taxis, takes off and lands at %@"), v.name, dest.name))
     }
 
     /// Plan a trip from here to a stop: walking, lines, changes and the time it takes.

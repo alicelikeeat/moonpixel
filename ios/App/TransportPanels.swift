@@ -21,6 +21,18 @@ struct TravelPanel: View {
                     }
                     Chip(title: L("用背包材料造一辆车", "Build a car from the pack"), icon: "car.fill", id: "build-car") { model.buildCarHere() }
                     Divider().opacity(0.3)
+                    // flying: a charter from the nearest airport to another city's
+                    Text(L("坐飞机去别的城市", "Fly to another city")).font(.system(size: 13, weight: .bold, design: .rounded))
+                    if model.flights.isEmpty { Text(L("还没有别的机场：城市长到 150 人会自己修机场", "No other airport yet: towns build one at 150 people")).font(.system(size: 11, design: .rounded)).opacity(0.7) }
+                    ForEach(model.flights) { a in
+                        HStack(spacing: 6) {
+                            Text(a.text).font(.system(size: 11, weight: .semibold, design: .rounded)).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Chip(title: L("乘机", "Fly there"), icon: "airplane.departure", id: "fly-\(a.id)") { model.flyTo(a.id, pilot: false) }
+                            Chip(title: L("驾驶", "Pilot"), icon: "airplane", id: "pilot-\(a.id)") { model.flyTo(a.id, pilot: true) }
+                        }
+                    }
+                    Divider().opacity(0.3)
                     Text(L("目的地", "Where to")).font(.system(size: 13, weight: .bold, design: .rounded))
                     if model.destinations.isEmpty { Text(L("还没有车站", "No stops yet")).font(.system(size: 11, design: .rounded)).opacity(0.7) }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220))], alignment: .leading, spacing: 6) {

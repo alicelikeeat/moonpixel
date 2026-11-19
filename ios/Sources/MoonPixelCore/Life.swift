@@ -45,6 +45,10 @@ public struct Animal: Codable {
     public var facing = 1.0
     public var think = 0.0
     public var moving = false
+    /// Livestock kept on a farm: they graze round here and never follow the traveller.
+    public var home: Vec2?
+    /// A hunter's state: seconds until it may bite again, seconds it has been chasing, seconds it keeps away.
+    public var rest: Double?, chase: Double?, scared: Double?
     public var species: Species { Species.all[min(kind, Species.all.count - 1)] }
 }
 
@@ -164,10 +168,32 @@ extension Society {
             let sp = a.species
             let d = a.pos.distance(to: viewer)
             a.think -= dt
-            if a.tame { if d > 34 { a.to = viewer } else { a.to = a.pos } }
-            else if sp.hostile && d < 170 {
-                a.to = viewer
-                if d < 18 { bite += (sp.key == "bear" || sp.key == "golem" ? 14 : 8) * dt }
+            let inTown = settlements.values.contains { !$0.abandoned && $0.inArea(viewer.tile) }
+            a.rest = max(0, (a.rest ?? 0) - dt)
+            a.scared = max(0, (a.scared ?? 0) - dt)
+            if let home = a.home {
+                // livestock: graze within a few tiles of home
+                if a.think <= 0 { a.think = f.rng.range(2, 6); a.to = home + Vec2(f.rng.range(-80, 80), f.rng.range(-60, 60)) }
+            } else if a.tame { if d > 34 { a.to = viewer } else { a.to = a.pos } }
+            else if sp.hostile && d < 170 && (a.scared ?? 0) <= 0 && !inTown && a.hp > sp.hp * 0.5 {
+                // a hunter closes in and bites, then backs off a moment before the next bite; after a long chase
+                // with no kill it gives up and keeps away for a while
+                a.chase = (a.chase ?? 0) + dt
+                // away from the traveller (a fixed way when right on top of them, where there is no "away")
+                let off = a.pos - viewer
+                let away = off.length > 0.5 ? off.normalized : Vec2(1, 0)
+                a.to = (a.rest ?? 0) > 0.8 ? a.pos + away * 40 : viewer + away * 12      // up to biting distance, not onto them
+                if d < 18 && (a.rest ?? 0) <= 0 {
+                    bite += sp.key == "bear" || sp.key == "golem" ? 12 : 6
+                    a.rest = 1.6
+                    a.to = a.pos + away * 40
+                }
+                if (a.chase ?? 0) > 25 { a.chase = 0; a.scared = 60 }
+            } else if sp.hostile && d < 170 {
+                // hurt, given up, or the traveller is in a town: it slinks away
+                a.chase = 0
+                let off = a.pos - viewer
+                a.to = a.pos + (off.length > 0.5 ? off.normalized : Vec2(1, 0)) * 120
             } else if !sp.hostile && d < 64 {
                 a.to = a.pos + (a.pos - viewer).normalized * 90            // prey bolts
             } else if a.think <= 0 {
@@ -177,7 +203,7 @@ extension Society {
             let to = a.to - a.pos
             a.moving = to.length > 2
             if a.moving {
-                let step = sp.speed * (a.tame || (sp.hostile && d < 170) || (!sp.hostile && d < 64) ? 1.0 : 0.45) * dt
+                let step = sp.speed * ((a.tame && a.home == nil) || (sp.hostile && d < 170) || (!sp.hostile && d < 64) ? 1.0 : 0.45) * dt
                 let np = to.length <= step ? a.to : a.pos + to.normalized * step
                 // slide along whatever is in the way, one axis at a time
                 var moved = false
@@ -202,7 +228,7 @@ extension Society {
             if a.pos.distance(to: p) > radius + Double(a.species.size) * 3 { keep.append(a); continue }
             a.hp -= damage
             if a.hp <= 0 { realm.player.food += a.species.meat; out.append((a.pos, true)) }
-            else { a.tame = false; out.append((a.pos, false)); keep.append(a) }
+            else { if a.home == nil { a.tame = false }; a.scared = 20; out.append((a.pos, false)); keep.append(a) }
         }
         realm.fauna.animals = keep
         return out

@@ -61,6 +61,7 @@ public struct RealmConfig: Codable, Equatable {
     // --- balance of power
     public var dominance = 0.5, dominanceRelease = 0.42
     public var pactWar = 2.0               // allies declare on the strong nation this much more readily
+    public var allyPower = 1.35            // armies fight this much harder alongside an ally against a common enemy
     /// A nation starts a war only against one this many times weaker (by people and soldiers): otherwise it
     /// keeps the peace, whatever its pressure or grudges. Nations at peace warm to each other (`coopRate` a
     /// year); from `coopTrust` on they cooperate: open trade, and food for each other's hungry towns.
@@ -282,6 +283,8 @@ public struct Realm: Codable {
     public var growDay: Int?
     /// The last game hour the new towns took a building step (they build hour by hour, not day by day).
     public var growHour: Int?
+    /// Places the traveller's presence favours, and until when ("t<town>", "d<district>", "c<city>": game time).
+    public var favorUntil: [String: Double]?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
     public var metroLink: MetroLink?
     public var weather: Weather { get { weatherBox ?? Weather() } set { weatherBox = newValue } }
@@ -315,7 +318,7 @@ extension Society {
         "split": ("The united realm broke apart: %@ stand again", "统一王朝分裂：%@ 各自独立"),
         "revived": ("%@ rose again at %@", "%@ 在 %@ 复国"), "submitted": ("%@ submitted to %@", "%@ 归附于 %@"),
         "cooperation": ("%@ and %@ signed a cooperation agreement: open trade and mutual aid", "%@ 与 %@ 签署合作协定：开放贸易、互相援助"), "aid": ("%@ sent food to hungry %@", "%@ 向缺粮的 %@ 运送粮食援助"),
-        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
+        "pact": ("%@ and %@ joined against %@", "%@ 与 %@ 结盟对抗 %@"), "ally_aid": ("%@ came to the aid of its ally %@ against %@", "%@ 出兵支援盟友 %@，对抗 %@"), "alliance_broken": ("The alliance of %@ and %@ fell apart", "%@ 与 %@ 的联盟破裂"),
         "harvest_good": ("Bumper harvest in %@", "%@ 喜获丰收"), "harvest_bad": ("Poor harvest in %@", "%@ 遭遇歉收"),
         "general": ("%@ rose as a general of %@", "%@ 成为 %@ 的名将"), "leader_died": ("%@, leader of %@, has died; %@ succeeds", "%@ 的领袖 %@ 去世，%@ 继位"),
         "breakthrough": ("A breakthrough quickens research in %@", "%@ 出现技术突破"), "town_defect": ("%@ went over to %@", "%@ 倒戈归于 %@"),
@@ -735,6 +738,30 @@ extension Society {
         emit("war", [realm.nation(a)?.name(zh: zh) ?? "", realm.nation(b)?.name(zh: zh) ?? ""], towns(of: b).first?.center.center ?? .zero,
              nations: [a, b], cause: String(format: "pressure %.2f", realm.nation(a)?.pressure ?? 0), result: "war")
         muster(a, against: b)
+        // the attacked nation's allies come to its defence: they go to war with the attacker at once (an ally's
+        // duty is not weighed against how strong the attacker is) and send their armies
+        for c in allies(of: b) where c != a {
+            guard let rc = realm.ri(c, a), realm.relations[rc].state == 0 else { continue }
+            setState(rc, 1)
+            emit("ally_aid", [realm.nation(c)?.name(zh: zh) ?? "", realm.nation(b)?.name(zh: zh) ?? "", realm.nation(a)?.name(zh: zh) ?? ""],
+                 towns(of: b).first?.center.center ?? .zero, nations: [c, b, a], cause: "alliance", result: "war")
+            muster(c, against: a)
+        }
+    }
+
+    /// A nation's allies: those it has a pact with, or a cooperation agreement of full trust, at peace with it.
+    public func allies(of n: Int) -> [Int] {
+        realm.relations.filter { ($0.a == n || $0.b == n) && $0.state == 0 && ($0.pact || $0.value >= realm.cfg.coopTrust) }
+            .map { $0.a == n ? $0.b : $0.a }.filter { realm.nation($0)?.exileSince == nil }.sorted()
+    }
+
+    /// How much harder a nation's armies fight: fighting a war side by side with an ally (both at war with a
+    /// common enemy), by `allyPower`; otherwise 1.
+    public func allianceBonus(_ n: Int) -> Double {
+        let foes = Set(realm.relations.filter { ($0.a == n || $0.b == n) && $0.state == 1 }.map { $0.a == n ? $0.b : $0.a })
+        guard !foes.isEmpty else { return 1 }
+        for c in allies(of: n) where foes.contains(where: { realm.atWar(c, $0) }) { return realm.cfg.allyPower }
+        return 1
     }
 
     /// Nations at peace grow closer; once they trust each other they sign a cooperation agreement (trade and
@@ -1370,6 +1397,7 @@ extension RealmConfig {
         dominance = try c.decodeIfPresent(Double.self, forKey: .dominance) ?? dominance
         dominanceRelease = try c.decodeIfPresent(Double.self, forKey: .dominanceRelease) ?? dominanceRelease
         pactWar = try c.decodeIfPresent(Double.self, forKey: .pactWar) ?? pactWar
+        allyPower = try c.decodeIfPresent(Double.self, forKey: .allyPower) ?? allyPower
         ambition = try c.decodeIfPresent(Double.self, forKey: .ambition) ?? ambition
         governFood = try c.decodeIfPresent(Double.self, forKey: .governFood) ?? governFood
         strongUnrest = try c.decodeIfPresent(Double.self, forKey: .strongUnrest) ?? strongUnrest

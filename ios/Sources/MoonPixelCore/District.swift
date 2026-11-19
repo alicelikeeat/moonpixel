@@ -584,6 +584,7 @@ extension Society {
         var died: [String: Int] = [:]
         var eaten = 0.0, short = 0.0
         let health = d.services["health"]!.ratio, water = min(d.services["water"]!.ratio, d.services["sewage"]!.ratio)
+        let blessed = favored(district: d)
         let refuse = d.services["garbage"]!.ratio
         for bi in d.buildings.indices where d.buildings[bi].state == .open {
             for fi in d.buildings[bi].floors.indices {
@@ -594,6 +595,8 @@ extension Society {
                 f.food -= got; eaten += got
                 if got + 1e-9 < need { f.hungry += 1; short += need - got } else { f.hungry = 0 }
                 var deaths = 0
+                // near the traveller nobody dies here, of hunger, illness or age (`Favor.swift`)
+                if blessed { d.buildings[bi].floors[fi] = f; continue }
                 if f.hungry >= 3 { deaths += Int((Double(f.residents) * 0.05).rounded(.up)) ; died["hunger", default: 0] += 0 }
                 let illness = 0.0002 + (1 - water) * 0.002 + (1 - refuse) * 0.0005
                 let base = 0.00025 + illness * (1.5 - health)
@@ -778,7 +781,7 @@ extension Society {
         for id in d.buildings.filter({ busy.contains($0.state) }).map({ $0.id }) {
             if let bi = d.buildings.firstIndex(where: { $0.id == id }) { advanceProject(d, bi) }
         }
-        if d.buildings.filter({ busy.contains($0.state) }).count >= Society.parallelProjects(d.population) { return }
+        if d.buildings.filter({ busy.contains($0.state) }).count >= Society.parallelProjects(d.population) + (favored(district: d) ? 3 : 0) { return }
         // what is short? a service under strain first, then homes, then work, then food
         let pop = Double(d.population)
         var key: String?

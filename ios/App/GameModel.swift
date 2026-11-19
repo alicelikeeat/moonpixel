@@ -122,6 +122,8 @@ final class GameModel: ObservableObject {
     /// Vehicles close enough to get into, and stops to travel to (for the travel panel).
     @Published var vehiclesHere: [VehicleRow] = []
     @Published var destinations: [StopRow] = []
+    /// Other cities' airports, nearest first: where a charter flight can take you.
+    @Published var flights: [StopRow] = []
     @Published var trip: TripPlan?
     @Published var tripTo: Int?
     @Published var transportLines: [String] = []

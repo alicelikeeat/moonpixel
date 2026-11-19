@@ -60,6 +60,7 @@ extension Society {
         p *= (1 + cfg.techPower * Double(n.techCount)) * (1 - 0.3 * min(1, n.fatigue))
         if realm.active("general", lg.nation, world.time) { p *= cfg.generalPower }
         p *= arsenalBonus(lg.nation) * gearBonus(lg.nation)
+        p *= allianceBonus(lg.nation)                       // side by side with an ally: they fight harder
         p *= 0.5 + 0.5 * (lg.morale ?? cfg.moraleStart)
         if mode == 3 {
             let fort = settlements[lg.home].map { fortBonus($0) } ?? 1

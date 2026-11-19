@@ -99,7 +99,7 @@ extension Society {
         // a well-fed town whose homes are full is growing faster than its taxes can build for: the nation lends it
         // money to build with (growth bonds, scaled to its size) until the world nears its growth target
         let pop = Double(d.population)
-        let growing = Society.growthBrake(totalPopulation) > 0.5 && plenty(d) > 0.5 && d.population + 10 >= d.homes
+        let growing = (Society.growthBrake(totalPopulation) > 0.5 || favored(district: d)) && plenty(d) > 0.5 && d.population + 10 >= d.homes
         if (d.population < 400 && d.money < 6000) || (growing && d.money < 3000 + pop * 4) {
             var paid = 0.0
             if let c = realm.civBox, var p = c.polities[d.nation] { paid = max(0, min(400, p.treasury * 0.1)); p.treasury -= paid; c.polities[d.nation] = p }
@@ -302,6 +302,29 @@ extension Society {
                 d.note("opened the railway to \(o.name)")
                 if let v = buy(.train, at: a, heading: atan2(Double(track[2].y - a.y), Double(track[2].x - a.x))) { assign(v, to: l); d.note("train \(v.id) runs to \(o.name)") }
             } else { d.note("could not open the railway to \(o.name) yet") }
+            return
+        }
+        // 5b. a highway to each other district of the nation (or across an open border) within 600 tiles, and an
+        // intercity coach along it: the cities are joined by road as well as by rail and air
+        for o in net.districts.sorted(by: { $0.id < $1.id }) where o.id != d.id && (o.nation == d.nation || borderOpen(d.nation, o.nation)) {
+            guard o.center.distance2(d.center) <= 600 * 600, d.population >= 120 || open >= 5 else { continue }
+            let tag = "road:\(o.id)"
+            if (o.works?["road:\(d.id)"]) != nil || tried.contains(tag) { continue }
+            if site(tag) == nil {
+                let from = TilePos(d.center.x + 20, d.center.y + 4), to = TilePos(o.center.x - 20, o.center.y + 4)
+                if start(tag, planWay(.highway, from: from, to: to, join: true)) || tried.contains(tag) { return }
+                continue
+            }
+            guard done(tag), !realm.transport.lines.contains(where: { $0.kind == .bus && $0.payer == .district(d.id) && $0.name.hasSuffix("~\(o.id)") }) else { continue }
+            let road = site(tag)!.cells.map { $0.t }.filter { wayKind(at: $0)?.mode == .road && bridge(at: $0) == nil && tunnel(at: $0) == nil }
+            guard road.count >= 6 else { tried.insert(tag); continue }
+            let a = road[2], b = road[road.count - 3]
+            if let s0 = addStop(.busStop, at: a, name: d.name + (zh ? " 长途汽车站" : " Coach Station"), nation: d.nation, district: d.id),
+               let s1 = addStop(.busStop, at: b, name: o.name + (zh ? " 长途汽车站" : " Coach Station"), nation: o.nation, district: o.id),
+               let l = addLine(.bus, stops: [s0.id, s1.id], name: d.name + " – " + o.name + (zh ? " 长途 ~" : " coach ~") + "\(o.id)", headway: 240, nation: d.nation, payer: .district(d.id), freight: false) {
+                d.note("opened the highway and a coach to \(o.name)")
+                if let v = buy(.bus, at: a, heading: atan2(Double(road[3].y - a.y), Double(road[3].x - a.x))) { assign(v, to: l) }
+            } else { d.note("could not open the coach to \(o.name) yet") }
             return
         }
         // 6. an airport (a runway three tiles wide, a taxiway and an apron) once it has 150 people
