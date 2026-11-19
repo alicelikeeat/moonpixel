@@ -238,7 +238,8 @@ final class CityWarTests: XCTestCase {
         s.realm.nations[0].fatigue = 1.2
         hours(s, 1)
         XCTAssertEqual(s.realm.relation(1, 2)?.state, 2, "exhaustion forces a truce")
-        runYears(s, 0.02)
+        // a few hours on, the damage is still there (a small town may be whole again within days)
+        hours(s, 6)
         XCTAssertGreaterThan(target.buildings.filter { !$0.done }.count, 0, "nothing is whole again at once")
         runYears(s, 1.5)
         XCTAssertLessThan(target.buildings.filter { !$0.done && !$0.retry.isEmpty }.count, damaged + 1)
