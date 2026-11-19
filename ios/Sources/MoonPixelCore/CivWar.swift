@@ -19,6 +19,8 @@ public struct CivUnit: Codable, Equatable {
     public var target: Int64?                          // where it is flying to strike or look
     public var aloft = 0.0                             // hours of flight left
     public var cruising = false                        // a sky carrier high in near space: unseen by most, harmless to all
+    /// A shifter's form ("vehicle" or "robot"; nil: robot), and when a change of form ends (Mechs.swift).
+    public var form: String?, shiftDone: Double?
     public var ready: [String: Double] = [:]           // weapon -> game time it can fire again
     public var def: CivUnitDef { CivUnitDef.byKey[kind]! }
     public func ok(_ part: String) -> Bool { (parts[part] ?? 1) > 0 }
@@ -321,9 +323,9 @@ extension Civ {
             let ms = f.units.compactMap { units[$0] }
             guard !ms.isEmpty else { continue }
             // the slowest sets the pace; no fuel, no power or no crew to work it: no movement
-            let canGo = ms.allSatisfy { u in (u.def.fuelPerDay == 0 || u.fuel > 0) && (u.def.energyPerDay == 0 || u.energy > 0) && u.ok("power") && u.air != .airborne }
+            let canGo = ms.allSatisfy { u in (u.def.fuelPerDay == 0 || u.fuel > 0) && (u.def.energyPerDay == 0 || u.energy > 0) && u.ok("power") && u.air != .airborne && !shifting(u) }
             guard canGo else { continue }
-            let speed = ms.map { $0.def.speed }.min() ?? 1
+            let speed = ms.map { formSpeed($0) }.min() ?? 1
             f.progress += speed / 24
             for i in f.units.indices { if var u = units[f.units[i]] { u.fuel = max(0, u.fuel - u.def.fuelPerDay / 24); units[u.id] = u } }
             while f.progress >= 1 && !f.path.isEmpty {
@@ -343,7 +345,7 @@ extension Civ {
     /// Size and layer of a force for routing: the largest machine in it decides.
     func moveRules(_ f: CivForce) -> (CivSize, CivLayer) {
         let ms = f.units.compactMap { units[$0] }.filter { !($0.def.carrierBased && $0.def.hangar == 0 && f.units.contains { units[$0]?.def.hangar ?? 0 > 0 }) }
-        let size = ms.map { $0.def.size }.max { $0.rawValue < $1.rawValue } ?? .person
+        let size = ms.map { formSize($0) }.max { $0.rawValue < $1.rawValue } ?? .person
         return (size, f.layer)
     }
 

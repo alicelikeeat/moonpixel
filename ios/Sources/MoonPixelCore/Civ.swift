@@ -329,7 +329,9 @@ public final class Civ: Codable {
             if size == .huge { return a.deep >= 0.3 && b.deep >= 0.3 }
             return a.water >= 0.35 && b.water >= 0.35
         case .ground:
-            guard a.land >= 0.2 && b.land >= 0.2 else { return false }
+            // a humanoid frame wades a shallow strait that no vehicle can cross (Mechs.swift)
+            let wade = size == .large && a.land >= 0.1 && b.land >= 0.1 && max(a.deep, b.deep) < 0.2
+            guard (a.land >= 0.2 && b.land >= 0.2) || wade else { return false }
             let rough = max(a.mountain, b.mountain)
             switch size {
             case .person: return true

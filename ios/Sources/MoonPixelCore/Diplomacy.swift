@@ -42,14 +42,16 @@ public struct WarBalance: Codable, Equatable {
     /// Effective strength points of one unit of each kind (whole, supplied, on open ground).
     public var points: [String: Double] = [
         "levy": 40, "infantry": 100, "lancers": 120, "armour": 220, "artillery": 160, "air_defence": 90,
-        "drone": 60, "fighter": 180, "escort": 200, "submarine": 160, "carrier": 400, "frame": 600, "sky_carrier": 800,
+        "drone": 60, "fighter": 180, "escort": 200, "submarine": 160, "carrier": 400, "frame": 600, "shifter": 500, "sky_carrier": 800,
     ]
     /// Kinds that can take and hold a city (ground units with people in them).
-    public var occupiers: Set<String> = ["levy", "infantry", "lancers", "armour", "artillery", "frame"]
+    public var occupiers: Set<String> = ["levy", "infantry", "lancers", "armour", "artillery", "frame", "shifter"]
     /// Landing from the sea, and a defender fighting from a pass or walls.
     public var landing = 0.75, fortified = 1.5
     /// What a shipyard's fleet lifts in a round, and what a port takes in (strength points; Logistics.swift).
     public var liftPerYard = 4000.0, intakePerPort = 3000.0
+    /// Hours a shifter takes to change form, and how much faster it runs as a vehicle (Mechs.swift).
+    public var shiftHours = 0.5, vehicleSpeed = 2.4
     public init() {}
 
     /// The attacker's chance to win a fight for a place at this ratio of effective strength.
@@ -332,7 +334,8 @@ extension Civ {
     public func attack(on w: CivTargetWar) -> (points: Double, ground: Bool, lines: [String]) {
         guard let c = cities[w.target] else { return (0, false, []) }
         var pts = 0.0, ground = false, lines: [String] = [], waiting = 0
-        let bySea = landRoute(for: w.attacker, from: homeCity(w.attacker)?.regionKey ?? c.regionKey, to: c.regionKey, size: .person) == nil
+        // by sea when no way over land exists at all (geography, not who stands in the way)
+        let bySea = route(from: homeCity(w.attacker)?.regionKey ?? c.regionKey, to: c.regionKey, size: .person) == nil
         let landing = bySea ? cfg.war.landing : 1
         // by sea, only what the fleet lifts and the port takes in lands this round (counted once, here)
         let round = bySea ? landingRound(w.attacker, at: c) : (lands: Double.infinity, lift: Double.infinity, intake: Double.infinity)
@@ -343,7 +346,7 @@ extension Civ {
             for u in f.units.compactMap({ units[$0] }) {
                 guard there else { waiting += 1; continue }
                 if u.air == .parked && f.layer != .ground { waiting += 1; continue }          // in a hangar: not deployed
-                let onGround = f.layer == .ground && cfg.war.occupiers.contains(u.kind)
+                let onGround = f.layer == .ground && cfg.war.occupiers.contains(u.kind) && !shifting(u)     // mid-shift: neither moves nor takes
                 if onGround {
                     let raw = unitPoints(u)
                     if landed + raw > round.lands { onShips += 1; continue }                 // still on the ships
