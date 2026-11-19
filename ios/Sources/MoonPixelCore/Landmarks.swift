@@ -27,7 +27,7 @@ extension Society {
         let r = Int(reach / 512) + 1
         let cx = Int((p.x / 512).rounded(.down)), cy = Int((p.y / 512).rounded(.down))
         var out: [UfoState] = []
-        for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where world.gen.isUfoPort(x, y) {
+        for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where ufoPortOpen(x, y) {
             let pad = Vec2(Double(x * 32) + 16, Double(y * 32) + 14) * 16
             for k in 0..<2 {
                 let s = Society.ufoState(pad: pad, time: t0, saucer: k, seed: Int(MP.h2(world.seed, x, y) % 1000))

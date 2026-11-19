@@ -1593,6 +1593,7 @@ public final class Society {
         nextID = s.nextID; nextSID = s.nextSID; nextBID = s.nextBID; stats = s.stats; rng = s.rng
         legacyTech = min(Society.techs.count, s.techCount ?? 0)
         realm = s.realm ?? Realm()
+        syncFlats()
         log = (s.log ?? []).map { ($0.t, $0.text) }
         // saves from before the three nations: divide the existing villages between them
         if realm.nations.isEmpty { foundNations() }

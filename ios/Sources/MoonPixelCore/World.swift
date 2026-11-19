@@ -57,6 +57,10 @@ public final class Generator {
     /// Climate shifts chosen when the world was created (see WorldRecipe).
     public var tempBias = 0.0, moistBias = 0.0, elevBias = 0.0
     public var depth = 0
+    /// Ground levelled for monuments (set from the realm's monuments: Society.syncFlats).
+    public struct Flat: Equatable { public let x0: Int, y0: Int, x1: Int, y1: Int, e: Double }
+    public var flats: [Flat] = []
+    public static let flatBlend = 24
     let content = Content.shared
     let nElev, nTemp, nMoist, nRiver, nForest, nDetail, nHill: Noise
     var ground = [UInt8](), alt = [UInt8](), altCh = [Double](), density = [Double]()

@@ -182,7 +182,7 @@ public final class WorldMap {
         var volcanoes = Set<TilePos>()
         for y in 0..<side { for x in 0..<side where world.known(origin.x + x, origin.y + y) != 0 {
             let cx = origin.x + x, cy = origin.y + y
-            if world.gen.isUfoPort(cx, cy) { add(.ufo, zh ? "UFO 机场" : "UFO airport", "#6af0ff", TilePos(cx * 32 + 15, cy * 32 + 13)) }
+            if s.ufoPortOpen(cx, cy) { add(.ufo, zh ? "UFO 机场" : "UFO airport", "#6af0ff", TilePos(cx * 32 + 15, cy * 32 + 13)) }
             if let v = world.gen.volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 23), volcanoes.insert(TilePos(v.x, v.y)).inserted {
                 add(.volcano, zh ? "火山" : "Volcano", "#ff5a1a", TilePos(v.x, v.y))
             }
@@ -215,7 +215,8 @@ public final class WorldMap {
             let d = Int(Double((v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y)).squareRoot())
             return d < 4 ? (zh ? "火山口（熔岩）" : "Volcano crater (lava)") : (zh ? "火山坡" : "Volcano slope")
         }
-        if gen.isUfoPort(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) { return zh ? "UFO 机场" : "UFO airport" }
+        if let m = (s.realm.monuments ?? []).first(where: { t.x >= $0.x && t.x < $0.x + $0.w && t.y >= $0.y && t.y < $0.y + $0.d }) { return m.kind.name(zh: zh) }
+        if s.ufoPortOpen(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) { return zh ? "UFO 机场" : "UFO airport" }
         if e > Biome.mountainLevel + 0.12 { return zh ? "高山" : "High mountains" }
         if e > Biome.mountainLevel { return zh ? "山地" : "Mountains" }
         let b = Content.shared.biomes[min(Content.shared.biomes.count - 1, max(0, gen.biome(t.x, t.y)))]

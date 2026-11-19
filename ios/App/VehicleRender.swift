@@ -118,35 +118,42 @@ extension GameScene {
     }
 
     static var ufoTexture: SKTexture?
-    static var monumentTextures: [MonumentKind: SKTexture] = [:]
+    static var monumentTextures: [String: SKTexture] = [:]
 
-    /// The capitals' monuments in the flat view: the structure painted standing up from its ground, its foot
-    /// three quarters of the way down its plot (the gardens and gates round it are the world's own tiles).
+    /// The capitals' monuments in the flat view, at their real size: each hall, gate and tower (or the statue,
+    /// the tower, the pyramid) painted standing up from its foot; the walls, courts and gardens round them are
+    /// the world's own tiles.
     func updateMonuments2D(_ society: Society, _ model: GameModel) {
-        guard model.depth == 0, viewPos.x.isFinite, viewPos.y.isFinite else { for n in monumentNodes.values { n.removeFromParent() }; monumentNodes = [:]; return }
-        let reach = Int(900.0 / Double(max(0.3, zoom)) * 1.4 / 16) + 30
+        guard model.depth == 0, viewPos.x.isFinite, viewPos.y.isFinite else {
+            for ns in monumentNodes.values { for n in ns { n.removeFromParent() } }; monumentNodes = [:]; return
+        }
+        let reach = Int(900.0 / Double(max(0.3, zoom)) * 1.4 / 16) + 200
         var seen = Set<Int>()
         for m in society.monuments(near: viewPos.tile, reach: reach) {
             seen.insert(m.id)
-            let n = monumentNodes[m.id] ?? {
-                let tex = GameScene.monumentTextures[m.kind] ?? {
-                    let t = MonumentArt.picture(m.kind, ppt: 32).cgImage.map { SKTexture(image: UIImage(cgImage: $0, scale: 2, orientation: .up)) } ?? SKTexture()
+            if monumentNodes[m.id] != nil { continue }
+            var ns: [SKSpriteNode] = []
+            for sp in MonumentArt.sprites(m.kind) {
+                let tex = GameScene.monumentTextures[sp.key] ?? {
+                    // as sharp as a texture of at most 2048 pixels allows
+                    let ppt = min(16.0, 2048.0 / Double(max(sp.w, sp.h)))
+                    let t = sp.draw(ppt).cgImage.map { SKTexture(image: UIImage(cgImage: $0, scale: 1, orientation: .up)) } ?? SKTexture()
                     t.filteringMode = .linear
-                    GameScene.monumentTextures[m.kind] = t
+                    GameScene.monumentTextures[sp.key] = t
                     return t
                 }()
-                let s = SKSpriteNode(texture: tex)
-                s.size = CGSize(width: tex.size().width, height: tex.size().height)
-                s.anchorPoint = CGPoint(x: 0.5, y: 0)
-                addChild(s)
-                monumentNodes[m.id] = s
-                return s
-            }()
-            let foot = Double(m.y) + Double(m.d) * 0.78
-            n.position = CGPoint(x: Double(m.x) * 16 + Double(m.w) * 8, y: -foot * 16)
-            n.zPosition = 9 + CGFloat(foot) * 1e-5
+                let n = SKSpriteNode(texture: tex)
+                n.size = CGSize(width: CGFloat(sp.w) * 16, height: CGFloat(sp.h) * 16)
+                n.anchorPoint = CGPoint(x: 0.5, y: 0)
+                let foot = Double(m.y) + Double(sp.z)
+                n.position = CGPoint(x: (Double(m.x) + Double(sp.x)) * 16, y: -foot * 16)
+                n.zPosition = 9 + CGFloat(foot) * 1e-5
+                addChild(n)
+                ns.append(n)
+            }
+            monumentNodes[m.id] = ns
         }
-        for (id, n) in monumentNodes where !seen.contains(id) { n.removeFromParent(); monumentNodes[id] = nil }
+        for (id, ns) in monumentNodes where !seen.contains(id) { for n in ns { n.removeFromParent() }; monumentNodes[id] = nil }
     }
 
     /// Car drawings by model and paint, made once.

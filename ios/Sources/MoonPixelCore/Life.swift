@@ -413,7 +413,7 @@ extension Society {
     /// The nearest UFO airport (its chunk), searching outwards from a chunk.
     public func nearestUfoPort(cx: Int, cy: Int, within r: Int = 24) -> (Int, Int)? {
         var best: (Int, Int)?, bd = Int.max
-        for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where world.gen.isUfoPort(x, y) {
+        for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where ufoPortOpen(x, y) {
             let d = (x - cx) * (x - cx) + (y - cy) * (y - cy)
             if d < bd { bd = d; best = (x, y) }
         } }
