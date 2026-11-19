@@ -743,8 +743,9 @@ public final class Society {
             } }
             let farY = out.y < 0 ? h - 2 : 1                    // the far side from the door
             let farX = out.x < 0 ? w - 2 : 1
-            // inside: two beds against the far wall, a kitchen, a table with chairs, a chest, a bookshelf and a
-            // flower pot; nothing right behind the door
+            // inside: two beds against the far wall, a table with chairs and a flower pot (from offcuts: only the
+            // beds take timber; the kitchens, stores and books of a town are in its own buildings); nothing right
+            // behind the door
             let inside = dd + TilePos(-out.x, -out.y)
             var taken: Set<TilePos> = [inside, TilePos(1, h / 2), TilePos(w - 2, h / 2)]
             func put(_ x: Int, _ y: Int, _ key: String, wood: Double) {
@@ -755,10 +756,7 @@ public final class Society {
             }
             put(farX, farY, "bed", wood: 2); put(w - 1 - farX, farY, "bed", wood: 2)
             let midY = h / 2, midX = w / 2
-            put(midX, midY, "table", wood: 1); put(midX - 1, midY, "chair", wood: 1); put(midX + 1, midY, "chair", wood: 1)
-            put(1, h - 2 == farY ? 1 : h - 2, "kitchen", wood: 1)
-            put(w - 2, h - 2 == farY ? 1 : h - 2, "chest", wood: 1)
-            put(midX, farY, "bookshelf", wood: 1)
+            put(midX, midY, "table", wood: 0); put(midX - 1, midY, "chair", wood: 0); put(midX + 1, midY, "chair", wood: 0)
             put(midX - 1, farY, "flower_pot", wood: 0)          // (the middle of each end wall stays free: a stair up goes there)
             // the front: windows either side of the door (glass when the town builds in stone)
             if stone {

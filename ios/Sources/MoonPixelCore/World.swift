@@ -280,10 +280,11 @@ public final class Generator {
         for by in (bys - 1)...(bys + 1) { for bx in (bxs - 1)...(bxs + 1) {
             let h = MP.h2(seed &+ 4242, bx, by)
             guard h % 8 == 0 else { continue }                                   // one block in eight
-            let vx = bx * 256 + 64 + Int((h >> 4) % 128), vy = by * 256 + 64 + Int((h >> 12) % 128)
+            let vx = bx &* 256 &+ 64 &+ Int((h >> 4) % 128), vy = by &* 256 &+ 64 &+ Int((h >> 12) % 128)
             if abs(vx) < 200 && abs(vy) < 200 { continue }
-            let dx = vx - wx, dy = vy - wy
-            guard dx * dx + dy * dy <= radius * radius else { continue }
+            // (in Double: far-off numbers must not overflow)
+            let dx = Double(vx) - Double(wx), dy = Double(vy) - Double(wy)
+            guard dx * dx + dy * dy <= Double(radius * radius) else { continue }
             let e = climate(vx, vy).0
             guard e > Biome.sea + 0.06 else { continue }
             return Volcano(x: vx, y: vy, r: 26)
@@ -756,9 +757,18 @@ public final class OpenWorld {
     // MARK: tiles
     @inline(__always) static func idx(_ wx: Int, _ wy: Int) -> Int { (wy & 31) * 32 + (wx & 31) }
 
-    public func tile(_ layer: Int, _ wx: Int, _ wy: Int) -> UInt8 { chunk(wx >> 5, wy >> 5).layers[layer][OpenWorld.idx(wx, wy)] }
+    public func tile(_ layer: Int, _ wx: Int, _ wy: Int) -> UInt8 {
+        // a place far beyond any world (a "none" placeholder, a broken number) is empty: never generated
+        guard OpenWorld.sane(wx, wy) else { return 0 }
+        return chunk(wx >> 5, wy >> 5).layers[layer][OpenWorld.idx(wx, wy)]
+    }
+
+    /// Coordinates a world can hold (about 17 000 km either way): anything beyond is a placeholder or a fault.
+    @inline(__always) public static func sane(_ wx: Int, _ wy: Int) -> Bool { wx.magnitude < (1 << 33) && wy.magnitude < (1 << 33) }
+    @inline(__always) public static func sane(_ t: TilePos) -> Bool { sane(t.x, t.y) }
 
     public func blocked(_ wx: Int, _ wy: Int) -> Bool {
+        guard OpenWorld.sane(wx, wy) else { return true }
         let c = chunk(wx >> 5, wy >> 5)
         let i = OpenWorld.idx(wx, wy)
         let o = Int(c.layers[2][i])
@@ -779,6 +789,7 @@ public final class OpenWorld {
     }
 
     public func setTile(_ layer: Int, _ wx: Int, _ wy: Int, _ id: UInt8) {
+        guard OpenWorld.sane(wx, wy) else { return }
         let c = chunk(wx >> 5, wy >> 5)
         let i = OpenWorld.idx(wx, wy)
         let old = c.layers[layer][i]

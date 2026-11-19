@@ -238,7 +238,7 @@ extension Society {
     /// Someone stepped on or off a pressure plate.
     public func press(_ t: TilePos, down: Bool, in w: OpenWorld? = nil) {
         let w = w ?? world
-        guard content.tile(w.tile(2, t.x, t.y))?.key == "plate" else { return }
+        guard OpenWorld.sane(t), content.tile(w.tile(2, t.x, t.y))?.key == "plate" else { return }
         let was = pressed.contains(t)
         if down == was { return }
         if down { pressed.insert(t) } else { pressed.remove(t) }

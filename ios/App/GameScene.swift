@@ -293,7 +293,11 @@ final class GameScene: SKScene {
         }
         // pressure plates notice who stands on them
         let here = player.tile
-        if here != lastTile { society.press(lastTile, down: false, in: world); society.press(here, down: true, in: world); lastTile = here }
+        if here != lastTile {
+            // (before the first step there is no tile left behind: "none" is a far-off number, never looked up)
+            if !lastTile.isNone { society.press(lastTile, down: false, in: world) }
+            society.press(here, down: true, in: world); lastTile = here
+        }
         switch model.watch {
         case .none: viewPos = player
         case .point(let p): viewPos = p

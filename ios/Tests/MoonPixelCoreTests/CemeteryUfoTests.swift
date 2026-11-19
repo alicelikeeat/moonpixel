@@ -121,3 +121,23 @@ extension Anime3DPreviewTests {
         try data.write(to: URL(fileURLWithPath: dir).appendingPathComponent("cem-a.rgba"))
     }
 }
+
+final class FarOffPlacesTests: XCTestCase {
+    /// The crash on opening a world: the first frame asked for the tile "left behind", which is the "none"
+    /// placeholder (Int.max): generating a chunk out there overflowed the volcano check. Far-off places are
+    /// now empty and never generated, and the volcano check cannot overflow.
+    func testAPlaceholderOrFarOffTileIsEmptyAndNothingOverflows() {
+        for seed in [1, 2, 3, 7, 9, 42, 123, 2024] {
+            let w = OpenWorld(seed: seed, budget: MemoryBudget(overrideMB: 128))
+            let s = Society(world: w, seed: seed)
+            XCTAssertEqual(w.tile(2, TilePos.none.x, TilePos.none.y), 0)
+            XCTAssertEqual(w.tile(0, Int.min, Int.min), 0)
+            XCTAssertTrue(w.blocked(Int.max, 5))
+            w.setTile(2, Int.max, 0, 1)
+            s.press(TilePos.none, down: false)
+            _ = w.gen.volcano(near: Int.max / 2, Int.max / 2, radius: 48)
+            _ = w.gen.volcano(near: -(Int.max / 2), 7, radius: 48)
+            XCTAssertFalse(w.cache.keys.contains { MP.keyCX($0).magnitude > 1 << 28 }, "nothing generated out there")
+        }
+    }
+}

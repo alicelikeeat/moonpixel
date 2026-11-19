@@ -225,7 +225,11 @@ final class CityWarTests: XCTestCase {
         let breach = s.realm.chron!.last { $0.kind == "breach" }!
         // the gap stays open: bare ground, or (when the engines broke in at a gate) the gate reopened after the capture
         let gap = s.world.tile(2, Int(breach.x / 16), Int(breach.y / 16))
-        XCTAssertTrue(gap == 0 || gap == s.content.tid("gate_open"), "the breach is no wall: \(gap)")
+        let bt = TilePos(Int(breach.x / 16), Int(breach.y / 16))
+        let inBuilding = target.buildings.contains { bt.x >= $0.x && bt.x < $0.x + $0.w && bt.y >= $0.y && bt.y < $0.y + $0.h }
+        print("CAMPAIGN breach at \(bt) gap \(gap) in a building: \(inBuilding)")
+        // (a breach through a house's wall is mended when the house is rebuilt)
+        XCTAssertTrue(gap == 0 || gap == s.content.tid("gate_open") || inBuilding, "the breach is no wall: \(gap)")
         // occupation: identity stays, the place is damaged, people flee, unrest starts, gates reopen
         XCTAssertGreaterThan(target.members.filter { s.agents[$0]?.nation == 2 }.count, 0, "residents keep who they are")
         XCTAssertGreaterThan(target.buildings.filter { !$0.done }.count, 0, "the city is damaged")
