@@ -275,6 +275,13 @@ struct CivGroundWarCard: View {
             ForEach(Array(c.nationFacts(nation, zh: zh).enumerated()), id: \.offset) { _, line in
                 Text(line).font(.system(size: 11, design: .rounded))
             }
+            // the first four technologies of war and what holds a landing back
+            ForEach(Array(c.techPreview(nation, zh: zh).enumerated()), id: \.offset) { _, t in
+                Text(t).font(.system(size: 10, design: .rounded)).opacity(0.75)
+            }
+            if let w = wars.last(where: { $0.attacker == nation && $0.ended == nil }), let place = c.cities[w.target] {
+                Text(c.bottleneck(nation, at: place, zh: zh)).font(.system(size: 10, weight: .semibold, design: .rounded))
+            }
             ForEach(Array(envoys.enumerated()), id: \.offset) { _, e in
                 Label(c.envoyLine(e, zh: zh), systemImage: "envelope.fill").font(.system(size: 10, design: .rounded)).opacity(0.9)
             }
