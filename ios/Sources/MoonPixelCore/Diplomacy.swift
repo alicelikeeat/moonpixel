@@ -162,6 +162,8 @@ extension Civ {
         }
         let guardPts = Double(c.pop) / 20
         pts += guardPts
+        let giant = giantDefence(c)
+        if giant > 0 { pts += giant; lines.append(String(format: "the giantess stands guard: +%.0f", giant)) }
         lines.append(String(format: "guard %.0f, forces %d, works x%.2f", guardPts, here.count, fort))
         return (pts, lines)
     }

@@ -208,6 +208,10 @@ public final class Civ: Codable {
     public var vassals: [CivVassal] = []
     public var targetWars: [CivTargetWar] = []
     public var nextEnvoy = 1, nextTargetWar = 1
+    /// Frames falling from sky carriers, and the giantesses of the world (Airborne.swift).
+    public var drops: [CivDrop] = []
+    public var giants: [CivGiant] = []
+    public var nextDrop = 1, nextGiant = 1
     public init(seed: Int) { self.seed = seed; rng = RNG(seed: seed &* 7919 &+ 17) }
 
     // Saving. The rules (`cfg`) are not saved: they belong to the version of the game. Every field is
@@ -215,7 +219,7 @@ public final class Civ: Codable {
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
         case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
-        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar
+        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -239,6 +243,7 @@ public final class Civ: Codable {
         try c.encode(coastRule, forKey: .coastRule); try c.encode(seaChecked.sorted(), forKey: .seaChecked)
         try c.encode(envoys, forKey: .envoys); try c.encode(envoysOut, forKey: .envoysOut); try c.encode(vassals, forKey: .vassals)
         try c.encode(targetWars, forKey: .targetWars); try c.encode(nextEnvoy, forKey: .nextEnvoy); try c.encode(nextTargetWar, forKey: .nextTargetWar)
+        try c.encode(drops, forKey: .drops); try c.encode(giants, forKey: .giants); try c.encode(nextDrop, forKey: .nextDrop); try c.encode(nextGiant, forKey: .nextGiant)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -283,6 +288,10 @@ public final class Civ: Codable {
         targetWars = try c.decodeIfPresent([CivTargetWar].self, forKey: .targetWars) ?? []
         nextEnvoy = try c.decodeIfPresent(Int.self, forKey: .nextEnvoy) ?? (envoysOut.map { $0.id }.max() ?? 0) + 1
         nextTargetWar = try c.decodeIfPresent(Int.self, forKey: .nextTargetWar) ?? (targetWars.map { $0.id }.max() ?? 0) + 1
+        drops = try c.decodeIfPresent([CivDrop].self, forKey: .drops) ?? []
+        giants = try c.decodeIfPresent([CivGiant].self, forKey: .giants) ?? []
+        nextDrop = try c.decodeIfPresent(Int.self, forKey: .nextDrop) ?? (drops.map { $0.id }.max() ?? 0) + 1
+        nextGiant = try c.decodeIfPresent(Int.self, forKey: .nextGiant) ?? (giants.map { $0.id }.max() ?? 0) + 1
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -398,6 +407,8 @@ public final class Civ: Codable {
         runPending()
         warHourly()
         if envoys { envoysHourly(); targetWarsHourly() }
+        dropsHourly()
+        if !giants.isEmpty { giantsHourly() }
         let h = Int((time - hourAcc) / (MP.daySeconds / 24)) % 24
         for id in cities.keys.sorted() where id % 24 == h {
             guard let c = cities[id], c.detail == nil else { continue }
@@ -876,6 +887,7 @@ public final class Civ: Codable {
     public var people: Int {
         cities.values.reduce(0) { $0 + ($1.detail == nil ? $1.people.total : 0) }
             + towerIndex.towers.values.reduce(0) { a, t in a + t.floors.reduce(0) { $0 + $1.people.total } } + trips.values.reduce(0) { $0 + $1.people.total } + forces.values.reduce(0) { $0 + $1.crew.total }
+            + drops.reduce(0) { $0 + $1.crew.total }
     }
 
     /// What must hold every day. Empty when everything adds up.
