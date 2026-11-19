@@ -786,6 +786,31 @@ public enum Figure3D {
         func b(_ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA) { m.px(o, x, y, z, w, h, d, c, faces: .all) }
         let body = RGBA(hex: sp.body), accent = RGBA(hex: sp.accent), ink = RGBA(hex: "#2a2233")
         let sw: Float = frame % 2 == 1 ? 1 : 0
+        if sp.aquatic {
+            // sea creatures float at the water's surface level (y 0), long along z
+            switch sp.key {
+            case "fish":
+                for (x, z) in [(Float(-3), Float(0)), (2, 3), (0, -4), (-1, 6), (3, -1)] { b(x, 0.5, z, 1, 1, 3, body); b(x, 0.5, z + 3, 1, 1, 0.5, accent) }
+            case "dolphin":
+                b(-1.5, 0, -6, 3, 3, 12, body); b(-1, 0, -5, 2, 1, 10, accent); b(-0.5, 3, -1, 1, 2, 2, body); b(-2.5 - sw, 0.5, -7.5, 5, 0.8, 1.5, body); b(-0.5, 1, 6, 1, 1, 2, body)
+            case "whale":
+                b(-3.5, -1, -11, 7, 5, 22, body); b(-3, -1, -10, 6, 1.5, 20, accent); b(-5 - sw, 0, -13, 10, 1, 2.5, body); b(-0.3, 4, 3, 0.6, 3, 0.6, RGBA(200, 230, 255))
+            case "shark":
+                b(-1.5, 0, -7, 3, 3, 14, body); b(-1, 0, -6, 2, 1, 12, accent); b(-0.4, 3, -1, 0.8, 3, 2.5, body); b(-0.4, 0.5, -9 - sw, 0.8, 3, 2.5, body)
+            case "turtle":
+                b(-3, 0, -3, 6, 2, 6, accent); b(-2.5, 1.5, -2.5, 5, 1, 5, body); b(-1, 0.5, 3, 2, 1.5, 2, RGBA(130, 170, 110))
+                for (x, z) in [(Float(-4), Float(-2)), (3, -2), (-4, 2), (3, 2)] { b(x, 0.3, z + sw * 0.5, 1, 0.6, 1.5, RGBA(130, 170, 110)) }
+            case "jellyfish":
+                b(-2, 2, -2, 4, 2.5, 4, body.lightened(0.2))
+                for x in [Float(-1.5), -0.5, 0.5, 1.5] { b(x, -2 - sw * 0.5, -0.2, 0.3, 4, 0.3, body.lightened(0.4)) }
+            case "octopus":
+                b(-2, 1, -2, 4, 4, 4, body); b(-1.2, 3, 2, 0.6, 0.6, 0.2, ink); b(0.6, 3, 2, 0.6, 0.6, 0.2, ink)
+                for (x, z) in [(Float(-3), Float(0)), (3, 0), (0, -3), (0, 3), (-2, -2), (2, 2)] { b(x - 0.3, 0, z - 0.3, 0.6, 1, 0.6, body.darkened(0.1)) }
+            default:
+                b(-6, 0, -2, 12, 0.8, 4, body); b(-6, 0.5 + sw, -1, 2, 0.6, 2, body); b(4, 0.5 + sw, -1, 2, 0.6, 2, body); b(-1, 0, 2, 2, 0.5, 1, accent); b(-0.2, 0, -6, 0.4, 0.4, 4, body.darkened(0.2))
+            }
+            return m
+        }
         if sp.key == "chicken" {
             b(-2, 3, -3, 4, 4, 6, body); b(-1.5, 6, 2, 3, 3, 3, body); b(-0.5, 7, 5, 1, 1, 1, RGBA(hex: "#f0a020")); b(-0.5, 9, 3, 1, 1, 2, accent)
             b(-1.5, 0, -0.5 + sw, 1, 3, 1, RGBA(hex: "#f0a020")); b(0.5, 0, -0.5 - sw, 1, 3, 1, RGBA(hex: "#f0a020"))

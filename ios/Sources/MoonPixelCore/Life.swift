@@ -15,6 +15,8 @@ public struct Species {
     public let hostile: Bool, tameable: Bool
     public let size: Int
     public let body: String, accent: String
+    /// Lives in the sea: it appears in open water and swims only in water.
+    public var aquatic: Bool = false
     public static let all: [Species] = [
         Species(key: "rabbit", en: "Rabbit", zh: "兔子", hp: 20, speed: 60, meat: 2, hostile: false, tameable: true, size: 0, body: "#d8d0c4", accent: "#f4b8c0"),
         Species(key: "deer", en: "Deer", zh: "鹿", hp: 50, speed: 62, meat: 6, hostile: false, tameable: false, size: 2, body: "#b07a48", accent: "#f0e0c0"),
@@ -28,7 +30,19 @@ public struct Species {
         Species(key: "camel", en: "Camel", zh: "骆驼", hp: 100, speed: 36, meat: 8, hostile: false, tameable: true, size: 3, body: "#d0a868", accent: "#a88048"),
         Species(key: "horse", en: "Horse", zh: "马", hp: 90, speed: 70, meat: 8, hostile: false, tameable: true, size: 3, body: "#8a5a38", accent: "#3a2a20"),
         Species(key: "golem", en: "Maze golem", zh: "迷宫石像", hp: 180, speed: 30, meat: 0, hostile: true, tameable: false, size: 3, body: "#7a8088", accent: "#60e0ff"),
+        // the sea's creatures (after the land's, so saved animals keep their kinds)
+        Species(key: "fish", en: "Shoal of fish", zh: "鱼群", hp: 10, speed: 70, meat: 3, hostile: false, tameable: false, size: 0, body: "#5aa0d8", accent: "#f0d040", aquatic: true),
+        Species(key: "dolphin", en: "Dolphin", zh: "海豚", hp: 60, speed: 90, meat: 0, hostile: false, tameable: true, size: 2, body: "#7a90a8", accent: "#e8eef4", aquatic: true),
+        Species(key: "whale", en: "Whale", zh: "鲸", hp: 400, speed: 34, meat: 0, hostile: false, tameable: false, size: 3, body: "#3a4c64", accent: "#d8e0e8", aquatic: true),
+        Species(key: "shark", en: "Shark", zh: "鲨鱼", hp: 120, speed: 80, meat: 4, hostile: false, tameable: false, size: 2, body: "#6a7888", accent: "#e8ecf0", aquatic: true),
+        Species(key: "turtle", en: "Sea turtle", zh: "海龟", hp: 80, speed: 28, meat: 0, hostile: false, tameable: true, size: 1, body: "#5a8a50", accent: "#c8a060", aquatic: true),
+        Species(key: "jellyfish", en: "Jellyfish", zh: "水母", hp: 8, speed: 14, meat: 0, hostile: false, tameable: false, size: 0, body: "#e8a0e0", accent: "#ffffff", aquatic: true),
+        Species(key: "octopus", en: "Octopus", zh: "章鱼", hp: 40, speed: 30, meat: 2, hostile: false, tameable: false, size: 1, body: "#d86a50", accent: "#f8d8c8", aquatic: true),
+        Species(key: "manta", en: "Manta ray", zh: "蝠鲼", hp: 90, speed: 48, meat: 0, hostile: false, tameable: false, size: 2, body: "#2a3448", accent: "#f0f0f4", aquatic: true),
     ]
+    /// What lives in shallow water and in deep water.
+    static let shallowSea = ["fish", "fish", "turtle", "jellyfish", "octopus", "dolphin"]
+    static let deepSea = ["fish", "dolphin", "whale", "shark", "manta", "jellyfish", "turtle"]
     static let byBiome: [String: [String]] = [
         "grassland": ["rabbit", "sheep", "cow", "horse", "chicken", "rabbit", "wolf"], "forest": ["deer", "boar", "rabbit", "wolf", "deer", "fox"],
         "taiga": ["deer", "wolf", "bear", "fox"], "snow": ["fox", "wolf"], "desert": ["camel"], "canyon": ["camel"],
@@ -150,7 +164,16 @@ extension Society {
                 let ang = f.rng.unit() * 2 * Double.pi
                 let p = viewer + Vec2(cos(ang), sin(ang)) * f.rng.range(520, 760)
                 let t = p.tile
-                if !world.blocked(t.x, t.y), let list = Species.byBiome[biomeKey(t)], world.gen.isMaze(t.x >> 5, t.y >> 5) == false {
+                let g = world.tile(0, t.x, t.y)
+                if world.depth == 0, Content.shared.water[Int(g)] {
+                    // the sea: a shoal, a pod or a lone swimmer of the water there
+                    let list = Content.shared.tile(g)?.key == "deep_water" ? Species.deepSea : Species.shallowSea
+                    let key = list[f.rng.index(list.count)]
+                    realm.fauna = f
+                    let herd = key == "fish" || key == "dolphin" || key == "jellyfish" ? f.rng.int(2, 5) : 1
+                    for i in 0..<herd where Content.shared.water[Int(world.tile(0, t.x + i, t.y))] { spawnAnimal(key, at: TilePos(t.x + i, t.y).center) }
+                    f = realm.fauna
+                } else if !world.blocked(t.x, t.y), let list = Species.byBiome[biomeKey(t)], world.gen.isMaze(t.x >> 5, t.y >> 5) == false {
                     let key = list[f.rng.index(list.count)]
                     realm.fauna = f
                     let herd = Species.all[Species.index(key)].hostile ? 1 : f.rng.int(1, 3)
@@ -209,7 +232,9 @@ extension Society {
                 var moved = false
                 for cand in [np, Vec2(np.x, a.pos.y), Vec2(a.pos.x, np.y), Vec2(a.pos.x + (to.y >= 0 ? step : -step), a.pos.y), Vec2(a.pos.x, a.pos.y + (to.x >= 0 ? step : -step))] {
                     let t = cand.tile
-                    if !world.blocked(t.x, t.y) { a.pos = cand; moved = true; break }
+                    // a sea creature swims only in water; a land animal walks only where it can
+                    let ok = sp.aquatic ? Content.shared.water[Int(world.tile(0, t.x, t.y))] && Content.shared.tile(world.tile(2, t.x, t.y))?.solid != true : !world.blocked(t.x, t.y)
+                    if ok { a.pos = cand; moved = true; break }
                 }
                 if !moved { a.to = a.pos } else if abs(to.x) > 0.5 { a.facing = to.x < 0 ? -1 : 1 }
             }
@@ -461,7 +486,35 @@ extension PixelArt {
         let (bw, bh, leg) = dims[min(sp.size, 3)]
         var b = Bitmap(24, 22)
         let x0 = 4, y0 = 20 - leg - bh
-        if sp.key == "chicken" {
+        if sp.aquatic {
+            let w = frame % 2
+            switch sp.key {
+            case "fish":
+                for (x, y) in [(4, 8), (11, 5), (14, 12), (6, 15), (17, 8)] {
+                    b.rect(x, y, 4, 2, body); b.set(x + 4, y, accent); b.set(x + 4, y + 1, accent); b.set(x - 1 - w, y, body.darkened(0.2)); b.set(x + 3, y, ink)
+                }
+            case "dolphin":
+                b.rect(4, 10, 14, 4, body); b.rect(6, 13, 10, 2, accent); b.rect(17, 11, 4, 2, body); b.rect(10, 7, 3, 3, body)
+                b.rect(1, 9 - w, 3, 2, body); b.rect(1, 12 + w, 3, 2, body); b.set(17, 10, ink)
+            case "whale":
+                b.rect(1, 7, 20, 8, body); b.rect(3, 13, 16, 3, accent); b.rect(20, 9, 3, 4, body); b.rect(0, 5 - w, 2, 4, body); b.rect(0, 13 + w, 2, 4, body)
+                b.set(18, 9, ink); b.rect(12, 3, 1, 4, RGBA(200, 230, 255, 200))
+            case "shark":
+                b.rect(4, 10, 15, 4, body); b.rect(6, 13, 12, 2, accent); b.rect(10, 6, 3, 4, body); b.rect(19, 11, 3, 2, body)
+                b.rect(1, 8 - w, 3, 3, body); b.rect(1, 12 + w, 3, 3, body); b.set(18, 11, ink)
+            case "turtle":
+                b.rect(7, 8, 10, 7, accent); b.rect(8, 9, 8, 5, body); b.rect(17, 10, 3, 3, RGBA(130, 170, 110)); b.set(19, 11, ink)
+                b.rect(6 - w, 7, 3, 2, RGBA(130, 170, 110)); b.rect(6 + w, 14, 3, 2, RGBA(130, 170, 110)); b.rect(15, 6 + w, 3, 2, RGBA(130, 170, 110))
+            case "jellyfish":
+                b.disc(12, 8, 5, body.lightened(0.2)); b.rect(7, 8, 10, 2, body)
+                for x in stride(from: 8, through: 16, by: 2) { b.rect(x, 10, 1, 6 + (x / 2 + w) % 3, body.lightened(0.4)) }
+            case "octopus":
+                b.disc(12, 8, 4.5, body); b.set(10, 8, ink); b.set(14, 8, ink)
+                for (i, x) in [6, 9, 12, 15, 18].enumerated() { b.rect(x, 12, 1, 4 + (i + w) % 3, body.darkened(0.1)); b.set(x, 13, accent) }
+            default:   // manta
+                b.rect(4, 10, 16, 3, body); b.rect(2, 9 - w, 4, 2, body); b.rect(18, 9 - w, 4, 2, body); b.rect(10, 12, 4, 2, accent); b.rect(0, 11, 4, 1, body.darkened(0.2))
+            }
+        } else if sp.key == "chicken" {
             b.rect(9, 12, 6, 5, body); b.rect(13, 9, 4, 4, body); b.set(17, 11, RGBA(hex: "#f0a020")); b.rect(14, 8, 2, 1, accent)
             b.set(15, 10, ink); b.rect(7, 12, 2, 3, body.darkened(0.12))
             b.rect(10 + frame % 2, 17, 1, 3, RGBA(hex: "#f0a020")); b.rect(13 - frame % 2, 17, 1, 3, RGBA(hex: "#f0a020"))
