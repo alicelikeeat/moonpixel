@@ -9,6 +9,9 @@ struct HUDView: View {
     @State private var showPicker = false
     @State private var pending: PhotoPick = .none      // what the open picker is for
     @State private var toastVisible = false
+    @State private var speedOpen = false             // the speed bar opened out (it folds back to the current speed)
+    @State private var tabsOpen = false              // the tab bar grown longer with the shortcuts
+    @State private var longPressed = false           // a long press just acted: the tap that ends it does nothing
 
     var body: some View {
         ZStack(alignment: .top) {                         // whatever grows, the top row (clock, speed) stays on screen
@@ -16,7 +19,8 @@ struct HUDView: View {
             // driving: the vehicle's own controls take the bottom of the screen (walking controls and tabs step aside)
             if !model.showMap && !(model.drive?.driving ?? false) { PlayControls() }
             if !model.showMap, let d = model.drive { DriveHUD(d: d) }
-            VStack(spacing: 8) {
+            // the map takes the whole screen: the HUD steps away so nothing lies over it
+            if !model.showMap { VStack(spacing: 8) {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 8) {
                         Button { withAnimation(.snappy) { model.showDetails.toggle(); model.refreshHUD() } } label: {
@@ -26,15 +30,21 @@ struct HUDView: View {
                         .buttonStyle(PressStyle()).glass(Capsule())
                         Text(model.playerLine).font(.system(size: 10, weight: .medium, design: .rounded)).lineLimit(1).fixedSize()
                             .padding(.horizontal, 10).padding(.vertical, 5).glass(Capsule()).allowsHitTesting(false)
-                        if model.showDetails { details }
+                        // a long details sheet scrolls inside the room above the tabs instead of pushing them off the screen
+                        if model.showDetails {
+                            ScrollView(.vertical, showsIndicators: false) { details }
+                                .frame(maxHeight: max(140, UIScreen.main.bounds.height - 210))
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
                     }
                     Spacer(minLength: 0)
                     // the last message, kept for assistive technology and UI tests after the toast has faded
                     Text(model.toast).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)
                         .accessibilityIdentifier("last-toast").allowsHitTesting(false)
                     if toastVisible {
-                        Text(model.toast).font(.system(size: 13, weight: .medium, design: .rounded)).lineLimit(2)
+                        Text(model.toast).font(.system(size: 13, weight: .medium, design: .rounded)).lineLimit(2).minimumScaleFactor(0.8)
                             .padding(.horizontal, 14).padding(.vertical, 9).glass(Capsule())
+                            .layoutPriority(-1)
                             .transition(.move(edge: .top).combined(with: .opacity))
                             .allowsHitTesting(false)
                     }
@@ -60,6 +70,7 @@ struct HUDView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)       // if it ever overflows, the top stays on screen
+            }
         }
         .foregroundStyle(.white)
         .overlay(alignment: .bottomLeading) {
@@ -232,24 +243,60 @@ struct HUDView: View {
         .padding(.horizontal, 14).padding(.vertical, 6).glass(Capsule())
     }
 
+    /// The game's speed: folded, one capsule with the current speed (tap to open, long press to pause or go
+    /// on); opened, every speed in a row that grows out of it. Choosing one folds it back.
     private var speedBar: some View {
         HStack(spacing: 2) {
             if model.speedIndex > 1 && model.actualSpeed < GameModel.speeds[model.speedIndex] * 0.8 {
                 Text(String(format: L("实际 %.0f×", "real %.0f×"), model.actualSpeed)).font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.orange).padding(.horizontal, 4)
             }
-            ForEach(0..<GameModel.speeds.count, id: \.self) { i in
-                Button { model.speedIndex = i } label: {
-                    Group {
-                        if i == 0 { Image(systemName: "pause.fill") } else { Text("\(Int(GameModel.speeds[i]))×") }
+            if speedOpen {
+                ForEach(0..<GameModel.speeds.count, id: \.self) { i in
+                    Button {
+                        model.speedIndex = i
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) { speedOpen = false }
+                    } label: {
+                        speedLabel(i)
+                            .frame(width: 40, height: 34)
+                            .background(model.speedIndex == i ? Color.white.opacity(0.22) : .clear, in: Capsule())
                     }
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .frame(width: 40, height: 34)
-                    .background(model.speedIndex == i ? Color.white.opacity(0.22) : .clear, in: Capsule())
+                    .buttonStyle(PressStyle())
+                    .transition(.scale(scale: 0.4, anchor: .trailing).combined(with: .opacity))
+                }
+            } else {
+                Button {
+                    if longPressed { longPressed = false; return }
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.75)) { speedOpen = true }
+                    let opened = Date()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        if speedOpen && Date().timeIntervalSince(opened) >= 4.9 { withAnimation(.snappy) { speedOpen = false } }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        speedLabel(model.speedIndex)
+                        Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold)).opacity(0.6)
+                    }
+                    .frame(height: 34).padding(.horizontal, 10)
                 }
                 .buttonStyle(PressStyle())
+                .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                    longPressed = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    model.speedIndex = model.speedIndex == 0 ? 1 : 0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { longPressed = false }
+                })
+                .accessibilityIdentifier("speed")
+                .accessibilityLabel(L("速度 ", "Speed ") + (model.speedIndex == 0 ? L("暂停", "paused") : "\(Int(GameModel.speeds[model.speedIndex]))x"))
             }
         }
         .padding(4).glass(Capsule())
+    }
+
+    @ViewBuilder private func speedLabel(_ i: Int) -> some View {
+        Group {
+            if i == 0 { Image(systemName: "pause.fill") } else { Text("\(Int(GameModel.speeds[i]))×") }
+        }
+        .font(.system(size: 13, weight: .semibold, design: .rounded))
     }
 
     private var details: some View {
@@ -347,18 +394,49 @@ struct HUDView: View {
         }
     }
 
+    /// The tabs. Six at hand; the chevron (or a long press on More) makes the bar grow longer with shortcuts to
+    /// the other panels. A long press on a tab does its second thing: the map opens in detail, Build opens
+    /// crafting, Nations the cities, Powers the war, the weapon the arsenal.
     private var tabBar: some View {
-        HStack(spacing: 2) {
-            tab(L("地图", "Map"), "map.fill") { model.toggleMap() }
-            tab(L("建造", "Build"), "square.grid.3x3.fill") { model.showBuild = true }
-            // six things at hand; the rest is grouped under More (zoom is two fingers)
-            tab(L("国度", "Nations"), "flag.2.crossed.fill") { model.showRealm = true; model.refreshRealm() }
-            tab(L("能力", "Powers"), "bolt.fill") { model.showArsenal = true }
-            tab(weaponName, weaponIcon) { model.cycleWeapon() }
-            tab(L("更多", "More"), "ellipsis.circle.fill") { model.showMore = true }
-                .accessibilityIdentifier("more")
+        let room = max(320, min(UIScreen.main.bounds.width - 300, 760))
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                tab(L("地图", "Map"), "map.fill", long: { model.toggleMap(); model.setMapZoom(8) }) { model.toggleMap() }
+                tab(L("建造", "Build"), "square.grid.3x3.fill", long: { model.showCraft = true }) { model.showBuild = true }
+                tab(L("国度", "Nations"), "flag.2.crossed.fill", long: { model.showCities = true }) { model.showRealm = true; model.refreshRealm() }
+                tab(L("能力", "Powers"), "bolt.fill", long: { model.showWar = true }) { model.showArsenal = true }
+                tab(weaponName, weaponIcon, long: { model.showArsenal = true }) { model.cycleWeapon() }
+                tab(L("更多", "More"), "ellipsis.circle.fill", long: { withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) { tabsOpen.toggle() } }) { model.showMore = true }
+                    .accessibilityIdentifier("more")
+                if tabsOpen {
+                    Divider().frame(height: 30).overlay(Color.white.opacity(0.3)).padding(.horizontal, 3)
+                    Group {
+                        tab(L("城市", "Cities"), "building.columns.fill") { model.showCities = true }.accessibilityIdentifier("quick-cities")
+                        tab(L("战争", "War"), "shield.lefthalf.filled") { model.showWar = true }.accessibilityIdentifier("quick-war")
+                        tab(L("纪事", "History"), "book.closed.fill") { model.showChronicle = true }.accessibilityIdentifier("quick-history")
+                        tab(L("制造", "Craft"), "hammer.fill") { model.showCraft = true }.accessibilityIdentifier("quick-craft")
+                        tab(L("交通", "Transport"), "tram.fill") { model.showTransport = true }.accessibilityIdentifier("quick-transport")
+                        tab(L("背包", "Pack"), "backpack.fill") { model.showBackpack = true }.accessibilityIdentifier("quick-pack")
+                        tab(L("法则", "Laws"), "flame.fill") { model.showLaws = true }.accessibilityIdentifier("quick-laws")
+                        tab(L("保存", "Save"), "square.and.arrow.down.fill") { model.save(announce: true) }.accessibilityIdentifier("quick-save")
+                    }
+                    .transition(.scale(scale: 0.3, anchor: .leading).combined(with: .opacity))
+                }
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) { tabsOpen.toggle() }
+                } label: {
+                    Image(systemName: tabsOpen ? "chevron.left.2" : "chevron.right.2").font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 44).opacity(0.8)
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityIdentifier("expand-tabs")
+                .accessibilityLabel(tabsOpen ? L("收起", "Fewer") : L("展开更多按键", "More buttons"))
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
         }
-        .padding(.horizontal, 8).padding(.vertical, 5)
+        .fixedSize(horizontal: !tabsOpen, vertical: false)
+        .frame(maxWidth: tabsOpen ? room : nil)
         .glass(Capsule())
     }
 
@@ -386,8 +464,9 @@ struct HUDView: View {
         }
     }
 
-    private func tab(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+    private func tab(_ title: String, _ icon: String, long: (() -> Void)? = nil, action: @escaping () -> Void) -> some View {
         Button {
+            if longPressed { longPressed = false; return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             action()
         } label: {
@@ -398,25 +477,61 @@ struct HUDView: View {
             .frame(minWidth: title.isEmpty ? 40 : 52, minHeight: 44)
         }
         .buttonStyle(PressStyle())
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+            guard let long = long else { return }
+            longPressed = true
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            long()
+            // if the finger lifts outside the button no tap comes to clear it
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { longPressed = false }
+        })
     }
 
+    /// The map, over the whole screen (the HUD is away while it is open): a title bar with the close button,
+    /// the map as large as the screen allows, and its controls beside it (below it on a tall screen).
     private var mapOverlay: some View {
         ZStack {
-            Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { model.toggleMap() }
-            // everything is sized to the screen it is on: a landscape phone is only ~380 points tall, and a map
-            // taller than that would push the HUD's top row off the top of the screen
+            Color.black.opacity(0.62).ignoresSafeArea()
             GeometryReader { g in
-                let box = max(160, min(350, g.size.height - 40))
-                HStack(alignment: .center, spacing: 10) {
-                    mapCanvas(box: box)
-                    ScrollView(.vertical, showsIndicators: false) { mapControls }
-                        .frame(width: 290).frame(maxHeight: max(120, g.size.height - 28))
+                let wide = g.size.width > g.size.height * 1.15
+                let panelW = min(300, max(230, g.size.width * 0.32))
+                let headerH: Double = 40
+                let box = wide ? max(160, min(g.size.height - headerH - 14, g.size.width - panelW - 34))
+                               : max(160, min(g.size.width - 20, (g.size.height - headerH) * 0.55))
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Label(L("世界地图", "World map"), systemImage: "map.fill").font(.system(size: 15, weight: .bold, design: .rounded))
+                        Text(model.mapCaption).font(.system(size: 10, design: .rounded)).opacity(0.7).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 6)
+                        // closes the map; named like the tab that opened it
+                        Button { model.toggleMap() } label: {
+                            Label(L("地图", "Map"), systemImage: "xmark").labelStyle(.iconOnly)
+                                .font(.system(size: 14, weight: .bold)).frame(width: 36, height: 36)
+                                .background(Color.white.opacity(0.18), in: Circle())
+                        }
+                        .buttonStyle(PressStyle())
+                        .accessibilityLabel(L("地图", "Map"))
+                    }
+                    .frame(height: headerH)
+                    if wide {
+                        HStack(alignment: .top, spacing: 12) {
+                            mapCanvas(box: box)
+                            ScrollView(.vertical, showsIndicators: false) { mapControls(width: panelW) }
+                                .frame(width: panelW).frame(maxHeight: .infinity)
+                        }
+                    } else {
+                        VStack(spacing: 10) {
+                            mapCanvas(box: box)
+                            ScrollView(.vertical, showsIndicators: false) { mapControls(width: g.size.width - 20) }
+                        }
+                    }
                 }
-                .padding(.vertical, 14).padding(.leading, 58).padding(.trailing, 20)
-                .frame(width: g.size.width, height: g.size.height)
+                .padding(.horizontal, 10).padding(.top, 4).padding(.bottom, 6)
+                .frame(width: g.size.width, height: g.size.height, alignment: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transition(.opacity.combined(with: .scale(scale: 0.97)))
     }
 
     private func mapCanvas(box: Double) -> some View {
@@ -476,6 +591,14 @@ struct HUDView: View {
                 .buttonStyle(.plain).fixedSize().position(x: at.x, y: at.y - 6)
                 .accessibilityIdentifier("map-building-" + m.name)
             }
+        case .underCity:
+            // the way down to an underground city: a purple stairway mark, its name once enlarged
+            Image(systemName: "arrow.down.square.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
+            if model.mapZoom >= 4 {
+                Text(m.name).font(.system(size: 8, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    .padding(.horizontal, 3).background(Color.black.opacity(0.45), in: Capsule()).fixedSize()
+                    .position(x: at.x, y: at.y - 10).allowsHitTesting(false)
+            }
         case .volcano:
             Image(systemName: "flame.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.orange).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .monument:
@@ -510,23 +633,36 @@ struct HUDView: View {
         }
     }
 
-    private var mapControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(model.mapCaption).font(.system(size: 11, design: .rounded)).fixedSize(horizontal: false, vertical: true)
+    /// A small button that shares a row with others (wraps instead of running off the panel).
+    private func gridPill(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).font(.system(size: 12, weight: .medium, design: .rounded))
+                .lineLimit(1).minimumScaleFactor(0.7)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.14), in: Capsule())
+        }
+        .buttonStyle(PressStyle())
+    }
+
+    private func mapControls(width: Double) -> some View {
+        let grid = [GridItem(.adaptive(minimum: 96), spacing: 6)]
+        return VStack(alignment: .leading, spacing: 8) {
             Text(L("点一下选中格子，双击直接瞬移；点地名立刻前往。", "Tap to pick a tile, double-tap to go there at once; tap a name to go to that place."))
                 .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 6) {
-                pill("1×", "minus.magnifyingglass") { model.setMapZoom(1) }
-                pill("2×", "magnifyingglass") { model.setMapZoom(2) }
-                pill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }
-                pill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }
+            Text(model.mapCaption).font(.system(size: 1)).opacity(0.01).frame(width: 1, height: 1)      // for tests and voice-over
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 6)], alignment: .leading, spacing: 6) {
+                gridPill("1×", "minus.magnifyingglass") { model.setMapZoom(1) }
+                gridPill("2×", "magnifyingglass") { model.setMapZoom(2) }
+                gridPill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }
+                gridPill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }
             }
             if model.mapPick != nil {
                 Text(model.mapPickText).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit().fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("map-pick-text")
                 Button { model.teleportToPick() } label: {
                     Label(L("瞬移到这里", "Teleport here"), systemImage: "location.fill").font(.system(size: 14, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 16).frame(height: 40).background(Color(red: 0.45, green: 0.4, blue: 0.95), in: Capsule())
+                        .padding(.horizontal, 16).frame(maxWidth: .infinity).frame(height: 40).background(Color(red: 0.45, green: 0.4, blue: 0.95), in: Capsule())
                 }
                 .buttonStyle(PressStyle())
                 .accessibilityIdentifier("teleport")
@@ -537,18 +673,21 @@ struct HUDView: View {
                 .sorted { $0.tile.distance2(me) < $1.tile.distance2(me) }.prefix(4)
             if !near.isEmpty {
                 Text(L("快速前往", "Go to")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
-                ForEach(Array(near.enumerated()), id: \.offset) { _, m in
-                    pill((m.kind == .capital ? "★" : "") + m.name, "mappin") { model.teleport(to: m.tile, name: m.name) }
+                LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
+                    ForEach(Array(near.enumerated()), id: \.offset) { _, m in
+                        gridPill((m.kind == .capital ? "★" : "") + m.name, "mappin") { model.teleport(to: m.tile, name: m.name) }
+                    }
                 }
             }
-            HStack(spacing: 6) {
-                pill(L("最近的UFO机场", "Nearest UFO port"), "circle.circle.fill") { model.pickNearestUfoPort() }
-                pill(L("最近的火山", "Nearest volcano"), "flame.fill") { model.pickNearestVolcano() }
-                pill(L("关闭", "Close"), "xmark") { model.toggleMap() }
+            Text(L("找地方", "Find")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
+            LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
+                gridPill(L("地下城", "Underground city"), "arrow.down.to.line") { model.pickNearestUnderCity() }
+                gridPill(L("UFO机场", "UFO port"), "circle.circle.fill") { model.pickNearestUfoPort() }
+                gridPill(L("火山", "Volcano"), "flame.fill") { model.pickNearestVolcano() }
             }
         }
-        .padding(14).frame(width: 290, alignment: .leading)
-        .glass(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(14).frame(width: width, alignment: .leading)
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
 }

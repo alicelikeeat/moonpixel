@@ -61,11 +61,11 @@ final class MoonPixelUITests: XCTestCase {
         let cleanWait = XCTWaiter().wait(for: [expectation(for: cleaned, evaluatedWith: last)], timeout: 15)
         print("UITEST clean: \(cleanWait.rawValue) last-toast '\(last.exists ? last.label : "missing")' clock '\(app.staticTexts["clock-line"].exists ? app.staticTexts["clock-line"].label : "-")'")
         XCTAssertEqual(cleanWait, .completed, "clean was announced")
-        app.buttons["64×"].tap(); sleep(8)
+        speed(app, "64×"); sleep(8)
         shot("05-fast")
         // cheats unlock every power; the arsenal lists five schools; a storm is called
         // (at 1x, so the storm is still there when it is checked: at 64x it can pass within a second)
-        if app.buttons["1×"].exists { app.buttons["1×"].tap(); sleep(1) }
+        speed(app, "1×"); sleep(1)
         more(app, "Cheats"); sleep(1)
         app.buttons["cheat-rich"].tap(); app.buttons["cheat-powers"].tap(); app.buttons["weather-3"].tap(); app.buttons["cheat-animals"].tap(); sleep(1)
         shot("05f-cheats")
@@ -116,7 +116,7 @@ final class MoonPixelUITests: XCTestCase {
         }
         app.buttons["close-panel"].firstMatch.tap(); sleep(1)
         // free building: choose a piece, drag a line, confirm (at normal speed, so nothing scrolls away)
-        app.buttons["1×"].tap(); sleep(1)
+        speed(app, "1×"); sleep(1)
         app.buttons["Build"].tap(); sleep(2)
         shot("09-build-panel")
         XCTAssertTrue(app.buttons["piece-wall_stone"].exists && app.buttons["piece-furnace"].exists && app.buttons["piece-lever"].exists, "pieces to build")
@@ -164,7 +164,7 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(entry.exists || text(app, containing: "declared war").exists, "numbered history, with the war in it")
         app.buttons["close-panel"].tap(); sleep(1)
         if app.buttons["stop-watching"].exists { app.buttons["stop-watching"].tap(); sleep(1) }
-        app.buttons["1×"].tap(); sleep(1)
+        speed(app, "1×"); sleep(1)
         // world laws: one tap really deletes
         more(app, "Laws"); sleep(2)
         shot("05c-laws")
@@ -249,11 +249,11 @@ final class MoonPixelUITests: XCTestCase {
         sleep(2)
         shot("3d-02-turned")
         win.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.55)).tap(); sleep(1)
-        print("UITEST frames: window \(win.frame) 64x \(app.buttons["64×"].frame) status \(status.frame) jump \(app.buttons["jump"].frame) hotbar \(app.buttons["hotbar-0"].frame) more \(app.buttons["more"].frame)")
-        app.buttons["64×"].tap(); sleep(6)
+        print("UITEST frames: window \(win.frame) 64x \(app.buttons["speed"].frame) status \(status.frame) jump \(app.buttons["jump"].frame) hotbar \(app.buttons["hotbar-0"].frame) more \(app.buttons["more"].frame)")
+        speed(app, "64×"); sleep(6)
         shot("3d-03-fast")
         XCTAssertTrue(status.exists)
-        if app.buttons["1×"].exists { app.buttons["1×"].tap(); sleep(1) }
+        speed(app, "1×"); sleep(1)
         more(app, "View3D"); sleep(4)
         shot("3d-04-flat-again")
         XCTAssertFalse(solid.exists, "back in 2D")
@@ -557,5 +557,14 @@ final class MoonPixelUITests: XCTestCase {
         app.buttons["ArtStyle"].tap(); sleep(2)
         XCTAssertTrue(app.buttons["Map"].exists, "the game is still running after both style changes")
     }
+
+    /// Choose a game speed: the speed bar folds to the current speed, so open it first when it is folded.
+    func speed(_ app: XCUIApplication, _ label: String) {
+        let opener = app.buttons["speed"]
+        if opener.waitForExistence(timeout: 3) { opener.tap(); sleep(1) }
+        let b = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        if b.waitForExistence(timeout: 3) { b.tap() }
+    }
+
 }
 

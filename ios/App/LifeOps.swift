@@ -81,6 +81,15 @@ extension GameModel {
         mapPickText = L("UFO 机场入口", "The UFO airport's road in") + String(format: " (%d, %d)", t.x, t.y)
     }
 
+    func pickNearestUnderCity() {
+        guard let sc = scene, let t0 = society.nearestUnderCity(cx: Int((sc.player.x / 512).rounded(.down)), cy: Int((sc.player.y / 512).rounded(.down))) else {
+            showToast(L("附近没有地下城", "No underground city nearby")); return
+        }
+        let t = TilePos(t0.x, t0.y + 6)        // on the plaza, before the gatehouse's open gate
+        mapPick = t
+        mapPickText = L("地下城入口（门楼里有通往地下的楼梯）", "Underground city entrance (the stairway down is in the gatehouse)") + String(format: " (%d, %d)", t.x, t.y)
+    }
+
     func pickNearestVolcano() {
         guard let sc = scene, let v = society.nearestVolcano(near: sc.player.tile) else {
             showToast(L("附近没有火山", "No volcano nearby")); return

@@ -38,7 +38,7 @@ extension Mesh3D {
         let n = vnorm((keep1 ? n1 : .zero) + (keep2 ? n2 : .zero))
         let k1 = keep1 && vdot(n1, n) > 1e-6, k2 = keep2 && vdot(n2, n) > 1e-6
         guard k1 || k2 else { return }
-        let sh = Mesh3D.shade(for: n)
+        let sh = unshaded ? 0 : Mesh3D.shade(for: n)
         let t = Palette3D.uv(cel ? Mesh3D.celColor(color, shade: sh < 0.06 ? 0 : sh) : color.darkened(sh))
         // four corners always (the ink outline works on quads), triangles only where they have area
         let i = UInt32(positions.count)

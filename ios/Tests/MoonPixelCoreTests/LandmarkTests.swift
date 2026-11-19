@@ -87,7 +87,7 @@ final class LandmarkTests: XCTestCase {
     func testUndergroundCitiesHaveStreetsHousesASquareAVaultAndAStairway() {
         let (w, s) = world()
         var city: (Int, Int)?
-        for y in -10...10 { for x in -10...10 where city == nil && w.gen.isUnderCity(x, y) && w.gen.volcano(near: x * 32 + 16, y * 32 + 16, radius: 40) == nil && !w.gen.isUfoPort(x, y) { city = (x, y) } }
+        for y in -30...30 { for x in -30...30 where city == nil && w.gen.isUnderCity(x, y) && w.gen.volcano(near: x * 32 + 16, y * 32 + 16, radius: 40) == nil && !w.gen.isUfoPort(x, y) { city = (x, y) } }
         guard let c = city else { return XCTFail("an underground city") }
         let u = s.underworld()
         let ox = c.0 * 32, oy = c.1 * 32

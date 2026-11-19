@@ -10,7 +10,7 @@ import Foundation
 // they are. A pixel of the picture is a known square of tiles, so a tap on it names one tile.
 
 public struct MapMarker: Equatable {
-    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building, monument }
+    public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building, monument, underCity }
     public var kind: Kind
     public var name: String
     public var color: String               // hex
@@ -43,6 +43,15 @@ public final class WorldMap {
 
     static let deep = RGBA(38, 86, 150), sea = RGBA(64, 128, 196), shallow = RGBA(110, 176, 222), coast = RGBA(28, 58, 104)
     static let fog = RGBA(22, 24, 34)
+
+    /// A town's buildings by name (English, Chinese).
+    public static let townBuildingNames: [String: (String, String)] = [
+        "house": ("House", "房屋"), "farm": ("Farm", "农田"), "well": ("Well", "水井"), "lights": ("Lantern square", "灯火广场"),
+        "granary": ("Granary", "粮仓"), "market": ("Market", "集市"), "warehouse": ("Warehouse", "仓库"), "mine": ("Mine", "矿井"),
+        "workshop": ("Workshop", "工坊"), "tavern": ("Tavern", "酒馆"), "school": ("School", "学堂"), "factory": ("Factory", "工厂"),
+        "lab": ("Laboratory", "研究所"), "ai_center": ("AI centre", "人工智能中心"), "windmill": ("Windmill", "风车磨坊"),
+        "palace": ("Palace", "王宫"), "fortress": ("Fortress", "要塞"), "barracks": ("Barracks", "兵营"), "watchtower": ("Watchtower", "瞭望塔"),
+    ]
 
     /// A tile's colour on the map: its ground, then what stands on it.
     static func colour(ground g: UInt8, way w: UInt8, thing o: UInt8) -> RGBA {
@@ -182,6 +191,9 @@ public final class WorldMap {
         var volcanoes = Set<TilePos>()
         for y in 0..<side { for x in 0..<side where world.known(origin.x + x, origin.y + y) != 0 {
             let cx = origin.x + x, cy = origin.y + y
+            if world.gen.isUnderCity(cx, cy) && world.gen.volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 40) == nil && !world.gen.isUfoPort(cx, cy) {
+                add(.underCity, zh ? "地下城入口" : "Underground city", "#c08aff", TilePos(cx * 32 + 16, cy * 32 + 22))
+            }
             if s.ufoPortOpen(cx, cy) { add(.ufo, zh ? "UFO 机场" : "UFO airport", "#6af0ff", TilePos(cx * 32 + 15, cy * 32 + 13)) }
             if let v = world.gen.volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 23), volcanoes.insert(TilePos(v.x, v.y)).inserted {
                 add(.volcano, zh ? "火山" : "Volcano", "#ff5a1a", TilePos(v.x, v.y))
@@ -194,7 +206,7 @@ public final class WorldMap {
                 add(.building, b.def.name(zh: zh), "#f2e6c8", b.front)
             } }
             for t in s.settlements.values where !t.abandoned { for b in t.buildings where b.done {
-                let n = Society.text[b.type].map { zh ? $0.1 : $0.0 } ?? b.type
+                let n = WorldMap.townBuildingNames[b.type].map { zh ? $0.1 : $0.0 } ?? Society.text[b.type].map { zh ? $0.1 : $0.0 } ?? b.type
                 add(.building, n, "#e8d8b0", b.door)
             } }
         }
@@ -216,6 +228,11 @@ public final class WorldMap {
             return d < 4 ? (zh ? "火山口（熔岩）" : "Volcano crater (lava)") : (zh ? "火山坡" : "Volcano slope")
         }
         if let m = (s.realm.monuments ?? []).first(where: { t.x >= $0.x && t.x < $0.x + $0.w && t.y >= $0.y && t.y < $0.y + $0.d }) { return m.kind.name(zh: zh) }
+        let ccx = OpenWorld.floorDiv(t.x, 32), ccy = OpenWorld.floorDiv(t.y, 32)
+        if gen.isUnderCity(ccx, ccy) && gen.volcano(near: ccx * 32 + 16, ccy * 32 + 16, radius: 40) == nil && !gen.isUfoPort(ccx, ccy) {
+            let dx = t.x - (ccx * 32 + 16), dy = t.y - (ccy * 32 + 16)
+            if dx * dx + dy * dy <= 121 { return zh ? "地下城入口（门楼里有楼梯下去）" : "Underground city entrance (stairs down in the gatehouse)" }
+        }
         if s.ufoPortOpen(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) { return zh ? "UFO 机场" : "UFO airport" }
         if e > Biome.mountainLevel + 0.12 { return zh ? "高山" : "High mountains" }
         if e > Biome.mountainLevel { return zh ? "山地" : "Mountains" }

@@ -16,6 +16,8 @@ public struct Mesh3D {
     public var indices: [UInt32] = []
     /// Anime look: two flat tones (lit tops, shadowed sides) instead of six graded ones, like 2D cel shading.
     public var cel = false
+    /// Drawn in its own colours whichever way it faces (the sun, the moon, the planets: lights in the sky).
+    public var unshaded = false
     public init() {}
     public var isEmpty: Bool { indices.isEmpty }
     public var triangles: Int { indices.count / 3 }
@@ -45,7 +47,7 @@ public struct Mesh3D {
     }
 
     mutating func flat(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>, _ color: RGBA, shade: Double) {
-        let t = Palette3D.uv(cel ? Mesh3D.celColor(color, shade: shade) : color.darkened(shade))
+        let t = Palette3D.uv(unshaded ? color : (cel ? Mesh3D.celColor(color, shade: shade) : color.darkened(shade)))
         quad(a, b, c, d, normal: n, uv: (t, t, t, t))
     }
 
@@ -1039,7 +1041,7 @@ public enum Figure3D {
         for _ in 0..<count {
             let az = Float(r.unit()) * 2 * .pi, el = Float(0.08 + r.unit() * 1.4)
             let x = cos(az) * cos(el) * radius, y = sin(el) * radius, z = sin(az) * cos(el) * radius
-            let s: Float = r.unit() < 0.15 ? 1.1 : 0.6
+            let s: Float = (r.unit() < 0.15 ? 1.1 : 0.6) * radius / 300
             let tint = UInt8(200 + r.int(0, 55))
             m.box(x - s, y - s, z - s, x + s, y + s, z + s, RGBA(tint, tint, 255), faces: .all)
         }

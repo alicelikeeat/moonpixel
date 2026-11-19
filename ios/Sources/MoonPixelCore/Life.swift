@@ -411,7 +411,7 @@ extension Society {
     }
 
     /// The nearest UFO airport (its chunk), searching outwards from a chunk.
-    public func nearestUfoPort(cx: Int, cy: Int, within r: Int = 24) -> (Int, Int)? {
+    public func nearestUfoPort(cx: Int, cy: Int, within r: Int = 48) -> (Int, Int)? {
         var best: (Int, Int)?, bd = Int.max
         for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where ufoPortOpen(x, y) {
             let d = (x - cx) * (x - cx) + (y - cy) * (y - cy)
@@ -421,7 +421,17 @@ extension Society {
     }
 
     /// The nearest volcano (its centre tile) within `r` tiles.
-    public func nearestVolcano(near t: TilePos, within r: Int = 900) -> TilePos? {
+    /// The entrance to the nearest underground city within `r` chunks (the stairway down).
+    public func nearestUnderCity(cx: Int, cy: Int, within r: Int = 40) -> TilePos? {
+        var best: TilePos?, bd = Int.max
+        for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where world.gen.isUnderCity(x, y) && world.gen.volcano(near: x * 32 + 16, y * 32 + 16, radius: 40) == nil {
+            let d = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+            if d < bd { bd = d; best = TilePos(x * 32 + 16, y * 32 + 16) }
+        } }
+        return best
+    }
+
+    public func nearestVolcano(near t: TilePos, within r: Int = 1600) -> TilePos? {
         var best: TilePos?, bd = Int.max
         for by in stride(from: t.y - r, through: t.y + r, by: 256) { for bx in stride(from: t.x - r, through: t.x + r, by: 256) {
             if let v = world.gen.volcano(near: bx, by, radius: 260) {

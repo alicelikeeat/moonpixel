@@ -246,13 +246,15 @@ public final class Generator {
 
     // MARK: landmarks
 
-    /// One chunk in every 6x6 block of chunks (where the mazes were) is a UFO airport, on land and away from
-    /// where the first villages are founded.
+    /// One chunk in every 14x14 block of chunks (about one every 900 m each way) is a UFO airport, on land and
+    /// away from where the first villages are founded.
+    public static let ufoSpacing = 14
     public func isUfoPort(_ cx: Int, _ cy: Int) -> Bool {
         if depth > 0 { return false }
-        let rx = Int((Double(cx) / 6).rounded(.down)), ry = Int((Double(cy) / 6).rounded(.down))
+        let n = Generator.ufoSpacing
+        let rx = Int((Double(cx) / Double(n)).rounded(.down)), ry = Int((Double(cy) / Double(n)).rounded(.down))
         let h = MP.h2(seed &+ 77, rx, ry)
-        if rx * 6 + Int(h % 6) != cx || ry * 6 + Int((h >> 8) % 6) != cy { return false }
+        if rx * n + Int(h % UInt32(n)) != cx || ry * n + Int((h >> 8) % UInt32(n)) != cy { return false }
         if abs(cx) <= 3 && abs(cy) <= 3 { return false }
         let e = climate(cx * 32 + 16, cy * 32 + 16).0
         guard e > Biome.sea + 0.03 && e < Biome.mountainLevel - 0.03 else { return false }
@@ -269,7 +271,7 @@ public final class Generator {
         let bxs = Int((Double(wx) / 256).rounded(.down)), bys = Int((Double(wy) / 256).rounded(.down))
         for by in (bys - 1)...(bys + 1) { for bx in (bxs - 1)...(bxs + 1) {
             let h = MP.h2(seed &+ 4242, bx, by)
-            guard h % 3 == 0 else { continue }                                   // a third of the blocks
+            guard h % 8 == 0 else { continue }                                   // one block in eight
             let vx = bx * 256 + 64 + Int((h >> 4) % 128), vy = by * 256 + 64 + Int((h >> 12) % 128)
             if abs(vx) < 200 && abs(vy) < 200 { continue }
             let dx = vx - wx, dy = vy - wy
@@ -354,30 +356,45 @@ public final class Generator {
         for y in 24...31 { for x in 15...16 { let i = y * 32 + x; st[i] = 0; ob[i] = 0; de[i] = 0; g[i] = stoneF } }
     }
 
-    /// One chunk in every 5x5 block of chunks holds an underground city (not under a ruin).
+    /// One chunk in every 10x10 block of chunks (about one every 640 m each way) holds an underground city (not
+    /// under a ruin).
+    public static let underCitySpacing = 10
     public func isUnderCity(_ cx: Int, _ cy: Int) -> Bool {
-        let rx = Int((Double(cx) / 5).rounded(.down)), ry = Int((Double(cy) / 5).rounded(.down))
+        let n = Generator.underCitySpacing
+        let rx = Int((Double(cx) / Double(n)).rounded(.down)), ry = Int((Double(cy) / Double(n)).rounded(.down))
         let h = MP.h2(seed &+ 888, rx, ry)
-        guard rx * 5 + Int(h % 5) == cx && ry * 5 + Int((h >> 8) % 5) == cy else { return false }
+        guard rx * n + Int(h % UInt32(n)) == cx && ry * n + Int((h >> 8) % UInt32(n)) == cy else { return false }
         if abs(cx) <= 2 && abs(cy) <= 2 { return false }
         let rr = Int((Double(cx) / 3).rounded(.down)), rr2 = Int((Double(cy) / 3).rounded(.down))
         let hr = MP.h2(seed &+ 555, rr, rr2)
         return !(rr * 3 + Int(hr % 3) == cx && rr2 * 3 + Int((hr >> 8) % 3) == cy)
     }
 
-    /// On the surface over an underground city: a small stone gatehouse round a stairway down, lamps at its door.
+    /// On the surface over an underground city, an entrance nobody can miss: a round plaza of brick ringed by
+    /// burning beacons, four paved roads in from the chunk's edges, banners and a signpost at the gate, and a
+    /// stone gatehouse with an open gate round the stairway down.
     func carveCityStair(_ g: inout [UInt8], _ st: inout [UInt8], _ ob: inout [UInt8], _ de: inout [UInt8]) {
         let c = Content.shared
-        let wall = c.tid("wall_stone"), floor = c.tid("stone_floor")
-        for y in 13...19 { for x in 13...19 {
+        let wall = c.tid("wall_stone"), floor = c.tid("stone_floor"), plaza = c.tid("brick_floor"), beacon = c.tid("lamp_on")
+        for y in 0..<32 { for x in 0..<32 {
             let i = y * 32 + x
-            st[i] = 0; de[i] = 0; g[i] = floor
-            let edge = x == 13 || x == 19 || y == 13 || y == 19
-            ob[i] = edge && !(x == 16 && y == 19) ? wall : 0
+            let dx = Double(x) - 16, dy = Double(y) - 16, r = (dx * dx + dy * dy).squareRoot()
+            let road = (abs(x - 16) <= 1 && (y > 26 || y < 6)) || (abs(y - 16) <= 1 && (x > 26 || x < 6))
+            if r <= 11 || road { st[i] = 0; de[i] = 0; ob[i] = 0; g[i] = r <= 11 ? plaza : floor }
+            // the beacons round the plaza (gaps where the roads come in)
+            if abs(r - 10.5) < 0.5 && abs(x - 16) > 2 && abs(y - 16) > 2 && (x + y) % 3 == 0 { ob[i] = beacon }
+        } }
+        for y in 12...20 { for x in 12...20 {
+            let i = y * 32 + x
+            g[i] = floor
+            let edge = x == 12 || x == 20 || y == 12 || y == 20
+            ob[i] = edge ? (y == 20 && abs(x - 16) <= 1 ? c.tid("gate_open") : wall) : 0
         } }
         ob[16 * 32 + 16] = c.tid("stairs_down")
-        ob[20 * 32 + 15] = c.tid("lantern_post"); ob[20 * 32 + 17] = c.tid("lantern_post")
-        for y in 20...22 { for x in 15...17 where ob[y * 32 + x] == 0 { let i = y * 32 + x; st[i] = 0; g[i] = floor } }
+        ob[14 * 32 + 14] = c.tid("torch"); ob[14 * 32 + 18] = c.tid("torch")
+        ob[21 * 32 + 14] = c.tid("banner_1"); ob[21 * 32 + 18] = c.tid("banner_1")
+        ob[23 * 32 + 15] = c.tid("lantern_post"); ob[23 * 32 + 17] = c.tid("lantern_post")
+        ob[24 * 32 + 18] = c.tid("sign")
     }
 
     /// An underground city filling a cave chunk: a wall round it with four gates, paved streets on a grid,

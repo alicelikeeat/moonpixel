@@ -98,7 +98,6 @@ final class SolidRenderer {
     private var ufoEntities: [Int: (ship: ModelEntity, beam: ModelEntity)] = [:]
     private var monumentEntities: [Int: [ModelEntity]] = [:]
     private var shownStyle = 0
-    private var sky: (moon: ModelEntity, stars: ModelEntity)?
 
     /// The colour atlas every solid is drawn from, in the current art style (anime: cel-shaded colours).
     private func makePalette() {
@@ -111,23 +110,44 @@ final class SolidRenderer {
         light = -1
     }
 
-    /// The moon and the stars, round the camera, shown at night (outdoors) and faded in at dusk.
+    /// The sky round the camera: the sun by day, the moon in its phase, the three planets, and the stars at
+    /// night (turning with the hours), each where the clock puts it (Sky.swift), facing the eye.
     private func updateSky(_ world: OpenWorld, under: Bool, at eye: SIMD3<Float>) {
-        if sky == nil {
-            let moon = ModelEntity(), stars = ModelEntity()
-            moon.model = model3D(key: "moon") { Figure3D.moon() }
-            stars.model = model3D(key: "stars") { Figure3D.starDome(seed: 7) }
-            root.addChild(moon); root.addChild(stars)
-            sky = (moon, stars)
+        if skyStars == nil {
+            let stars = ModelEntity()
+            stars.model = model3D(key: "stars-far") { Figure3D.starDome(seed: 7, count: 700, radius: 1250) }
+            root.addChild(stars)
+            skyStars = stars
         }
-        let night = !under && world.daylight < 0.45
-        sky!.moon.isEnabled = night; sky!.stars.isEnabled = night
-        guard night else { return }
-        // the moon crosses the sky through the night (its angle follows the clock)
-        let a = Float(world.hour / 24 * 2 * Double.pi)
-        sky!.moon.position = eye + SIMD3<Float>(cos(a) * 120, 90 + sin(a) * 40, -160)
-        sky!.stars.position = eye
+        let bodies = Sky.bodies(time: world.time)
+        let starsOn = !under && Sky.starlight(daylight: world.daylight) > 0.25
+        skyStars!.isEnabled = starsOn
+        if starsOn {
+            skyStars!.position = eye
+            skyStars!.orientation = simd_quatf(angle: Sky.starTurn(time: world.time), axis: simd_normalize(SIMD3<Float>(0, cos(0.5), sin(0.5))))
+        }
+        for b in bodies {
+            let key = b.kind == .moon ? "sky-moon-\(Sky.phaseIndex(b.phase))" : "sky-\(b.kind.rawValue)"
+            var e = skyBodies[b.kind.rawValue]
+            if e == nil || skyKeys[b.kind.rawValue] != key {
+                e?.removeFromParent()
+                let n = ModelEntity()
+                n.model = model3D(key: key) { Figure3D.skyBody(b) }
+                root.addChild(n)
+                skyBodies[b.kind.rawValue] = n; skyKeys[b.kind.rawValue] = key
+                e = n
+            }
+            // the moon and the planets show faintly by day too, but not the stars; nothing below the horizon
+            e!.isEnabled = !under && b.up
+            guard e!.isEnabled else { continue }
+            // each is drawn with its face on the local -z side (the near half of the ring too): turn that to the eye
+            e!.position = eye + b.dir * Sky.distance
+            e!.orientation = simd_quatf(from: SIMD3<Float>(0, 0, -1), to: simd_normalize(-b.dir))
+        }
     }
+    private var skyStars: ModelEntity?
+    private var skyBodies: [String: ModelEntity] = [:]
+    private var skyKeys: [String: String] = [:]
     private var deckEntities: [Int: [ModelEntity]] = [:]
     private var cabHeading: Double?
     private var pool: [ModelEntity] = []
@@ -284,8 +304,11 @@ final class SolidRenderer {
         var l = under ? 0.62 : Float(0.25 + 0.75 * world.daylight)
         if !under { l *= 1 - Float(w.dim) * 0.6 }
         let day = CGFloat(under ? 0 : world.daylight)
+        // dawn and dusk: the sky warms to orange and rose while the sun is low
+        let dusk = CGFloat(day > 0.02 && day < 0.98 ? sin(Double(day) * .pi) : 0) * 0.55
         let sky = under ? UIColor(red: 0.03, green: 0.03, blue: 0.05, alpha: 1)
-            : (w.fall == 3 ? UIColor(white: 0.78 * day + 0.08, alpha: 1) : UIColor(red: 0.05 + 0.51 * day, green: 0.07 + 0.67 * day, blue: 0.18 + 0.72 * day, alpha: 1))
+            : (w.fall == 3 ? UIColor(white: 0.78 * day + 0.08, alpha: 1)
+               : UIColor(red: min(1, 0.05 + 0.51 * day + 0.55 * dusk), green: 0.07 + 0.67 * day + 0.12 * dusk, blue: max(0, 0.18 + 0.72 * day - 0.25 * dusk), alpha: 1))
         setLight(l, sky: sky)
 
         if model.inputReset != seenReset { seenReset = model.inputReset; host?.releaseTouches() }
