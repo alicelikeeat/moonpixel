@@ -62,7 +62,8 @@ final class LuxuryTests: XCTestCase {
             let mesh = Figure3D.car(m, paint: m.paints[0])
             XCTAssertFalse(mesh.isEmpty)
             let bb = mesh.bounds
-            XCTAssertEqual(Double(bb.max.x - bb.min.x), VehicleKind.car.spec.length, accuracy: 0.1, "\(m): the car's own length")
+            XCTAssertEqual(Double(bb.max.x - bb.min.x), VehicleKind.car.spec.length * (m == .limousine ? 1.25 : 1), accuracy: 0.1, "\(m): the car's own length")
+            XCTAssertGreaterThan(bb.max.x - bb.min.x, (bb.max.z - bb.min.z) * 1.6, "\(m): a car's proportions, long and narrow")
             meshes.append(mesh.triangles)
         }
         XCTAssertEqual(Set(tops.map { $0.hashValue }).count, CarModel.allCases.count, "each model looks different from above")
@@ -110,5 +111,29 @@ extension Anime3DPreviewTests {
         sheet.blit(shapes, sx: 0, sy: 0, sw: shapes.w, sh: shapes.h, dx: 0, dy: map.h + cars.h, blend: false)
         var data = Data("\(sheet.w) \(sheet.h)\n".utf8); data.append(contentsOf: sheet.px)
         try data.write(to: URL(fileURLWithPath: dir).appendingPathComponent("villas-and-cars.rgba"))
+    }
+}
+
+extension Anime3DPreviewTests {
+    /// MP_PREVIEW: people modelled in 3D (curved shapes), several looks and poses (docs/people-3d.png).
+    func testPreviewPeople3D() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MP_PREVIEW"] else { throw XCTSkip("set MP_PREVIEW") }
+        var looks: [Look] = []
+        for (i, (skin, hair, shirt, pants)) in [("#f2c8a4", "#5a3a22", "#5a8ae8", "#4a4a5a"), ("#ffe0c8", "#f0a0c0", "#ffffff", "#e05a7a"), ("#e8b890", "#202838", "#d84a4a", "#30304a"), ("#f8d8c0", "#f0d060", "#60c080", "#5a4a3a")].enumerated() {
+            var l = Look(); l.skin = skin; l.hair = hair; l.shirt = shirt; l.pants = pants; l.shoes = "#3a2a22"; l.style = i; looks.append(l)
+        }
+        var parts: [(Mesh3D, Tex?, Bool, SIMD3<Float>, Float)] = []
+        let pal = Tex(b: Palette3D.bitmap)
+        for (i, l) in looks.enumerated() {
+            for (j, f) in [0, 1, 3].enumerated() {
+                let mesh = Figure3D.human(l, frame: f, held: f == 3 ? "hammer" : "", child: false, female: i % 2 == 1)
+                parts.append((mesh, pal, false, SIMD3(Float(i) * 1.2 - 1.8, 0, Float(j) * 1.4 - 1.4), 0))
+            }
+        }
+        parts.append((Figure3D.human(looks[1], frame: 0, held: "", child: true, female: true), pal, false, SIMD3(3.0, 0, 0), 0))
+        print("PEOPLE triangles per adult", Figure3D.human(looks[0], frame: 0, held: "", child: false, female: false).triangles)
+        let img = render(parts, size: (1100, 640), yaw: 0.3, pitch: 0.28, scale: 150, centre: SIMD3(0.3, 0.9, 0))
+        var data = Data("\(img.w) \(img.h)\n".utf8); data.append(contentsOf: img.px)
+        try data.write(to: URL(fileURLWithPath: dir).appendingPathComponent("people-3d.rgba"))
     }
 }

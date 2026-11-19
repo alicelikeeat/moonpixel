@@ -643,33 +643,71 @@ public enum Figure3D {
         let k: Float = child ? 0.68 : 1
         let o = SIMD3<Float>(0, 0, 0)
         func b(_ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA) { m.px(o, x, y, z, w, h, d, c, scale: k, faces: .all) }
+        // modelled with curves: every measure is in sixteenths of a tile (as the figure was drawn), scaled by k
+        func P(_ x: Float, _ y: Float, _ z: Float) -> SIMD3<Float> { SIMD3(x, y, z) * (k / 16) }
+        func R(_ x: Float, _ y: Float, _ z: Float) -> SIMD3<Float> { SIMD3(x, y, z) * (k / 16) }
+        let u = k / 16
         let skin = RGBA(hex: look.skin), hair = RGBA(hex: look.hair), shirt = RGBA(hex: look.shirt), pants = RGBA(hex: look.pants), shoes = RGBA(hex: look.shoes)
         // legs swing forwards and back; arms the other way
         let sw: Float = frame == 1 ? 2 : (frame == 2 ? -2 : 0)
-        b(-3.5, 1.5, -1.5 + sw, 3, 5.5, 3, pants); b(-3.5, 0, -1.5 + sw, 3, 1.5, 4, shoes)
-        b(0.5, 1.5, -1.5 - sw, 3, 5.5, 3, pants); b(0.5, 0, -1.5 - sw, 3, 1.5, 4, shoes)
-        b(-4, 7, -2, 8, 8, 4, shirt)
-        if female { b(-4.5, 6, -2.5, 9, 3, 5, shirt.darkened(0.12)) }
-        b(-6, 8, -1 - sw, 2, 7, 2, shirt.darkened(0.08)); b(-6, 7, -1 - sw, 2, 1.5, 2, skin)
         let acting = frame == 3
-        if acting { b(4, 13, -1, 2, 7, 2, shirt.darkened(0.08)); b(4, 20, -1, 2, 1.5, 2, skin) }
-        else { b(4, 8, -1 + sw, 2, 7, 2, shirt.darkened(0.08)); b(4, 7, -1 + sw, 2, 1.5, 2, skin) }
-        // head, hair
-        b(-4, 15, -3.5, 8, 8, 7, skin)
-        b(-4.5, 21, -4, 9, 3, 8, hair); b(-4.5, 16, -4, 9, 5, 2, hair)
-        if female || look.style % 3 == 1 { b(-4.5, 12, -4.5, 9, 5, 2, hair) }
-        if look.style % 3 == 2 { b(-2, 24, -2, 4, 2, 4, hair) }
+        // legs: a thigh and a shin each (tapered), knees bent a little in a step, shoes as rounded toes
+        for (x, swing) in [(-2.0 as Float, sw), (2.0, -sw)] {
+            let hip = P(x, 7.5, 0), knee = P(x, 4, swing * 0.6 + 0.3), ankle = P(x, 1.2, swing)
+            m.frustum(hip, knee, 1.6 * u, 1.35 * u, pants, seg: 8)
+            m.frustum(knee, ankle, 1.35 * u, 1.05 * u, pants, seg: 8)
+            m.ellipsoid(P(x, 0.9, swing + 0.6), R(1.5, 0.95, 2.3), shoes, seg: 8, rings: 4)
+        }
+        // the body: hips, a waist and a chest (ellipsoids), a skirt for a woman, a collar
+        m.ellipsoid(P(0, 8, 0), R(3.6, 1.9, 2.3), pants, seg: 12, rings: 5)
+        m.frustum(P(0, 8.5, 0), P(0, 11, 0), 3.0 * u, 3.4 * u, shirt, seg: 12, caps: false)
+        m.ellipsoid(P(0, 12.3, 0), R(4.0, 3.0, 2.5), shirt, seg: 12, rings: 6)
+        if female { m.frustum(P(0, 9.6, 0), P(0, 5.2, 0), 3.5 * u, 5.0 * u, shirt.darkened(0.1), seg: 14) }
+        m.frustum(P(0, 14.6, 0), P(0, 15.8, 0), 1.2 * u, 1.1 * u, skin, seg: 8)                       // the neck
+        m.ellipsoid(P(0, 14.8, 0), R(2.4, 0.7, 1.8), shirt.lightened(0.15), seg: 10, rings: 3)       // the collar
+        // arms: shoulder, elbow, hand (one raised when working or striking)
+        for side: Float in [-1, 1] {
+            let raised = acting && side > 0
+            let swing: Float = side < 0 ? -sw : sw
+            let shoulder = P(side * 4.4, 14, 0)
+            let elbow = raised ? P(side * 5.4, 17.5, 0.5) : P(side * 5.0, 10.8, swing * 0.5)
+            let hand = raised ? P(side * 5.2, 21, 0.5) : P(side * 5.2, 7.6, swing)
+            m.ellipsoid(shoulder, R(1.6, 1.5, 1.6), shirt, seg: 8, rings: 4)
+            m.frustum(shoulder, elbow, 1.15 * u, 1.0 * u, shirt.darkened(0.06), seg: 8)
+            m.frustum(elbow, hand, 0.95 * u, 0.8 * u, skin, seg: 8)
+            m.ellipsoid(hand, R(0.95, 1.1, 0.95), skin, seg: 8, rings: 4)
+        }
+        // the head: a rounded skull and a chin, ears; the hair as a cap over it, longer behind for long hair
+        let hc = P(0, 19.2, 0)
+        m.ellipsoid(hc, R(3.9, 4.1, 3.7), skin, seg: 14, rings: 8)
+        m.ellipsoid(P(0, 17.0, 0.9), R(2.7, 1.8, 2.6), skin, seg: 10, rings: 4)
+        for side: Float in [-1, 1] { m.ellipsoid(P(side * 3.9, 19.0, -0.2), R(0.6, 1.0, 0.8), skin.darkened(0.06), seg: 6, rings: 3) }
+        m.ellipsoid(P(0, 19.8, -0.35), R(4.25, 4.15, 4.0), hair, seg: 14, rings: 6, from: 0.48, to: 1)
+        m.ellipsoid(P(0, 21.6, 2.6), R(3.6, 1.2, 1.2), hair, seg: 10, rings: 3)                        // the fringe
+        if female || look.style % 3 == 1 {
+            // long hair falling behind to the shoulders
+            m.ellipsoid(P(0, 16.5, -2.6), R(4.0, 5.0, 1.6), hair, seg: 12, rings: 5)
+        }
+        if look.style % 3 == 2 { m.ellipsoid(P(0, 24.2, -1.0), R(1.9, 1.6, 1.9), hair, seg: 8, rings: 4) }   // a bun
+        if look.style % 4 == 3 { m.frustum(P(0, 20, -3.8), P(0, 13.5, -5.2), 1.3 * u, 0.5 * u, hair, seg: 8) }   // a ponytail
         if let f = face, f.w > 0, f.h > 0 {
             // a face made from a photo: its pixels become small plates on the front of the head
             let n = 8
             for gy in 0..<n { for gx in 0..<n {
                 let c = f.get(Swift.min(f.w - 1, gx * f.w / n + f.w / (2 * n)), Swift.min(f.h - 1, gy * f.h / n + f.h / (2 * n)))
                 if c.a < 128 { continue }
-                m.px(o, -4 + Float(gx), 22 - Float(gy), 3.5, 1, 1, 0.25, c, scale: k, faces: [.south])
+                m.px(o, -4 + Float(gx), 22 - Float(gy), 3.6, 1, 1, 0.25, c, scale: k, faces: [.south])
             } }
         } else {
+            // eyes with a light in each, brows, a mouth, a blush
             let ink = RGBA(hex: "#2a1e24")
-            b(-2.5, 18, 3.5, 1, 1.5, 0.3, ink); b(1.5, 18, 3.5, 1, 1.5, 0.3, ink)
+            for side: Float in [-1, 1] {
+                m.ellipsoid(P(side * 1.45, 19.2, 3.45), R(0.62, 0.9, 0.35), ink, seg: 8, rings: 4)
+                m.ellipsoid(P(side * 1.25, 19.55, 3.72), R(0.2, 0.22, 0.1), RGBA(255, 255, 255), seg: 6, rings: 3)
+                m.frustum(P(side * 0.7, 20.6, 3.55), P(side * 2.2, 20.8, 3.4), 0.18 * u, 0.12 * u, hair.darkened(0.3), seg: 4)
+                m.ellipsoid(P(side * 2.4, 17.9, 3.1), R(0.8, 0.4, 0.2), RGBA(240, 140, 150), seg: 6, rings: 3)
+            }
+            m.frustum(P(-0.6, 17.0, 3.55), P(0.6, 17.0, 3.55), 0.16 * u, 0.16 * u, RGBA(170, 80, 90), seg: 4)
         }
         // what the right hand holds
         let hy: Float = acting ? 20 : 7, hz: Float = acting ? 0 : sw
@@ -845,9 +883,9 @@ public enum Figure3D {
         func wheels(_ xs: [Float]) { for x in xs { for z in [-hw, hw - 0.12] { m.box(x - 0.15, 0, z, x + 0.15, 0.3, z + 0.12, dark, faces: .all) } } }
         switch k {
         case .car:
-            m.box(-hl, 0.12, -hw, hl, 0.45, hw, livery, faces: .all)
-            m.box(-hl * 0.45, 0.45, -hw + 0.05, hl * 0.4, 0.75, hw - 0.05, glass, faces: .all)
-            wheels([-hl * 0.6, hl * 0.6])
+            // a car is modelled with curved surfaces (Luxury.swift: `car`), an ordinary saloon in the livery
+            _ = glass
+            return car(.saloon, paint: String(format: "#%02x%02x%02x", livery.r, livery.g, livery.b))
         case .bus:
             m.box(-hl, 0.2, -hw, hl, 1.5, hw, livery, faces: .all)
             m.box(-hl + 0.1, 0.85, -hw - 0.01, hl - 0.3, 1.25, hw + 0.01, glass, faces: .all)

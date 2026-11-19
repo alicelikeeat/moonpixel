@@ -235,52 +235,91 @@ public enum CarArt {
 }
 
 extension Figure3D {
-    /// A car of a model in its paint, centred on the origin, nose along +x, wheels on y = 0 (the size of the
-    /// car's spec, like every vehicle): each model its own shape.
+    /// The shape of a car model: its body and cabin as cross-sections along its length (t from the tail 0 to the
+    /// nose 1: the bottom and top of the section in tiles, and its width as a share of the car's), its wheels.
+    struct CarShape {
+        var body: [(t: Float, y0: Float, y1: Float, w: Float)]
+        var cabin: [(t: Float, y0: Float, y1: Float, w: Float)]
+        var wheelR: Float
+        var wheels: [Float]
+    }
+
+    static func shape(_ m: CarModel) -> CarShape {
+        switch m {
+        case .saloon:
+            return CarShape(body: [(0, 0.11, 0.36, 0.9), (0.07, 0.09, 0.42, 1), (0.5, 0.09, 0.44, 1), (0.9, 0.09, 0.39, 1), (1, 0.12, 0.31, 0.88)],
+                            cabin: [(0.24, 0.42, 0.44, 0.86), (0.33, 0.42, 0.7, 0.78), (0.62, 0.42, 0.7, 0.78), (0.74, 0.42, 0.44, 0.86)], wheelR: 0.13, wheels: [0.2, 0.8])
+        case .sports:
+            return CarShape(body: [(0, 0.09, 0.32, 0.92), (0.08, 0.08, 0.36, 1.02), (0.5, 0.08, 0.36, 1.02), (0.86, 0.08, 0.29, 1), (1, 0.1, 0.21, 0.84)],
+                            cabin: [(0.3, 0.35, 0.37, 0.82), (0.4, 0.35, 0.56, 0.7), (0.57, 0.35, 0.56, 0.7), (0.72, 0.35, 0.37, 0.82)], wheelR: 0.13, wheels: [0.2, 0.8])
+        case .supercar:
+            return CarShape(body: [(0, 0.07, 0.31, 1), (0.15, 0.06, 0.34, 1.06), (0.55, 0.06, 0.32, 1.04), (0.85, 0.06, 0.23, 0.96), (1, 0.07, 0.15, 0.78)],
+                            cabin: [(0.3, 0.31, 0.33, 0.82), (0.41, 0.31, 0.48, 0.66), (0.57, 0.3, 0.46, 0.64), (0.7, 0.3, 0.31, 0.8)], wheelR: 0.135, wheels: [0.2, 0.79])
+        case .limousine:
+            return CarShape(body: [(0, 0.11, 0.38, 0.9), (0.05, 0.1, 0.45, 1), (0.95, 0.1, 0.45, 1), (1, 0.12, 0.36, 0.88)],
+                            cabin: [(0.12, 0.44, 0.46, 0.86), (0.2, 0.44, 0.64, 0.8), (0.74, 0.44, 0.64, 0.8), (0.82, 0.44, 0.46, 0.86)], wheelR: 0.13, wheels: [0.15, 0.85])
+        case .suv:
+            return CarShape(body: [(0, 0.16, 0.5, 0.95), (0.06, 0.15, 0.6, 1), (0.94, 0.15, 0.6, 1), (1, 0.17, 0.48, 0.93)],
+                            cabin: [(0.14, 0.6, 0.62, 0.92), (0.21, 0.6, 0.95, 0.86), (0.82, 0.6, 0.95, 0.86), (0.88, 0.6, 0.62, 0.92)], wheelR: 0.18, wheels: [0.2, 0.8])
+        }
+    }
+
+    /// A car of a model in its paint, centred on the origin, nose along +x, wheels on y = 0, the size of the
+    /// car's spec: a body lofted through rounded cross-sections from tail to nose, a glass cabin with a painted
+    /// roof over it, round wheels (tyre, rim, spokes), round head and tail lights, and each model's own parts
+    /// (a spoiler, a rear wing and intakes, chrome and a grille, roof rails).
     public static func car(_ model: CarModel, paint: String) -> Mesh3D {
-        if model == .saloon { return vehicle(.car, livery: RGBA(hex: paint)) }
         var m = Mesh3D()
         let sp = VehicleKind.car.spec
-        let L = Float(sp.length), W = Float(max(0.5, sp.deckW + 0.2)), hl = L / 2, hw = W / 2
-        let p = RGBA(hex: paint), glass = RGBA(90, 130, 170), dark = RGBA(30, 30, 36), chrome = RGBA(215, 220, 228)
-        let red = RGBA(210, 40, 40), lamp = RGBA(255, 248, 210)
-        func wheels(_ xs: [Float], r: Float = 0.15) { for x in xs { for z in [-hw - 0.01, hw - 0.11] { m.box(x - r, 0, z, x + r, r * 2, z + 0.12, dark, faces: .all) } } }
+        // drawn with a car's proportions (about two and a half times as long as it is wide); the space it takes
+        // on the road (its spec) is unchanged. A limousine is drawn longer, an SUV broader.
+        let L = Float(sp.length) * (model == .limousine ? 1.25 : 1)
+        let W = Float(sp.length) * (model == .suv ? 0.52 : 0.46), hl = L / 2, hw = W / 2
+        let p = RGBA(hex: paint), glass = RGBA(84, 124, 162), dark = RGBA(30, 30, 36), chrome = RGBA(218, 222, 230)
+        let sh = shape(model)
+        func x(_ t: Float) -> Float { -hl + t * L }
+        // the body
+        let body = sh.body.map { s in (x: x(s.t), ring: Mesh3D.roundedSection(w: W * s.w, y0: s.y0, y1: s.y1, r: 0.05, rt: 0.09)) }
+        m.loft(body, p)
+        // the cabin: glass all round, then the roof over its flat middle
+        let cabin = sh.cabin.map { s in (x: x(s.t), ring: Mesh3D.roundedSection(w: W * s.w, y0: s.y0, y1: s.y1, r: 0.02, rt: 0.06)) }
+        m.loft(cabin, glass)
+        if sh.cabin.count >= 4 {
+            let a = sh.cabin[1], b = sh.cabin[sh.cabin.count - 2]
+            let roof = [(x: x(a.t) + 0.015, ring: Mesh3D.roundedSection(w: W * a.w * 0.96, y0: a.y1 - 0.012, y1: a.y1 + 0.02, r: 0.01, rt: 0.03)),
+                        (x: x(b.t) - 0.015, ring: Mesh3D.roundedSection(w: W * b.w * 0.96, y0: b.y1 - 0.012, y1: b.y1 + 0.02, r: 0.01, rt: 0.03))]
+            m.loft(roof, p.lightened(0.04))
+        }
+        // wheels, just inside the body's sides
+        for t in sh.wheels { for z in [-hw + 0.04, hw - 0.04] { m.wheel(SIMD3(x(t), sh.wheelR, z), radius: sh.wheelR, width: 0.08) } }
+        // head lights at the nose, tail lights at the back (round, a little proud of the body)
+        let nose = sh.body.last!, tail = sh.body.first!
+        for z in [-W * nose.w * 0.32, W * nose.w * 0.32] {
+            m.ellipsoid(SIMD3(hl - 0.01, nose.y0 + (nose.y1 - nose.y0) * 0.6, z), SIMD3(0.02, 0.028, 0.05), RGBA(255, 250, 214), seg: 8, rings: 4)
+        }
+        for z in [-W * tail.w * 0.34, W * tail.w * 0.34] {
+            m.ellipsoid(SIMD3(-hl + 0.01, tail.y0 + (tail.y1 - tail.y0) * 0.65, z), SIMD3(0.02, 0.025, 0.06), RGBA(214, 36, 40), seg: 8, rings: 4)
+        }
+        // wing mirrors
+        if let front = sh.cabin.last { for s: Float in [-1, 1] { m.ellipsoid(SIMD3(x(front.t) - 0.04, front.y0 + 0.03, s * (W * 0.5 + 0.03)), SIMD3(0.03, 0.02, 0.025), p, seg: 6, rings: 3) } }
         switch model {
         case .sports:
-            m.box(-hl, 0.1, -hw, hl, 0.34, hw, p, faces: .all)                                  // low body
-            m.box(-hl * 0.25, 0.34, -hw + 0.07, hl * 0.2, 0.55, hw - 0.07, glass, faces: .all)   // a small cabin set back
-            m.box(-hl, 0.4, -hw + 0.04, -hl + 0.06, 0.48, hw - 0.04, p.darkened(0.25), faces: .all)   // the spoiler
-            m.box(-hl + 0.02, 0.34, -hw + 0.1, -hl + 0.05, 0.4, -hw + 0.14, dark, faces: .all)
-            m.box(-hl + 0.02, 0.34, hw - 0.14, -hl + 0.05, 0.4, hw - 0.1, dark, faces: .all)
-            wheels([-hl * 0.6, hl * 0.6], r: 0.14)
+            m.roundedBox(-hl + 0.01, 0.38, -hw + 0.05, -hl + 0.09, 0.42, hw - 0.05, r: 0.012, p.darkened(0.3))      // the spoiler
+            for z in [-hw + 0.12, hw - 0.12] { m.frustum(SIMD3(-hl + 0.05, 0.3, z), SIMD3(-hl + 0.05, 0.39, z), 0.012, 0.012, dark, seg: 5) }
         case .supercar:
-            m.box(-hl, 0.08, -hw - 0.02, hl * 0.6, 0.3, hw + 0.02, p, faces: .all)              // wide and low
-            m.box(hl * 0.6, 0.08, -hw + 0.06, hl, 0.22, hw - 0.06, p, faces: .all)              // the wedge nose
-            m.box(-hl * 0.15, 0.3, -hw + 0.1, hl * 0.3, 0.46, hw - 0.1, glass, faces: .all)
-            m.box(-hl, 0.3, -hw + 0.36, hl, 0.31, hw - 0.36, RGBA(245, 245, 245), faces: [.top])  // the stripe
-            m.box(-hl, 0.42, -hw, -hl + 0.08, 0.47, hw, dark, faces: .all)                      // the wing
-            for z in [-hw - 0.03, hw - 0.02] { m.box(-hl * 0.3, 0.14, z, -hl * 0.05, 0.24, z + 0.05, dark, faces: .all) }   // intakes
-            wheels([-hl * 0.62, hl * 0.58], r: 0.14)
+            m.roundedBox(-hl, 0.42, -hw - 0.01, -hl + 0.1, 0.46, hw + 0.01, r: 0.012, dark)                          // the rear wing
+            for z in [-hw + 0.14, hw - 0.14] { m.frustum(SIMD3(-hl + 0.05, 0.3, z), SIMD3(-hl + 0.05, 0.43, z), 0.012, 0.012, dark, seg: 5) }
+            for z in [-hw * 1.06, hw * 1.06] { m.roundedBox(-hl * 0.3, 0.13, z - 0.015, -hl * 0.02, 0.25, z + 0.015, r: 0.01, dark) }   // side intakes
+            m.roundedBox(-hl, 0.33, -0.05, hl * 0.9, 0.345, 0.05, r: 0.004, RGBA(246, 246, 246))                 // the stripe
         case .limousine:
-            m.box(-hl, 0.12, -hw, hl, 0.46, hw, p, faces: .all)
-            m.box(-hl * 0.75, 0.46, -hw + 0.05, hl * 0.5, 0.74, hw - 0.05, glass, faces: .all)   // a long cabin
-            m.box(-hl * 0.7, 0.74, -hw + 0.07, hl * 0.45, 0.78, hw - 0.07, p, faces: .all)       // its roof
-            m.box(hl - 0.01, 0.2, -hw + 0.12, hl + 0.02, 0.4, hw - 0.12, chrome, faces: .all)    // the grille
-            for z in [-hw - 0.005, hw - 0.015] { m.box(-hl, 0.28, z, hl, 0.3, z + 0.02, chrome, faces: .all) }
-            wheels([-hl * 0.7, hl * 0.7])
+            m.roundedBox(hl - 0.02, 0.17, -hw * 0.6, hl + 0.015, 0.38, hw * 0.6, r: 0.01, chrome)                  // the grille
+            for z in [-hw - 0.005, hw + 0.005] { m.roundedBox(-hl + 0.04, 0.27, z - 0.006, hl - 0.04, 0.29, z + 0.006, r: 0.003, chrome) }
         case .suv:
-            m.box(-hl, 0.18, -hw, hl, 0.62, hw, p, faces: .all)                                 // tall
-            m.box(-hl * 0.7, 0.62, -hw + 0.05, hl * 0.45, 0.95, hw - 0.05, glass, faces: .all)
-            m.box(-hl * 0.65, 0.95, -hw + 0.06, hl * 0.4, 0.99, hw - 0.06, p, faces: .all)
-            for z in [-hw + 0.1, hw - 0.14] { m.box(-hl * 0.6, 0.99, z, hl * 0.35, 1.03, z + 0.04, dark, faces: .all) }   // roof rails
-            m.box(hl - 0.01, 0.25, -hw + 0.1, hl + 0.02, 0.5, hw - 0.1, chrome, faces: .all)
-            wheels([-hl * 0.6, hl * 0.6], r: 0.18)
-        case .saloon: break
-        }
-        // lights: white at the front, red at the back
-        for z in [-hw + 0.06, hw - 0.14] {
-            m.box(hl, 0.22, z, hl + 0.02, 0.3, z + 0.08, lamp, faces: .all)
-            m.box(-hl - 0.02, 0.22, z, -hl, 0.3, z + 0.08, red, faces: .all)
+            m.roundedBox(hl - 0.02, 0.22, -hw * 0.66, hl + 0.015, 0.48, hw * 0.66, r: 0.012, chrome)
+            for z in [-hw * 0.7, hw * 0.7] { m.roundedBox(x(0.24), 0.965, z - 0.012, x(0.8), 0.99, z + 0.012, r: 0.005, dark) }   // roof rails
+            m.roundedBox(-hl - 0.03, 0.18, -hw * 0.7, -hl + 0.01, 0.26, hw * 0.7, r: 0.01, dark)                   // the rear step
+        case .saloon:
+            m.roundedBox(hl - 0.015, 0.16, -hw * 0.5, hl + 0.01, 0.27, hw * 0.5, r: 0.01, dark)                    // the grille
         }
         return m
     }
