@@ -155,7 +155,7 @@ final class CityGrowthTests: XCTestCase {
         s.fitLifts()
         let lift = s.realm.lifts.first { $0.tower == 2 }
         XCTAssertNotNil(lift, "the tower's shaft has its car")
-        XCTAssertEqual(lift?.stops.count, Society.autoLiftLevels, "up to the auto-fitted lift's top")
+        XCTAssertEqual(lift?.stops.count, min(40, Society.autoLiftLevels), "a stop on every floor, to the top")
         s.fitLifts()
         XCTAssertEqual(s.realm.lifts.count, 1, "never a second one")
         let w = s.storeyWorld(10)

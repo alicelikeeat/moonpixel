@@ -155,7 +155,12 @@ extension Society {
         } }
         for k in 5...12 { for x in [c.x - 1, c.x, c.x + 1] where world.isLand(x, c.y + k) && world.tile(1, x, c.y + k) == 0 && world.tile(2, x, c.y + k) == 0 { world.setTile(1, x, c.y + k, T["cobble_road"]!) } }
         let pole = c + TilePos(0, -3)
-        if world.tile(2, pole.x, pole.y) == 0, let n = s.nation, n >= 1 { world.setTile(2, pole.x, pole.y, content.tid("banner_\(Society.bannerTile(n))")) }
+        // the pole flies this nation's banner (an old owner's banner left on it is taken down)
+        if let n = s.nation, n >= 1 {
+            let want = content.tid("banner_\(Society.bannerTile(n))")
+            let o = world.tile(2, pole.x, pole.y)
+            if o == 0 || ((1...3).map { content.tid("banner_\($0)") }.contains(o) && o != want) { world.setTile(2, pole.x, pole.y, want) }
+        }
     }
 
     // MARK: capitals

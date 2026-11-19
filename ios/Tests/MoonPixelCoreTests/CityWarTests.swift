@@ -28,8 +28,10 @@ final class CityWarTests: XCTestCase {
         }
         XCTAssertGreaterThan(marks["palace", default: 0], 0, "capitals raise palaces")
         // each nation builds in its own material
-        if let brick = s.towns(of: 2).flatMap({ $0.buildings }).first(where: { Society.landmarkSpecs[$0.type] != nil && $0.done }) {
-            XCTAssertEqual(s.world.tile(2, brick.x, brick.y), s.content.tid("wall_brick"))
+        // (a town taken in war keeps the landmarks its old owner built in its own material: look at them all)
+        let landmarks = s.towns(of: 2).flatMap({ $0.buildings }).filter { Society.landmarkSpecs[$0.type] != nil && $0.done }
+        if !landmarks.isEmpty {
+            XCTAssertTrue(landmarks.contains { s.world.tile(2, $0.x, $0.y) == s.content.tid("wall_brick") }, "nation 2 builds in brick")
         }
         // chronicle: numbered, bounded, queryable
         let all = s.realm.chron ?? []

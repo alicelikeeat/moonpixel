@@ -175,8 +175,10 @@ final class SystemsTests: XCTestCase {
         XCTAssertLessThan(s.realm.fauna.animals.first { $0.tame }?.pos.distance(to: goal) ?? 999, 60, "a tamed animal follows")
         // predators bite; a ward stops it
         s.realm.fauna.animals = []
-        s.spawnAnimal("wolf", at: Vec2(100, 100))
-        let bite = s.faunaTick(0.5, viewer: Vec2(108, 100), mazeHere: false)
+        // (out in the wild: in a town wolves keep away)
+        let wild = Vec2(40_000, 40_000)
+        s.spawnAnimal("wolf", at: wild)
+        let bite = s.faunaTick(0.5, viewer: wild + Vec2(8, 0), mazeHere: false)
         XCTAssertGreaterThan(bite, 0)
         var t = Society.Threat(); t.damage = bite
         let hp = s.realm.player.hp

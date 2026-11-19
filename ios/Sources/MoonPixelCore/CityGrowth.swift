@@ -227,7 +227,8 @@ extension Society {
                 return
             }
         }
-        if works.values.contains(where: { id in realm.transport.sites.contains { $0.id == id && $0.finished == nil } }) { return }
+        // one work at a time (a long highway between cities takes days: the rest goes on meanwhile)
+        if works.contains(where: { tag, id in !tag.hasPrefix("road:") && realm.transport.sites.contains { $0.id == id && $0.finished == nil } }) { return }
 
         // 1. a main street across the district, east-west through its middle (or a row near it)
         if site("spine") == nil && !tried.contains("spine") {
