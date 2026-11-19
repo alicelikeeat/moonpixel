@@ -267,11 +267,12 @@ extension Society {
         }
 
         // 4. cars for the residents: one for every 25 people, eight at most
-        let cars = realm.transport.vehicles.filter { $0.kind == .car && $0.owner == .district(d.id) }
+        let cars = realm.transport.vehicles.filter { $0.kind == .car && $0.owner == .district(d.id) && $0.model == nil }
         if cars.count < min(8, d.population / 25) {
             let free = street.filter { t in !realm.transport.vehicles.contains { $0.tile == t } }
             if let t = free.isEmpty ? nil : free[d.rng.index(free.count)], let v = buy(.car, at: t, heading: 0) {
                 v.name = (zh ? "居民车 " : "Resident's car ") + "\(cars.count + 1)"
+                v.paint = ["#d84038", "#3a6ad8", "#e8e8ea", "#2a2a30", "#3a8a4a", "#e8c030", "#8a8a92"][v.id % 7]
                 d.note("a resident bought car \(v.id)")
             }
             return
@@ -462,7 +463,7 @@ extension Society {
             let drivable = streets.filter { bridge(at: $0) == nil && tunnel(at: $0) == nil && passable(NetNode($0.x, $0.y, 0), car) }
             guard drivable.count >= 4 else { continue }
             let streetsOK = drivable
-            for v in realm.transport.vehicles where v.kind == .car && v.owner == .district(d.id) && v.control == .auto && v.task.line == nil {
+            for v in realm.transport.vehicles where v.kind == .car && v.owner == .district(d.id) && v.control == .auto && v.task.line == nil && v.showcase != true {
                 // somewhere it cannot get to: another errand
                 if v.halted == "no way" { v.halted = nil; v.task.goal = nil }
                 if let g = v.task.goal, v.tile.distance2(g.tile) > 4, v.halted != "no fuel" { continue }

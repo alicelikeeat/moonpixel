@@ -33,6 +33,25 @@ extension GameScene {
             seen.insert(v.id)
             let n = vehicleNodes[v.id] ?? {
                 let s = v.spec
+                if v.kind == .car {
+                    // a car is a drawing seen from above: its model and paint, lights, glass and wheels
+                    let paint = v.paint ?? "#d84038"
+                    let tex = GameScene.carTextures["\(v.carModel.rawValue)\(paint)"] ?? {
+                        let b = CarArt.top(v.carModel, paint: paint, len: s.length, wid: max(0.5, s.deckW + 0.2), ppt: 32)
+                        let t = b.cgImage.map { SKTexture(image: UIImage(cgImage: $0, scale: 2, orientation: .up)) } ?? SKTexture()
+                        t.filteringMode = .linear
+                        GameScene.carTextures["\(v.carModel.rawValue)\(paint)"] = t
+                        return t
+                    }()
+                    let car = SKSpriteNode(texture: tex, size: CGSize(width: s.length * 16, height: max(8, (s.deckW + 0.2) * 16)))
+                    let shadow = SKShapeNode(rectOf: CGSize(width: s.length * 16, height: max(8, (s.deckW + 0.2) * 16)), cornerRadius: 4)
+                    shadow.name = "shadow"; shadow.fillColor = UIColor(white: 0, alpha: 0.3); shadow.strokeColor = .clear; shadow.zPosition = -1
+                    car.addChild(shadow)
+                    car.zPosition = 8.5
+                    addChild(car)
+                    vehicleNodes[v.id] = car
+                    return car
+                }
                 let body = SKShapeNode(rectOf: CGSize(width: s.length * 16, height: max(8, (s.deckW + 0.2) * 16)), cornerRadius: v.kind.mode == .water ? 6 : 3)
                 body.fillColor = GameScene.vehicleColor(v.kind); body.strokeColor = UIColor(white: 0, alpha: 0.6); body.lineWidth = 1
                 let nose = SKShapeNode(rectOf: CGSize(width: 4, height: max(4, (s.deckW) * 10)))
@@ -61,6 +80,9 @@ extension GameScene {
         }
         for (id, n) in vehicleNodes where !seen.contains(id) { n.removeFromParent(); vehicleNodes[id] = nil }
     }
+
+    /// Car drawings by model and paint, made once.
+    static var carTextures: [String: SKTexture] = [:]
 
     static func vehicleColor(_ k: VehicleKind) -> UIColor {
         switch k {

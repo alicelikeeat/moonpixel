@@ -181,6 +181,11 @@ public final class Vehicle: Codable {
     public var trail: [TilePos] = []
     /// The network revision its way was last planned on (a vehicle with no way tries again when the network changes).
     public var plannedRev = 0
+    /// A car's model ("sports", "supercar", "limousine", "suv"; nil: an ordinary saloon) and its paint ("#rrggbb").
+    public var model: String?
+    public var paint: String?
+    /// Standing on show at a dealer's (never sent on errands).
+    public var showcase: Bool?
     public init() {}
 
     public var spec: VehicleSpec { kind.spec }

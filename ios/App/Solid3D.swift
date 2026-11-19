@@ -906,7 +906,13 @@ final class SolidRenderer {
             seen.insert(v.id)
             let e = vehicleEntities[v.id] ?? {
                 let m = ModelEntity()
-                m.model = model3D(key: "vehicle-\(v.kind.rawValue)") { Figure3D.vehicle(v.kind) }
+                // a car is drawn as its model in its paint (a sports car, a supercar, a limousine, an SUV...)
+                if v.kind == .car, let paint = v.paint {
+                    let cm = v.carModel
+                    m.model = model3D(key: "car-\(cm.rawValue)-\(paint)") { Figure3D.car(cm, paint: paint) }
+                } else {
+                    m.model = model3D(key: "vehicle-\(v.kind.rawValue)") { Figure3D.vehicle(v.kind) }
+                }
                 root.addChild(m)
                 vehicleEntities[v.id] = m
                 return m

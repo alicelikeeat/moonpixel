@@ -67,6 +67,9 @@ public struct CityKind: Equatable {
         // food on a large scale: big fields of grain and vegetables, and ranches with cattle and sheep
         CityKind(key: "bigfarm", en: "Large farm", zh: "大型农场", use: .agricultural, w: 22, d: 16, storeys: 1, homesPerFloor: 0, jobsPerFloor: 40, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 600, goods: ["planks": 24, "stone": 8, "iron": 2], inputs: [:], outputs: ["food": 6.5]),
         CityKind(key: "ranch", en: "Ranch", zh: "牧场", use: .agricultural, w: 20, d: 14, storeys: 1, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 700, goods: ["planks": 30, "stone": 6], inputs: [:], outputs: ["food": 8.0]),
+        // the well-off: villas with gardens, pools and a luxury car each; a dealer's showroom of luxury cars
+        CityKind(key: "villa", en: "Villa", zh: "别墅", use: .residential, w: 14, d: 12, storeys: 2, homesPerFloor: 2, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 4, money: 1600, goods: ["stone": 22, "planks": 18, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "showroom", en: "Luxury car showroom", zh: "豪车展厅", use: .commercial, w: 18, d: 12, storeys: 1, homesPerFloor: 0, jobsPerFloor: 16, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 2600, goods: ["stone": 30, "iron": 10, "parts": 8], inputs: [:], outputs: [:]),
         // New York-style towers (see NewYork.swift): setbacks, crowns and spires; and brownstone rows
         CityKind(key: "brownstone", en: "Brownstone row", zh: "褐石联排", use: .residential, w: 12, d: 7, storeys: 4, homesPerFloor: 8, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 500, goods: ["stone": 16, "planks": 8], inputs: [:], outputs: [:]),
         CityKind(key: "pencil", en: "Slim residential tower", zh: "纤细住宅塔", use: .residential, w: 9, d: 9, storeys: 60, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 16, money: 3200, goods: ["stone": 8, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
@@ -311,6 +314,8 @@ extension Society {
     }
 
     func raiseCity(_ b: CityBuilding, _ d: District) {
+        if b.kind == "villa" { raiseVilla(b, d); return }
+        if b.kind == "showroom" { raiseShowroom(b, d); return }
         if Skyline.isTower(b.kind) && b.w >= 9 && b.w == b.d { raiseTower(b, d); return }
         let face = Society.facade(b.kind)
         let wall = content.tid(face.wall), window = content.tid(face.window), floor = content.tid(face.floor), door = content.tid("door_wood")
@@ -793,6 +798,9 @@ extension Society {
         }
         // food before anything else when the harvests (with what is being built) cannot feed the people to come
         if let f = foodToBuild(d), key == nil || (d.store["food"] ?? 0) < pop * 2 { key = f }
+        // the well-off: a villa quarter once the town has 300 people (one villa for every 120 more, 24 at most),
+        // and a luxury car showroom when it has eight villas
+        if key == nil, let lux = luxuryToBuild(d) { key = lux }
         if key == nil {
             let occupancy = d.homes > 0 ? pop / Double(d.homes) : 1
             let jobs = Double(d.jobs)
@@ -803,7 +811,9 @@ extension Society {
             }
         }
         guard let k = key, let def = CityKind.byKey[k] else { return }
-        guard let site = findSite(d, w: def.w, h: def.d, outskirts: def.use == .agricultural) else {
+        // villas go together (a quarter of their own, next to the first one), the showroom beside them
+        let quarter = (k == "villa" || k == "showroom") ? d.buildings.first(where: { $0.kind == "villa" }).map { TilePos($0.x + $0.w / 2, $0.y + $0.d / 2) } : nil
+        guard let site = findSite(d, w: def.w, h: def.d, outskirts: def.use == .agricultural || (k == "villa" && quarter == nil), near: quarter) else {
             // no room left: the district spreads out (farther fields, new blocks), up to 200 tiles
             if d.radius < 200 { d.radius = min(200, d.radius + 16); d.note("spreads out to \(d.radius) tiles") } else { d.note("no room for a \(def.en)") }
             return
@@ -917,7 +927,7 @@ extension Society {
 
     /// Free land for a building: dry, flat to build on, nothing anyone built, not on a way or another
     /// building (a tile of gap), not in a town, and near a street.
-    func findSite(_ d: District, w: Int, h: Int, outskirts: Bool = false) -> TilePos? {
+    func findSite(_ d: District, w: Int, h: Int, outskirts: Bool = false, near: TilePos? = nil) -> TilePos? {
         let r = d.radius
         var cands: [(Int, TilePos)] = []
         for y in stride(from: d.center.y - r, through: d.center.y + r - h, by: 2) {
@@ -929,6 +939,8 @@ extension Society {
         }
         // buildings as near the centre as they fit; fields and pastures out at the edge
         if outskirts { cands = cands.map { (-$0.0, $0.1) } }
+        // or as near a given place as they fit (a villa next to the others)
+        if let n = near { cands = cands.map { c in (TilePos(c.1.x + w / 2, c.1.y + h / 2).distance2(n), c.1) } }
         cands.sort { $0.0 != $1.0 ? $0.0 < $1.0 : ($0.1.y != $1.1.y ? $0.1.y < $1.1.y : $0.1.x < $1.1.x) }
         let towns = settlements.values.filter { !$0.abandoned }
         for (_, o) in cands {
