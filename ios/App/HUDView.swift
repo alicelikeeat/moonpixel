@@ -625,6 +625,10 @@ struct HUDView: View {
             Image(systemName: "flag.2.crossed.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .port:
             if model.mapZoom >= 2 { Image(systemName: "ferry.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false) }
+        case .oil:
+            if model.mapZoom >= 2 { Image(systemName: "drop.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Color.black).shadow(color: .white, radius: 1).position(at).allowsHitTesting(false) }
+        case .gold:
+            if model.mapZoom >= 2 { Image(systemName: "dollarsign.circle.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false) }
         case .pass:
             Image(systemName: "mountain.2.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(col).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false)
         case .airport:

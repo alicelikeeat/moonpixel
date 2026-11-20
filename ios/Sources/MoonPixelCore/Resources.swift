@@ -128,7 +128,7 @@ extension Civ {
                 r.seller = seller.id; r.buyer = home.id; r.good = good; r.sea = way.sea; r.path = way.path
                 r.since = now; r.next = now
                 tradeRoutes.append(r)
-                say(way.sea ? "sea_route" : "trade_route", [polities[seller.nation]!.nameEn, polities[seller.nation]!.nameZh, p.nameEn, p.nameZh, good, good], [seller.nation, id], region: seller.regionKey)
+                say(way.sea ? "sea_route" : "trade_route", [polities[seller.nation]!.nameEn, polities[seller.nation]!.nameZh, p.nameEn, p.nameZh, CivItem.byKey[good]?.en ?? good, CivItem.byKey[good]?.zh ?? good], [seller.nation, id], region: seller.regionKey)
                 record(way.sea ? "sea_route" : "trade_route", nations: [seller.nation, id], region: seller.regionKey, ids: [r.id], note: good)
             }
         }
@@ -162,7 +162,7 @@ extension Civ {
             if r.sea, forces.values.contains(where: { f in (f.layer == .sea || f.layer == .underwater) && r.path.contains(f.region) && (atWar(f.nation, s.nation) || atWar(f.nation, b.nation)) }) {
                 tradeRoutes[ri].lost += 1
                 totals.add(\.lost, sh.good, CivFood.isFood(sh.good) ? sh.amount : 0)
-                say("convoy_sunk", [polities[s.nation]?.nameEn ?? "", polities[s.nation]?.nameZh ?? "", sh.good, sh.good], [s.nation, b.nation], region: r.path[r.path.count / 2])
+                say("convoy_sunk", [polities[s.nation]?.nameEn ?? "", polities[s.nation]?.nameZh ?? "", CivItem.byKey[sh.good]?.en ?? sh.good, CivItem.byKey[sh.good]?.zh ?? sh.good], [s.nation, b.nation], region: r.path[r.path.count / 2])
                 record("convoy_sunk", nations: [s.nation, b.nation], region: r.path[r.path.count / 2], ids: [r.id], note: sh.good)
                 continue
             }

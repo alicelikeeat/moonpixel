@@ -11,7 +11,7 @@ import Foundation
 
 public struct MapMarker: Equatable {
     public enum Kind: String { case player, town, capital, city, district, airport, maze, army, ufo, volcano, building, monument, underCity
-        case nation, port, occupied, pass }
+        case nation, port, occupied, pass, oil, gold }
     public var kind: Kind
     public var name: String
     public var color: String               // hex
@@ -251,6 +251,23 @@ public final class WorldMap {
             if ly == 0 && owner(rx, ry - 1) != l { img.rect(cx * ppc, cy * ppc, ppc, w, line) }
             if ly == rcs - 1 && owner(rx, ry + 1) != l { img.rect(cx * ppc, cy * ppc + ppc - w, ppc, w, line) }
         } }
+        // trade routes: a dotted line from region to region, in the seller's colour (gold over the sea, brown by land)
+        let rc = Double(civ.cfg.regionTiles), tpp = tilesPerPixel
+        func px(_ k: Int64) -> (Double, Double)? {
+            civ.regions[k].map { ((Double($0.rx) * rc + rc / 2 - Double(origin.x * 32)) / tpp, (Double($0.ry) * rc + rc / 2 - Double(origin.y * 32)) / tpp) }
+        }
+        for r in civ.tradeRoutes where r.active {
+            let col = r.sea ? RGBA(250, 210, 80) : RGBA(170, 110, 60)
+            let dot = max(1, ppc / 6)
+            for (a, b) in zip(r.path, r.path.dropFirst()) {
+                guard let p0 = px(a), let p1 = px(b) else { continue }
+                let n = max(1, Int(max(abs(p1.0 - p0.0), abs(p1.1 - p0.1)) / Double(dot * 3)))
+                for i in 0...n {
+                    let f = Double(i) / Double(n), x = p0.0 + (p1.0 - p0.0) * f, y = p0.1 + (p1.1 - p0.1) * f
+                    if x >= 0, y >= 0, Int(x) < img.w, Int(y) < img.h { img.rect(Int(x), Int(y), dot, dot, col) }
+                }
+            }
+        }
     }
 
     /// In the Nations view: each nation's name in the middle of its land, its capital, its ports and passes,
@@ -273,6 +290,14 @@ public final class WorldMap {
             for t in civ.traits(of: id, bodies: bodies) where t.kind == .basin {
                 for k in t.places { if let m = mid(k) { add(.pass, zh ? "关" : "Pass", civ.polities[civ.controller(k) ?? id]?.color ?? p.color, m) } }
             }
+        }
+        // oil and gold: where they lie in owned land (the richest first, a handful)
+        let rich = civ.regions.values.filter { $0.legal != nil && ($0.oil > 0.3 || $0.gold > 0.3) }
+            .sorted { max($0.oil, $0.gold) != max($1.oil, $1.gold) ? max($0.oil, $0.gold) > max($1.oil, $1.gold) : $0.key < $1.key }.prefix(40)
+        for r in rich {
+            let t = TilePos(r.rx * rc + rc / 3, r.ry * rc + rc * 2 / 3)
+            if r.oil > 0.3 { add(.oil, zh ? "油田" : "Oil", "#202020", t) }
+            if r.gold > 0.3 { add(.gold, zh ? "金矿" : "Gold", "#f2c230", TilePos(t.x + rc / 4, t.y)) }
         }
         for k in civ.occupied() {
             guard let r = civ.regions[k], r.city != nil, let h = civ.controller(k), let t = mid(k) else { continue }

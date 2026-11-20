@@ -280,6 +280,12 @@ struct CivGroundWarCard: View {
             ForEach(Array(c.techPreview(nation, zh: zh).enumerated()), id: \.offset) { _, t in
                 Text(t).font(.system(size: 10, design: .rounded)).opacity(0.75)
             }
+            // oil, gold and the rest: what it holds, lacks, buys and sells, and its spies
+            if c.envoys {
+                ForEach(Array(c.resourceLines(nation, zh: zh).enumerated()), id: \.offset) { _, line in
+                    Text(line).font(.system(size: 10, design: .rounded)).opacity(0.9).accessibilityIdentifier("civ-resources")
+                }
+            }
             if let w = wars.last(where: { $0.attacker == nation && $0.ended == nil }), let place = c.cities[w.target] {
                 Text(c.bottleneck(nation, at: place, zh: zh)).font(.system(size: 10, weight: .semibold, design: .rounded))
             }
@@ -547,7 +553,12 @@ enum CivText {
         "vassal": ("%@ became a vassal of %@", "%@ 归附 %@，成为附属国"), "vassal_free": ("%@ is no one's vassal any more", "%@ 不再是附属国"),
         "envoy_sent": ("%@ sent an envoy to %@", "%@ 派使者前往 %@"), "envoy_refused": ("%@ refused the envoy of %@", "%@ 拒绝了 %@ 的劝降"), "tech": ("%@ learned %@", "%@ 掌握了 %@"),
         "built_unit": ("A %@ was completed at %@", "%@ 在 %@ 建成"), "convoy_lost": ("A convoy from %@ was lost", "来自 %@ 的车队失踪"),
-        "refugees_left": ("%@ people fled %@ for %@", "%@ 人逃离 %@，前往 %@"), "migrants_left": ("%@ people left %@ for %@", "%@ 人离开 %@，迁往 %@"),
+        "refugees_left": ("%@ people fled %@ for %@", "%@ 人逃离 %@，前往 %@"),
+        "sea_route": ("%@ ships to %@ over the sea: %@", "%@ 开通海上航线，向 %@ 出口%@"), "trade_route": ("%@ sends %@ by land: %@", "%@ 经陆路向 %@ 出口%@"),
+        "convoy_sunk": ("A convoy of %@ carrying %@ was sunk", "%@ 运送%@的船队被击沉"), "spy_caught": ("%@ caught a spy of %@", "%@ 抓获了 %@ 的间谍"),
+        "under_nation": ("%@ was founded underground", "地下国家 %@ 建立"), "under_town": ("%@ dug out a new town: %@", "%@ 向地下开拓了新城 %@"),
+        "under_sea_town": ("%@ dug a town under the sea, walled with glass: %@", "%@ 在海底之下挖出新城 %@，以高强度玻璃挡住海水"),
+        "sea_nation": ("%@ was founded on the sea floor", "海底国家 %@ 建立"), "giantess_rises": ("%@ rises for %@", "%@ 为 %@ 而起"), "migrants_left": ("%@ people left %@ for %@", "%@ 人离开 %@，迁往 %@"),
     ]
     /// News carries both languages side by side (en, zh, en, zh ...); pick one of each pair.
     static func line(_ n: CivNews) -> String {
