@@ -110,7 +110,7 @@ struct CivWorldSection: View {
         switch realm {
         case .underground: list = list.filter { $0.underground == true }
         case .seaFloor: list = list.filter { $0.undersea == true }
-        case .surface: break
+        case .surface, .sky: break
         }
         if nearOnly, let t = model.society.explorer {
             // nations with a city within three regions of where you are (and the towns about you)
