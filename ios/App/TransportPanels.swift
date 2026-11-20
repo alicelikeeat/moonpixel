@@ -39,6 +39,20 @@ struct TravelPanel: View {
                         }
                     }
                     Divider().opacity(0.3)
+                    // the air network: airports, the nations' airfields, UFO airports and the sky cities
+                    Text(L("航空网络（飞机 · 飞碟）", "Air network (planes · saucers)")).font(.system(size: 13, weight: .bold, design: .rounded))
+                    Text(model.airHere.map { L("你在：", "You are at: ") + $0.name } ?? L("你不在机场附近：走到机场、UFO 机场或天空城空港 64 格内即可起飞（也可以先用瞬移中心过去）", "Not at an airport: go within 64 tiles of an airport, a UFO airport or a sky city's airport to take off (or teleport there first)"))
+                        .font(.system(size: 11, design: .rounded)).opacity(0.8).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("air-here")
+                    ForEach(model.airHubs, id: \.id) { h in
+                        HStack(spacing: 6) {
+                            Image(systemName: h.kind == .ufo ? "circle.circle.fill" : (h.kind == .sky ? "cloud.fill" : "airplane")).frame(width: 18)
+                            Text(h.name).font(.system(size: 11, weight: .semibold, design: .rounded)).lineLimit(1)
+                            Spacer(minLength: 4)
+                            if h.runway && (model.airHere?.runway ?? false) { Chip(title: L("飞机", "Plane"), icon: "airplane.departure", id: "air-plane-\(h.id)") { model.airFly(h, by: .plane) } }
+                            if model.airHere != nil { Chip(title: L("飞碟", "Saucer"), icon: "circle.circle", id: "air-ufo-\(h.id)") { model.airFly(h, by: .ufo) } }
+                        }
+                    }
+                    Divider().opacity(0.3)
                     Text(L("目的地", "Where to")).font(.system(size: 13, weight: .bold, design: .rounded))
                     if model.destinations.isEmpty { Text(L("还没有车站", "No stops yet")).font(.system(size: 11, design: .rounded)).opacity(0.7) }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220))], alignment: .leading, spacing: 6) {

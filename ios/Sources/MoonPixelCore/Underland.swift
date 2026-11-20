@@ -48,7 +48,7 @@ public struct UnderlandPlan {
 extension Generator {
     /// What a chunk of underland looks like. `inZone` says which chunks round it are underland too (their
     /// sides get no wall); `home` is the centre chunk of a city (a plaza with its stairway).
-    public func underlandPlan(_ cx: Int, _ cy: Int, sea: Bool, home: Bool, inZone: (Int, Int) -> Bool) -> UnderlandPlan {
+    public func underlandPlan(_ cx: Int, _ cy: Int, sea: Bool, home: Bool, rim: UInt8? = nil, inZone: (Int, Int) -> Bool) -> UnderlandPlan {
         let c = Content.shared
         let ground = sea ? c.tid("sand") : c.tid("grass")
         let road = c.tid("cobble_road"), plaza = sea ? c.tid("sand") : c.tid("stone_floor")
@@ -125,13 +125,14 @@ extension Generator {
         if !home { for (x, y) in [(14, 14), (17, 14), (14, 17), (17, 17)] { ob[i(x, y)] = lamp; de[i(x, y)] = 0 } }
         // the edge: glass where it still meets the flooded rock (always on the sea floor's), open towards
         // the rest of the underland
-        let glassy = sea || seaAbove(cx * 32 + 16, cy * 32 + 16)
+        let glassy = rim != nil || sea || seaAbove(cx * 32 + 16, cy * 32 + 16)
+        let edgeTile = rim ?? glass
         let sides: [(Int, Int, (Int) -> (Int, Int))] = [(0, -1, { ($0, 0) }), (0, 1, { ($0, 31) }), (-1, 0, { (0, $0) }), (1, 0, { (31, $0) })]
         for (dx, dy, at) in sides {
             let shut = !inZone(cx + dx, cy + dy)
             for k in 0..<32 {
                 let (x, y) = at(k)
-                if shut && glassy { ob[i(x, y)] = glass; de[i(x, y)] = 0; st[i(x, y)] = 0 } else if !shut { open[i(x, y)] = true }
+                if shut && glassy { ob[i(x, y)] = edgeTile; de[i(x, y)] = 0; st[i(x, y)] = 0 } else if !shut { open[i(x, y)] = true }
             }
         }
         return UnderlandPlan(layers: [g, st, ob, de], openEdge: open)

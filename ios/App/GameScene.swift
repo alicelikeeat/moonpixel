@@ -547,8 +547,8 @@ final class GameScene: SKScene {
             }
         }
         // underground: the people of the nations' underlands, walking their roads
-        if model.depth == 1 {
-            for f in society.underFolk(center: viewPos, halfW: halfW, halfH: halfH) {
+        if model.depth == 1 || model.depth == SkyTune.depth {
+            for f in society.folk(depth: model.depth, center: viewPos, halfW: halfW, halfH: halfH) {
                 seen.insert(f.id)
                 let node = agentNodes[f.id] ?? {
                     let n = SKSpriteNode()

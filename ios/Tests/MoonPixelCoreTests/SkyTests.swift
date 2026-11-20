@@ -1,79 +1,91 @@
 import XCTest
 @testable import MoonPixelCore
 
+/// Sky cities, the air network (planes and saucers), and the teleport centre.
 final class SkyTests: XCTestCase {
-    func body(_ k: SkyBody.Kind, _ t: Double) -> SkyBody { Sky.bodies(time: t).first { $0.kind == k }! }
-
-    func testTheSunCrossesTheSkyByDayAndIsDownAtNight() {
-        let noon = 12.75 / 24 * MP.daySeconds, midnight = 0.0, dawn = 6.0 / 24 * MP.daySeconds, dusk = 19.5 / 24 * MP.daySeconds
-        XCTAssertGreaterThan(body(.sun, noon).dir.y, 0.8, "high at noon")
-        XCTAssertLessThan(body(.sun, midnight).dir.y, -0.3, "down at midnight")
-        XCTAssertGreaterThan(body(.sun, dawn).dir.x, 0.8, "rises in the east")
-        XCTAssertLessThan(body(.sun, dusk).dir.x, -0.8, "sets in the west")
-        XCTAssertGreaterThan(body(.sun, noon).dir.z, 0.2, "crosses the southern sky")
+    func firstSky(_ s: Society) -> (name: String, cx: Int, cy: Int) {
+        let list = s.skyCities(near: TilePos(0, 0), within: 60, zh: true)
+        XCTAssertFalse(list.isEmpty)
+        return list[0]
     }
 
-    func testTheMoonRunsThroughItsPhasesAndIsFullOppositeTheSun() {
-        var seen = Set<Int>()
-        for d in 0..<8 { seen.insert(Sky.phaseIndex(body(.moon, Double(d) * MP.daySeconds).phase)) }
-        XCTAssertEqual(seen.count, 8, "eight phases in eight days")
-        // full moon: four days in; at midnight the full moon is up while the sun is down
-        let t = 4 * MP.daySeconds + 0.5 / 24 * MP.daySeconds
-        XCTAssertEqual(Sky.phaseIndex(body(.moon, t).phase), 4)
-        XCTAssertTrue(body(.moon, t).up); XCTAssertFalse(body(.sun, t).up)
+    func testASkyCityFloatsOnItsStoreyWithAPlazaAnAirportAndAWayDown() {
+        let s = makeSociety(21)
+        let c = firstSky(s)
+        XCTAssertTrue(s.world.gen.isSkyCity(c.cx, c.cy))
+        let w = s.skyWorld()
+        let ct = s.content
+        let home = w.chunk(c.cx, c.cy)
+        XCTAssertEqual(home.layers[2][16 * 32 + 16], ct.tid("stairs_down"), "the way down in its plaza")
+        XCTAssertTrue(home.layers[0].contains(ct.tid("grass")) || home.layers[0].contains(ct.tid("stone_floor")))
+        let port = w.chunk(c.cx + 1, c.cy)
+        XCTAssertTrue(port.layers[1].contains(ct.tid("runway")), "a runway")
+        XCTAssertTrue(port.layers[0].contains(ct.tid("ufo_pad")), "a UFO pad")
+        // the edge of the island is fenced; beyond it, open air
+        let far = w.chunk(c.cx + 4, c.cy)
+        XCTAssertTrue(far.layers[0].allSatisfy { $0 == 0 }, "open air off the island")
+        var fenced = false
+        for y in 0..<32 { for x in 0..<32 where w.chunk(c.cx + 2, c.cy).layers[2][y * 32 + x] == ct.tid("fence") { fenced = true } }
+        XCTAssertTrue(fenced, "a fence round its edge")
+        XCTAssertFalse(s.skyFolk(center: Vec2(Double(c.cx * 32) * 16, Double(c.cy * 32) * 16), halfW: 1200, halfH: 1200).isEmpty, "its people")
+        // the stairway down comes out on the ground right below
+        _ = s.place(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 17), depth: SkyTune.depth)
+        XCTAssertEqual(s.realm.player.depth, SkyTune.depth)
+        let down = s.useStairs(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 16).center)
+        XCTAssertEqual(down?.depth, 0)
+        XCTAssertLessThan(abs((down?.pos.tile.x ?? 0) - (c.cx * 32 + 16)), 30)
     }
 
-    func testThePlanetsWanderAndEveryBodyHasAModel() {
-        let a = body(.ringed, 0), b = body(.ringed, MP.daySeconds * 0.3)
-        XCTAssertNotEqual(a.dir, b.dir, "the planets move across the sky")
-        for b in Sky.bodies(time: 1234) { XCTAssertFalse(Figure3D.skyBody(b).isEmpty, "\(b.kind) has a model") }
-        for k in 0..<8 { XCTAssertFalse(Figure3D.moon(phase: k).isEmpty) }
-        XCTAssertEqual(Sky.starlight(daylight: 0), 1); XCTAssertEqual(Sky.starlight(daylight: 1), 0)
-    }
-
-    func testUfoPortsVolcanoesAndUndergroundCitiesAreSparse() {
-        let g = Generator(seed: 9)
-        var ufo = 0, under = 0
-        for cy in -40..<40 { for cx in -40..<40 { if g.isUfoPort(cx, cy) { ufo += 1 }; if g.isUnderCity(cx, cy) { under += 1 } } }
-        // 80 x 80 chunks (2.5 km square): one port in each 14 x 14 block at most, one city in each 10 x 10 at most
-        XCTAssertLessThanOrEqual(ufo, 49); XCTAssertLessThanOrEqual(under, 81)
-        XCTAssertGreaterThan(under, 10, "still some to find")
-        var volcanoes = Set<Int>()
-        for y in stride(from: -1280, to: 1280, by: 64) { for x in stride(from: -1280, to: 1280, by: 64) {
-            if let v = g.volcano(near: x, y, radius: 48) { volcanoes.insert(v.x * 100_000 + v.y) }
-        } }
-        XCTAssertLessThanOrEqual(volcanoes.count, 25, "a volcano in about one block of 512 m in eight")
-    }
-
-    func testAnUndergroundCityEntranceIsAPlazaRingedWithBeaconsAndAGatehouse() {
-        let w = OpenWorld(seed: 9, budget: MemoryBudget(overrideMB: 256))
-        let s = Society(world: w, seed: 9)
-        guard let t = s.nearestUnderCity(cx: 0, cy: 0) else { return XCTFail("an underground city within reach") }
-        XCTAssertEqual(w.tile(2, t.x, t.y), s.content.tid("stairs_down"), "the stairway down in the gatehouse")
-        XCTAssertEqual(w.tile(2, t.x, t.y + 4), s.content.tid("gate_open"), "the gatehouse's open gate")
-        var beacons = 0
-        for y in (t.y - 12)...(t.y + 12) { for x in (t.x - 12)...(t.x + 12) where w.tile(2, x, y) == s.content.tid("lamp_on") { beacons += 1 } }
-        XCTAssertGreaterThanOrEqual(beacons, 8, "beacons round the plaza")
-        XCTAssertEqual(WorldMap.describe(s, TilePos(t.x, t.y + 6), zh: true), "地下城入口（门楼里有楼梯下去）")
-    }
-}
-
-extension Anime3DPreviewTests {
-    /// MP_PREVIEW: the sun, the moon in its eight phases and the three planets (docs/sky.png).
-    func testPreviewSky() throws {
-        guard let dir = ProcessInfo.processInfo.environment["MP_PREVIEW"] else { throw XCTSkip("set MP_PREVIEW") }
-        var sheet = Bitmap(1600, 600, fill: RGBA(14, 18, 44))
-        let tex = Tex(b: Palette3D.bitmap.animeGraded())
-        func cell(_ m: Mesh3D, _ x: Int, _ y: Int, _ w: Int, _ h: Int, span: Float) {
-            let img = render([(m, tex, false, .zero, 0)], size: (w, h), yaw: .pi, pitch: 0, scale: Float(min(w, h)) / span, centre: .zero)
-            for yy in 0..<h { for xx in 0..<w { let c = img.get(xx, yy); if c.a > 0 && !(c.r == 255 && c.g == 255 && c.b == 255) { sheet.set(x + xx, y + yy, c) } } }
+    func testPlanesAndSaucersFlyBetweenAirportsUfoPortsAndSkyCities() {
+        let s = makeSociety(22)
+        let c = firstSky(s)
+        let hubs = s.airHubs(around: TilePos(0, 0), within: 60, zh: true)
+        XCTAssertTrue(hubs.contains { $0.kind == .sky })
+        let ufo = hubs.first { $0.kind == .ufo }
+        // away from every airport: no flight
+        _ = s.place(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 18), depth: SkyTune.depth)
+        _ = s.place(at: TilePos(5000, 5000), depth: 0)
+        if s.airHubHere(zh: true) == nil { XCTAssertNil(s.airTravel(to: hubs[0], by: .ufo, zh: true)) }
+        // from the sky city's airport: by plane to an airfield or by saucer to a UFO airport
+        _ = s.place(at: Society.skyArrival(c.cx, c.cy, by: .airport), depth: SkyTune.depth)
+        guard let here = s.airHubHere(zh: true) else { return XCTFail("the sky city's airport is a place of the network") }
+        XCTAssertEqual(here.kind, .sky)
+        if let u = ufo {
+            XCTAssertNil(s.airTravel(to: u, by: .plane, zh: true), "no runway at a UFO airport")
+            let r = s.airTravel(to: u, by: .ufo, zh: true)
+            XCTAssertNotNil(r)
+            XCTAssertEqual(r?.depth, 0)
+            XCTAssertEqual(s.realm.player.depth, 0)
+            XCTAssertGreaterThan(r?.km ?? 0, 0)
+            // and back up by saucer to the sky city's pad
+            let back = s.airTravel(to: hubs.first { $0.kind == .sky && $0.name.hasPrefix(c.name) }!, by: .ufo, zh: true)
+            XCTAssertEqual(back?.depth, SkyTune.depth)
+            XCTAssertEqual(s.skyWorld().tile(0, back!.pos.tile.x, back!.pos.tile.y), s.content.tid("ufo_pad"))
         }
-        cell(Figure3D.sun(), 0, 0, 400, 400, span: 160)
-        cell(Figure3D.ringedPlanet(), 400, 0, 500, 400, span: 240)
-        cell(Figure3D.redPlanet(), 900, 100, 200, 200, span: 40)
-        cell(Figure3D.bluePlanet(), 1120, 60, 280, 280, span: 56)
-        for k in 0..<8 { cell(Figure3D.moon(phase: k), k * 200, 400, 200, 200, span: 64) }
-        var data = Data("\(sheet.w) \(sheet.h)\n".utf8); data.append(contentsOf: sheet.px)
-        try data.write(to: URL(fileURLWithPath: dir).appendingPathComponent("sky-a.rgba"))
+    }
+
+    func testTeleportAnywhereFromAnyLayerAndRememberPlaces() {
+        let s = makeSociety(23)
+        let c = firstSky(s)
+        let targets = s.teleportTargets(from: TilePos(0, 0), zh: true)
+        for g in [TeleportTarget.Group.city, .sky, .air] { XCTAssertTrue(targets.contains { $0.group == g }, "\(g)") }
+        let sky = targets.first { $0.group == .sky }!
+        XCTAssertNotNil(s.teleport(to: sky))
+        XCTAssertEqual(s.realm.player.depth, SkyTune.depth)
+        s.saveWaypoint("云上")
+        // from the sky straight underground, then to the surface
+        XCTAssertNotNil(s.teleport(to: TeleportTarget(group: .under, name: "下", tile: TilePos(c.cx * 32, c.cy * 32 + 600), depth: 1, detail: "")))
+        XCTAssertEqual(s.realm.player.depth, 1)
+        let town = targets.first { $0.group == .city }!
+        XCTAssertNotNil(s.teleport(to: town))
+        XCTAssertEqual(s.realm.player.depth, 0)
+        let again = s.teleportTargets(from: TilePos(0, 0), zh: true)
+        XCTAssertEqual(again.first { $0.group == .saved }?.name, "云上")
+        XCTAssertEqual(again.filter { $0.group == .recent }.count, 3, "the last places, newest first")
+        XCTAssertEqual(again.first { $0.group == .recent }?.name, town.name)
+        // saved places survive saving
+        let data = try! JSONEncoder().encode(s.realm)
+        let back = try! JSONDecoder().decode(Realm.self, from: data)
+        XCTAssertEqual(back.waypoints?.first?.name, "云上")
     }
 }

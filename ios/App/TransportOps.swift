@@ -145,6 +145,8 @@ extension GameModel {
             return VehicleRow(id: v.id, text: v.kind.name(zh: GameModel.zh) + " · " + v.name + String(format: L(" · %.0f 米", " · %.0f m"), v.pos.distance(to: b.pos) / 8)
                               + (v.stopped ? "" : L(" · 行驶中", " · moving")), canDrive: mine && v.stopped && !v.playerDriving, canRide: v.stopped && v.seatsFree > 0)
         }
+        airHere = s.airHubHere(zh: GameModel.zh)
+        airHubs = Array(s.airHubs(around: b.pos.tile, within: 80, zh: GameModel.zh).filter { $0.id != airHere?.id }.prefix(24))
         let home = s.nearestAirport(to: b.pos.tile)
         flights = s.passengerAirports().filter { $0.id != home?.id }.sorted { $0.tile.distance2(b.pos.tile) < $1.tile.distance2(b.pos.tile) }.prefix(12).map {
             StopRow(id: $0.id, text: $0.name + String(format: L(" · %.1f 公里", " · %.1f km"), $0.tile.center.distance(to: b.pos) / 8 / 1000))
@@ -152,6 +154,23 @@ extension GameModel {
         destinations = s.net.stops.sorted { $0.tile.distance2(b.pos.tile) < $1.tile.distance2(b.pos.tile) }.prefix(40).map {
             StopRow(id: $0.id, text: $0.kind.name(zh: GameModel.zh) + " · " + $0.name + String(format: L(" · %.0f 米", " · %.0f m"), $0.tile.center.distance(to: b.pos) / 8))
         }
+    }
+
+    /// Fly the air network: by plane between airports, by saucer between any of its places.
+    func airFly(_ dest: AirHub, by mode: Society.AirMode) {
+        guard let s = society, let sc = scene else { return }
+        let before = depth
+        let from = CGPoint(x: sc.player.x, y: -sc.player.y)
+        guard let r = s.airTravel(to: dest, by: mode, zh: GameModel.zh) else {
+            showToast(s.airHubHere(zh: GameModel.zh) == nil ? L("先到机场、UFO 机场或天空城的空港（64 格内）", "Go to an airport, a UFO airport or a sky city's airport first (within 64 tiles)")
+                                                          : L("飞机只在有跑道的机场之间飞；UFO 机场请乘飞碟", "Planes fly only between airports with runways: take a saucer to a UFO airport"))
+            return
+        }
+        showTravel = false
+        if r.depth != before { switchLayer(to: r.pos) } else { sc.player = r.pos }
+        sc.blinkFX(from: from, to: CGPoint(x: r.pos.x, y: -r.pos.y))
+        let how = mode == .plane ? L("乘飞机", "By plane") : L("乘飞碟", "By saucer")
+        showToast(String(format: L("%@抵达 %@ · %.1f 公里 · 航程约 %.0f 分钟", "%@ to %@ · %.1f km · about %.0f minutes in the air"), how, dest.name, r.km, r.minutes))
     }
 
     /// Fly to another city: a charter plane at the nearest airport, as its passenger (the autopilot flies) or

@@ -838,8 +838,8 @@ final class SolidRenderer {
             settle(e, at: place(upstairs.at[a.id] ?? a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
         }
         // underground: the people of the nations' underlands, walking their roads
-        if model.depth == 1 {
-            for f in society.underFolk(center: scene.viewPos, halfW: reach, halfH: reach, limit: 30) {
+        if model.depth == 1 || model.depth == SkyTune.depth {
+            for f in society.folk(depth: model.depth, center: scene.viewPos, halfW: reach, halfH: reach, limit: 30) {
                 seen.insert(f.id)
                 let fresh = agents[f.id] == nil
                 let e = agents[f.id] ?? take()

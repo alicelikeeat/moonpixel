@@ -293,6 +293,9 @@ public struct Realm: Codable {
     public var favorUntil: [String: Double]?
     /// The capitals' monuments (palace cities, statues, towers...: Monuments.swift).
     public var monuments: [Monument]?
+    /// Places the traveller saved for teleporting back to, and the last places teleported to (Teleport.swift).
+    public var waypoints: [Waypoint]?
+    public var teleportLog: [Waypoint]?
     /// The battle of the twin ports played in this world, step by step (WorldDemo.swift).
     public var worldDemo: WorldDemoState?
     /// Wars of annexation under way (Annexation.swift).

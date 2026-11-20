@@ -28,7 +28,7 @@ public final class WorldMap {
     public var political = false
     /// Which world the map shows: the surface, the underground (the underground nations' underlands) or the
     /// sea floor (the sea-floor nations' underlands, under the oceans).
-    public enum Layer: String, CaseIterable { case surface, underground, seaFloor }
+    public enum Layer: String, CaseIterable { case surface, underground, seaFloor, sky }
     public var layer = Layer.surface
     public init() {}
 
@@ -316,6 +316,7 @@ public final class WorldMap {
     /// underland, open land with its roads, in the nation's colour in the Nations view; each city by name and
     /// each nation's name over its cities.
     func renderBelow(_ s: Society, centre: TilePos, reach: Int, ppc want: Int?, zh: Bool) -> (Bitmap, [MapMarker]) {
+        if layer == .sky { return renderSky(s, centre: centre, reach: reach, ppc: want, zh: zh) }
         let gen = s.world.gen
         let civ = s.civ
         let sea = layer == .seaFloor
@@ -390,6 +391,53 @@ public final class WorldMap {
             }
             if sea && gen.isSeaCity(cx, cy) { add(.underCity, zh ? "珍珠穹顶入口" : "Pearl dome (way down)", "#7fe6ff", TilePos(cx * 32 + 16, cy * 32 + 17)) }
         } }
+        add(.player, zh ? "你" : "You", "#7fe6ff", centre)
+        return (img, marks)
+    }
+
+    /// The sky: the world below as a pale haze, and the sky cities' islands (grass, roads, the runway and the
+    /// UFO pad), each by name.
+    func renderSky(_ s: Society, centre: TilePos, reach: Int, ppc want: Int?, zh: Bool) -> (Bitmap, [MapMarker]) {
+        let gen = s.world.gen
+        let ext = min(120, max(6, reach))
+        side = ext * 2 + 1
+        ppc = want ?? max(2, min(16, 1600 / side))
+        let pc = TilePos(OpenWorld.floorDiv(centre.x, 32), OpenWorld.floorDiv(centre.y, 32))
+        origin = TilePos(pc.x - ext, pc.y - ext)
+        var img = Bitmap(side * ppc, side * ppc, fill: RGBA(150, 190, 230))
+        let haze = RGBA(170, 205, 236), grass = RGBA(120, 186, 96), road = RGBA(240, 236, 224), runway = RGBA(70, 72, 80), pad = RGBA(120, 230, 255), fence = RGBA(140, 110, 80)
+        for cy in 0..<side { for cx in 0..<side {
+            let x = origin.x + cx, y = origin.y + cy
+            let e = gen.elevation(x * 32 + 16, y * 32 + 16)
+            // the ground far below, faded into the sky's blue
+            let below = e < Biome.sea ? WorldMap.sea : RGBA(110, 150, 100)
+            img.rect(cx * ppc, cy * ppc, ppc, ppc, below.lerp(haze, 0.72))
+            guard let c = gen.skyIsland(x, y) else { continue }
+            img.rect(cx * ppc, cy * ppc, ppc, ppc, grass)
+            if x == c.0 + 1 && y == c.1 {
+                img.rect(cx * ppc, cy * ppc + ppc * 6 / 32, ppc, max(1, ppc * 4 / 32), runway)
+                img.rect(cx * ppc + ppc * 19 / 32, cy * ppc + ppc * 20 / 32, max(1, ppc * 8 / 32), max(1, ppc * 6 / 32), pad)
+            } else if ppc >= 4 {
+                img.rect(cx * ppc + ppc / 2, cy * ppc, max(1, ppc / 8), ppc, road)
+                img.rect(cx * ppc, cy * ppc + ppc / 2, ppc, max(1, ppc / 8), road)
+            }
+            let e2 = max(1, ppc / 10)
+            if gen.skyIsland(x - 1, y).map({ $0 != c }) ?? true { img.rect(cx * ppc, cy * ppc, e2, ppc, fence) }
+            if gen.skyIsland(x + 1, y).map({ $0 != c }) ?? true { img.rect(cx * ppc + ppc - e2, cy * ppc, e2, ppc, fence) }
+            if gen.skyIsland(x, y - 1).map({ $0 != c }) ?? true { img.rect(cx * ppc, cy * ppc, ppc, e2, fence) }
+            if gen.skyIsland(x, y + 1).map({ $0 != c }) ?? true { img.rect(cx * ppc, cy * ppc + ppc - e2, ppc, e2, fence) }
+        } }
+        var marks: [MapMarker] = []
+        func add(_ k: MapMarker.Kind, _ n: String, _ col: String, _ t: TilePos) {
+            let (fx, fy) = fraction(t)
+            guard fx >= 0, fy >= 0, fx <= 1, fy <= 1 else { return }
+            marks.append(MapMarker(kind: k, name: n, color: col, tile: t, fx: fx, fy: fy))
+        }
+        for c in s.skyCities(near: centre, within: ext + 3, zh: zh) {
+            add(.city, c.name, "#fff4c0", Society.skyArrival(c.cx, c.cy, by: .sky))
+            add(.airport, zh ? "空港" : "Airport", "#9fd3ff", Society.skyArrival(c.cx, c.cy, by: .airport))
+            add(.ufo, zh ? "UFO 停机坪" : "UFO pad", "#6af0ff", Society.skyArrival(c.cx, c.cy, by: .ufo))
+        }
         add(.player, zh ? "你" : "You", "#7fe6ff", centre)
         return (img, marks)
     }

@@ -91,6 +91,7 @@ struct HUDView: View {
         .overlay { if model.showBackpack { BackpackPanel() } }
         .overlay { if let id = model.liftPanel { LiftPanel(id: id) } }
         .overlay { if model.showTravel { TravelPanel() } }
+        .overlay { if model.showTeleport { TeleportPanel() } }
         .overlay { if model.showTransport { TransportPanel() } }
         .overlay { if model.showRealm { RealmPanel() } }
         .overlay { if let id = model.civDetail { CivNationSheet(id: id) } }
@@ -679,9 +680,13 @@ struct HUDView: View {
                 Text(L("地面", "Surface")).tag(WorldMap.Layer.surface)
                 Text(L("地下世界", "Underground")).tag(WorldMap.Layer.underground)
                 Text(L("海底世界", "Sea floor")).tag(WorldMap.Layer.seaFloor)
+                Text(L("天空", "Sky")).tag(WorldMap.Layer.sky)
             }
             .pickerStyle(.segmented).accessibilityIdentifier("map-layer")
-            if model.mapLayer != .surface {
+            if model.mapLayer == .sky {
+                Text(L("浅蓝是远处的地面；绿色岛屿是天空城，岛东侧有跑道和 UFO 停机坪，四周有围栏。点地图任意处可直接瞬移到天上。", "Pale blue: the ground far below; green islands: the sky cities, with a runway and a UFO pad on their east side and a fence round them. Tap anywhere to teleport up there."))
+                    .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
+            } else if model.mapLayer != .surface {
                 Text(model.mapLayer == .underground
                      ? L("绿色＝地下国家挖出的地底世界（人造天光），浅蓝边＝挡海水的玻璃墙；紫点是地面上的入口。点城市名可直接前往。", "Green: the underlands the underground nations have dug (a sky of lamps); pale blue rim: glass against the sea; purple: the ways down. Tap a city to go there.")
                      : L("沙色＝海底国家的海底世界，四周是玻璃墙；蓝点是海底城的珍珠穹顶入口。点城市名可直接前往。", "Sand: the sea-floor nations' underlands, walled in glass; blue: the pearl domes, the ways down. Tap a city to go there."))
@@ -728,6 +733,12 @@ struct HUDView: View {
                     }
                 }
             }
+            Button { model.showMap = false; model.showTeleport = true } label: {
+                Label(L("瞬移中心：所有城市、天空城、机场、收藏和坐标", "Teleport centre: every city, sky city, airport, saved place and coordinates"), systemImage: "sparkles")
+                    .font(.system(size: 12, weight: .bold, design: .rounded)).padding(.horizontal, 12).frame(maxWidth: .infinity).frame(minHeight: 36)
+                    .background(Color(red: 0.55, green: 0.35, blue: 0.95), in: Capsule())
+            }
+            .buttonStyle(PressStyle()).accessibilityIdentifier("open-teleport")
             Text(L("找地方", "Find")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
             LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
                 gridPill(L("地下城", "Underground city"), "arrow.down.to.line") { model.pickNearestUnderCity() }

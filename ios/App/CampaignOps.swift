@@ -121,6 +121,10 @@ extension GameModel {
         sc.resetLayer(keepChunks: depth != 1 && !wasUnder)
         following = false
         watch = .none
+        if depth == SkyTune.depth {
+            showToast(L("天空城：岛中央的楼梯直通下方地面；东侧空港可以坐飞机或飞碟去别处", "A sky city: the stairway in the middle goes straight down to the ground; its airport to the east flies planes and saucers"))
+            return
+        }
         if depth >= OpenWorld.storeyBase {
             let n = depth - OpenWorld.storeyBase
             showToast(String(format: L("第 %d 层：只能站在楼板上；墙下三格内可以铺楼板，放“向上楼梯”可以继续往上盖", "Storey %d: stand only on floors; lay floor within three tiles of a wall below; place Stairs up to build higher"), n))
@@ -564,6 +568,7 @@ struct MorePanel: View {
                         model.showMore = false; model.viewMode = model.viewMode == .first ? .third : .first; if !model.render3D { model.render3D = true }
                     }
                     Chip(title: L("交通管理", "Transport"), icon: "tram.fill", id: "Transport") { model.showMore = false; model.showTransport = true }
+                    Chip(title: L("瞬移中心", "Teleport centre"), icon: "sparkles", id: "TeleportCentre") { model.showMore = false; model.showTeleport = true }
                     Chip(title: L("都市并入开放世界", "Bring the metro city in"), icon: "building.2.fill", id: "MetroImport") { model.showMore = false; model.importMetroCity() }
                     Chip(title: model.artStyle == .anime ? L("像素风格", "Pixel style") : L("动漫风格", "Anime style"), icon: "paintbrush.pointed.fill", id: "ArtStyle") {
                         model.showMore = false; model.artStyle = model.artStyle == .anime ? .pixel : .anime

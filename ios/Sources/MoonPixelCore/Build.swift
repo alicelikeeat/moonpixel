@@ -333,7 +333,7 @@ extension Society {
         let w = OpenWorld(seed: world.seed, budget: world.budget, depth: OpenWorld.storeyBase + n)
         w.diskLimitBytes = world.diskLimitBytes
         if let st = world.store { w.open(store: st) }
-        w.overlay = { [unowned self] ch in self.stampTowers(ch, storey: n) }
+        w.overlay = { [unowned self] ch in self.stampTowers(ch, storey: n); if n == SkyTune.storey { self.stampSky(ch) } }
         w.onChunkChanged.append { [unowned self] _, _ in self.noteStorey(n) }
         storeys[n] = w
         return w
@@ -585,6 +585,11 @@ extension Society {
                 let n = w.storey + 1
                 realm.player.depth = OpenWorld.storeyBase + n
                 return (OpenWorld.storeyBase + n, storeyWorld(n).findFree(near: t + TilePos(0, 1), maxR: 3).center)
+            }
+            if w.storey == SkyTune.storey && id == down && world.gen.skyIsland(t.x >> 5, t.y >> 5) != nil {
+                // the sky city's way down: a long stair (a lift, really) straight to the ground below
+                realm.player.depth = 0
+                return (0, world.findFree(near: t + TilePos(0, 1), maxR: 24).center)
             }
             if w.storey > 0 && id == down {
                 let n = w.storey - 1

@@ -133,6 +133,11 @@ final class GameModel: ObservableObject {
     @Published var destinations: [StopRow] = []
     /// Other cities' airports, nearest first: where a charter flight can take you.
     @Published var flights: [StopRow] = []
+    /// The air network: the place the traveller is at, and the others (planes and saucers).
+    @Published var airHere: AirHub?
+    @Published var airHubs: [AirHub] = []
+    /// The teleport centre.
+    @Published var showTeleport = false { didSet { if showTeleport { inputReset += 1 } } }
     @Published var trip: TripPlan?
     @Published var tripTo: Int?
     @Published var transportLines: [String] = []
