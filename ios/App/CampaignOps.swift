@@ -72,6 +72,11 @@ extension GameModel {
 
     func demolish(at t: TilePos) {
         guard let s = society, !worldLocked else { return }
+        // a landmark's part (a hall, a gate, a courtyard house) or a building inside it comes down whole
+        if depth == 0, let part = s.demolishLandmarkPart(at: t) {
+            showToast(String(format: L("拆除了 %@，回收部分石料", "Took down %@ and got some stone back"), part))
+            return
+        }
         if let p = s.demolishBuild(at: t, in: activeWorld) { showToast(String(format: L("拆除了%@，回收一半材料", "Took down the %@ and got half back"), p.name(zh: GameModel.zh))) }
         else { showToast(L("这里没有可拆除的建筑", "Nothing built here to take down")) }
     }

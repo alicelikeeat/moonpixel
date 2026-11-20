@@ -162,6 +162,8 @@ public final class Agent: Codable {
     public var captiveOf: Int?, captiveHome: Int?
     /// Married on this day (a wedding; nil for couples who paired before weddings, or not married).
     public var spouseSince: Double?
+    /// Living in a landmark (home -3): the bed there (x, y).
+    public var bedAt: [Int]?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
@@ -176,7 +178,7 @@ public final class Agent: Codable {
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
              health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
-             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent, captiveOf, captiveHome, spouseSince
+             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent, captiveOf, captiveHome, spouseSince, bedAt
     }
 
     public init() {}
@@ -882,7 +884,7 @@ public final class Society {
             if hb == nil, let free = houses.first(where: { $0.done && $0.owner == nil }) { free.owner = hid; hb = free }
             // no house of their own: a storey of someone else's, where one stands empty
             if hb == nil, let up = houses.first(where: { $0.done && ($0.upstairs ?? []).count < ($0.levels ?? 1) - 1 }) { up.upstairs = (up.upstairs ?? []) + [hid]; hb = up }
-            for m in members {
+            for m in members where m.home != -3 {                 // (those living in a landmark keep their bed there)
                 let newHome = (hb?.done ?? false) ? hb!.id : -1
                 if newHome >= 0 && m.home != newHome { m.think(now, "t_home") }
                 m.home = newHome
@@ -1005,6 +1007,7 @@ public final class Society {
 
     func leaveHome(_ a: Agent, _ s: Settlement) {
         if a.home >= 0, let b = s.building(a.home) { b.residents.removeAll { $0 == a.id } }
+        a.bedAt = nil
         a.home = -1
     }
 
@@ -1111,6 +1114,7 @@ public final class Society {
             var spot = s.center + TilePos(a.id % 5 - 2, 3 + a.id % 2)
             if a.home >= 0, let hb = s.building(a.home), hb.done { spot = TilePos(hb.x + 2 + a.id % 2, hb.y + 2) }
             else if a.home == -2, !s.freeBeds.isEmpty { spot = s.freeBeds[a.id % s.freeBeds.count] + TilePos(0, 1) }
+            else if a.home == -3, let b = a.bedAt, b.count == 2 { spot = TilePos(b[0], b[1] + 1) }          // their bed in a landmark
             if go(a, s, spot, "sleep", 9999) { return }
         }
         // a wedding to go to (the couple, their family and friends), or Sunday service at the church

@@ -64,6 +64,9 @@ extension Society {
         var beds: [TilePos] = [], gates: [TilePos] = [], walls: [TilePos] = []
         let floors: Set<UInt8> = [content.tid("wood_floor"), content.tid("stone_floor"), content.tid("brick_floor")]
         let bed = content.tid("bed"), built = buildingTiles(s)
+        // the town's landmarks are lived in: their beds are homes like any other
+        var lived = Set<TilePos>()
+        for b in s.buildings where b.done && Society.landmarkSpecs[b.type] != nil { for y in b.y..<(b.y + b.h) { for x in b.x..<(b.x + b.w) { lived.insert(TilePos(x, y)) } } }
         for dy in -r...r { for dx in -r...r {
             let x = s.center.x + dx, y = s.center.y + dy
             let o = world.tile(2, x, y)
@@ -72,7 +75,7 @@ extension Society {
             f[key.hasPrefix("banner_") ? "banner" : key, default: 0] += 1
             let t = TilePos(x, y)
             // a bed the player (or anyone) put on a proper floor outside the villagers' own houses is housing too
-            if o == bed && floors.contains(world.tile(0, x, y)) && !built.contains(t) { beds.append(t) }
+            if o == bed && floors.contains(world.tile(0, x, y)) && (!built.contains(t) || lived.contains(t)) { beds.append(t) }
             if key == "gate" || key == "gate_open" { gates.append(t) }
             if (key == "wall_stone" || key == "wall_wood" || key == "wall_brick" || key == "wall_concrete" || key == "wall_glass" || key == "wall_limestone" || key == "wall_deco" || key == "wall_brownstone") && !built.contains(t) { walls.append(t) }
         } }

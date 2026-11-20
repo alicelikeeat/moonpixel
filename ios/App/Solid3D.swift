@@ -93,6 +93,7 @@ final class SolidRenderer {
     private var standards: [Int: ModelEntity] = [:]
     /// Outside elevators: the car (moved to its real height every frame) and the shaft's rails.
     private var liftEntities: [Int: (car: ModelEntity, rails: [ModelEntity], top: Float)] = [:]
+    private var monumentGone: [Int: Int] = [:]
     private var vehicleEntities: [Int: ModelEntity] = [:]
     private var warEntities: [Int: ModelEntity] = [:]
     /// The saucers of the UFO airports in view, and their light beams.
@@ -1096,9 +1097,13 @@ final class SolidRenderer {
         guard reach.isFinite else { return }
         for m in society.monuments(near: vp.tile, reach: Int(min(1e6, reach / 16)) + 600) {
             seen.insert(m.id)
-            if monumentEntities[m.id] != nil { continue }
+            // drawn again when part of it has been taken down
+            let gone = m.removed?.count ?? 0
+            if monumentEntities[m.id] != nil && monumentGone[m.id] == gone { continue }
+            for e in monumentEntities[m.id] ?? [] { e.removeFromParent() }
+            monumentGone[m.id] = gone
             var es: [ModelEntity] = []
-            for p in Figure3D.monumentPieces(for: m) {
+            for p in Figure3D.livePieces(for: m) {
                 let e = ModelEntity()
                 e.model = model3D(key: "monument-" + p.key) { p.mesh() }
                 let mid = Vec2(Double(Float(m.x) + p.x + p.w / 2), Double(Float(m.y) + p.z + p.d / 2)) * 16

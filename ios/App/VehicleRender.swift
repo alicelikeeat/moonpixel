@@ -132,9 +132,12 @@ extension GameScene {
         var seen = Set<Int>()
         for m in society.monuments(near: viewPos.tile, reach: reach) {
             seen.insert(m.id)
-            if monumentNodes[m.id] != nil { continue }
+            let gone = m.removed?.count ?? 0
+            if monumentNodes[m.id] != nil && monumentGone2D[m.id] == gone { continue }
+            for n in monumentNodes[m.id] ?? [] { n.removeFromParent() }
+            monumentGone2D[m.id] = gone
             var ns: [SKSpriteNode] = []
-            for sp in MonumentArt.sprites(for: m) {
+            for sp in Figure3D.liveSprites(for: m) {
                 let tex = GameScene.monumentTextures[sp.key] ?? {
                     // as sharp as a texture of at most 2048 pixels allows
                     let ppt = min(16.0, 2048.0 / Double(max(sp.w, sp.h)))

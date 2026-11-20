@@ -97,6 +97,9 @@ public struct Monument: Codable, Equatable {
     public var design: FusionDesign?
     /// For a nation's grave: the nation's records.
     public var grave: NationRecord?
+    /// Lived in and built onto (LandmarkLife.swift): its beds, who sleeps in them, what was built inside it,
+    /// and the parts of it taken down.
+    public var beds: [[Int]]?, residents: [Int]?, annexes: [MonumentAnnex]?, removed: [String]?
     /// Its name: the kind's, or its own for a landmark of a nation's design, or the fallen nation's.
     public func title(zh: Bool) -> String { grave.map { $0.name(zh: zh) + (zh ? "国家公墓" : " National Cemetery") } ?? design?.name(zh: zh) ?? kind.name(zh: zh) }
     /// How tall it stands, units.
@@ -167,6 +170,9 @@ extension Society {
             realm.cool["monument-\(n.id)"] = world.time + 2 * MP.daySeconds
             emit("monument", [n.name(zh: zh), s.name(zh: zh), m.title(zh: zh)], m.center.center)
         }
+        // landmarks are lived in and built onto
+        landmarkHomesDaily()
+        landmarkBuildDaily()
     }
 
     /// Raise a monument by a town, outside it on open land: its tiles laid now. Returns it, or nil when there is
@@ -349,6 +355,9 @@ extension Society {
                 for x in r.x..<(r.x + r.w) { set(x, r.z, obj: brick); set(x, r.z + r.d - 1, obj: x == r.x + r.w / 2 ? T("gate_open") : brick) }
                 for z in r.z..<(r.z + r.d) { set(r.x, z, obj: brick); set(r.x + r.w - 1, z, obj: brick) }
                 room(r.x + 6, r.z + 3, 18, 7, wall: brick, floor: wood)
+                // a home: beds along the back wall, a table, a kitchen
+                for bx in [2, 4, 12, 14] { set(r.x + 6 + bx, r.z + 4, obj: T("bed")) }
+                set(r.x + 6 + 8, r.z + 6, obj: T("table")); set(r.x + 6 + 1, r.z + 6, obj: T("kitchen"))
                 set(r.x + 4, r.z + 15, obj: T("tree_pine")); set(r.x + r.w - 5, r.z + 15, obj: T("tree_pine"))
             }
             keepClear(TilePos(m.x + cx, m.y + d)); keepClear(TilePos(m.x + cx, m.y))
@@ -413,6 +422,13 @@ extension Society {
             carveFusion(m)
         case .cemetery:
             carveCemetery(m)
+        }
+        // the keepers' lodge by every landmark but the palace city and the graves: beds, a table, a kitchen
+        if ![.palace, .cemetery, .fusion].contains(m.kind) {
+            let lx = 3, lz = d - 11
+            room(lx, lz, 9, 7, wall: brick, floor: wood)
+            for bx in [1, 3, 5] { set(lx + bx, lz + 1, obj: T("bed")) }
+            set(lx + 7, lz + 1, obj: T("kitchen")); set(lx + 4, lz + 4, obj: T("table"))
         }
     }
 }

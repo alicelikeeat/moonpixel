@@ -73,6 +73,7 @@ final class GameScene: SKScene {
     /// The saucers of the UFO airports in view, by id.
     var ufoNodes: [Int: SKSpriteNode] = [:]
     var warNodes: [Int: SKSpriteNode] = [:]
+    var monumentGone2D: [Int: Int] = [:]
     var warTextures: [String: SKTexture] = [:]
     var monumentNodes: [Int: [SKSpriteNode]] = [:]
     var driveAcc = 0.0

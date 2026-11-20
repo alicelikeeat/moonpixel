@@ -454,7 +454,12 @@ public final class WorldMap {
             let d = Int(Double((v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y)).squareRoot())
             return d < 4 ? (zh ? "火山口（熔岩）" : "Volcano crater (lava)") : (zh ? "火山坡" : "Volcano slope")
         }
-        if let m = (s.realm.monuments ?? []).first(where: { t.x >= $0.x && t.x < $0.x + $0.w && t.y >= $0.y && t.y < $0.y + $0.d }) { return m.grave.map { $0.lines(zh: zh).dropFirst().prefix(3).joined(separator: " · ") }.map { m.title(zh: zh) + "：" + $0 } ?? m.title(zh: zh) }
+        if let m = (s.realm.monuments ?? []).first(where: { t.x >= $0.x && t.x < $0.x + $0.w && t.y >= $0.y && t.y < $0.y + $0.d }) {
+            if let g = m.grave { return m.title(zh: zh) + "：" + g.lines(zh: zh).dropFirst().prefix(3).joined(separator: " · ") }
+            // lived in and built onto: who lives there, how many beds, what was built inside
+            let l = s.landmarkLiving(m), n = (m.annexes ?? []).count
+            return m.title(zh: zh) + (zh ? " · 住户 \(l.residents)/\(l.beds) 床 · 内部加建 \(n) 栋" : " · \(l.residents) living here, \(l.beds) beds · \(n) built inside")
+        }
         let ccx = OpenWorld.floorDiv(t.x, 32), ccy = OpenWorld.floorDiv(t.y, 32)
         if gen.isUnderCity(ccx, ccy) && gen.volcano(near: ccx * 32 + 16, ccy * 32 + 16, radius: 40) == nil && !gen.isUfoPort(ccx, ccy) {
             let dx = t.x - (ccx * 32 + 16), dy = t.y - (ccy * 32 + 16)
