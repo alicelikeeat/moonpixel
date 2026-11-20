@@ -347,6 +347,12 @@ struct CivGroundWarCard: View {
         let wars = c.targetWars.filter { $0.attacker == nation || $0.defender == nation }.suffix(3)
         VStack(alignment: .leading, spacing: 3) {
             Text(L("国土与战事", "Land and war")).font(.system(size: 13, weight: .bold, design: .rounded))
+            // prisoners of war: held by this nation, and its own held by others (nobody is killed in war)
+            let held = c.prisonersHeld()[nation] ?? 0, ownHeld = (c.prisoners ?? []).filter { $0.nation == nation }.reduce(0) { $0 + $1.count }
+            if held + ownHeld > 0 {
+                Text(L("战俘：关押敌方 \(held) 人 · 本国被俘 \(ownHeld) 人（停战后遣返）", "Prisoners: holds \(held) · its own held by others \(ownHeld) (sent home at peace)"))
+                    .font(.system(size: 10, design: .rounded)).opacity(0.9).accessibilityIdentifier("civ-prisoners")
+            }
             ForEach(Array(c.nationFacts(nation, zh: zh).enumerated()), id: \.offset) { _, line in
                 Text(line).font(.system(size: 11, design: .rounded))
             }
@@ -447,7 +453,7 @@ struct CivPeopleCard: View {
         case "old": return L("老死", "age")
         case "illness": return L("病", "illness")
         case "hunger": return L("饥饿", "hunger")
-        case "battle": return L("战死", "battle")
+        case "battle": return L("战事", "war")
         case "journey": return L("途中", "journey")
         case "accident": return L("事故", "accident")
         default: return k

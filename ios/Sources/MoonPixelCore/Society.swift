@@ -158,6 +158,8 @@ public final class Agent: Codable {
     public var crushSince: Double?
     /// A soldier lent by a regional force while the traveller is near: the force (id) they go back to.
     public var lent: Int?
+    /// Taken prisoner in a war (nobody is killed in war): the nation holding them, and the town they came from.
+    public var captiveOf: Int?, captiveHome: Int?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
@@ -172,7 +174,7 @@ public final class Agent: Codable {
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
              health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
-             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent
+             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent, captiveOf, captiveHome
     }
 
     public init() {}
@@ -285,6 +287,8 @@ public struct StringSet: Codable, Equatable {
 
 public struct SocietyStats: Codable {
     public var battle: Int?
+    /// Soldiers taken prisoner in war, and prisoners sent home again.
+    public var captured: Int?, freed: Int?
     public var crafted: Int?
     public var births = 0, deaths = 0, old = 0, hunger = 0, ill = 0, pairs = 0, buildings = 0, founded = 0, immigrants = 0, tilesPlaced = 0
 }
@@ -443,6 +447,8 @@ public final class Society {
     /// Storeys above the surface, by number (1, 2, ...), created as someone builds up to them.
     public internal(set) var storeys: [Int: OpenWorld] = [:]
     var wardActive = false
+    /// The nation that has just taken the traveller prisoner (read once by the scene).
+    var travellerCaptor: Int?
     /// Where the player is, so companions can follow. Set by the scene; never saved.
     public var viewer: Vec2?
     /// Where the traveller has walked to (set by the game, not by the camera): regions around it are found.
@@ -678,6 +684,9 @@ public final class Society {
             if s.usedSlots.contains(key) { continue }
             s.usedSlots.insert(key)
             let x = s.center.x + g.x * 9 - w / 2, y = s.center.y + g.y * 8 - h / 2
+            // never over the flag pole on the square (a life-sized hall is wider than its slot)
+            let pole = s.center + TilePos(0, -3)
+            if pole.x >= x - 1 && pole.x <= x + w && pole.y >= y - 1 && pole.y <= y + h { continue }
             if footprintOK(s, x, y, w, h) { return TilePos(x, y) }
         }
         return .none

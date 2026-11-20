@@ -159,7 +159,9 @@ extension Society {
         if let n = s.nation, n >= 1 {
             let want = content.tid("banner_\(Society.bannerTile(n))")
             let o = world.tile(2, pole.x, pole.y)
-            if o == 0 || ((1...3).map { content.tid("banner_\($0)") }.contains(o) && o != want) { world.setTile(2, pole.x, pole.y, want) }
+            // the pole stands on its own tile: a fitting a life-sized hall put there makes way (a wall does not)
+            let wallLike = content.tile(o).map { $0.artKind == "wall" || $0.artKind == "door" } ?? false
+            if o == 0 || ((1...3).map { content.tid("banner_\($0)") }.contains(o) && o != want) || (o != want && !wallLike && content.tile(o)?.natural != true && !["throne", "altar", "statue", "stairs_up", "stairs_down"].contains(content.tile(o)?.key ?? "")) { world.setTile(2, pole.x, pole.y, want) }
         }
     }
 

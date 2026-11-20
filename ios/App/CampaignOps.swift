@@ -516,7 +516,10 @@ struct WarPanel: View {
                 // losses come from the casualty ledger only: the same numbers whether a battle was watched or not
                 let ledger = model.society.realm.ledger
                 if ledger.total > 0 {
-                    Text(L("阵亡", "Fallen") + " · " + model.society.realm.nations.map { n in "\(n.name(zh: GameModel.zh)) \(ledger.fallen(n.id))" }.joined(separator: " · "))
+                    // nobody is killed in war: the losses are prisoners (held now, by whom)
+                    let held = model.society.prisoners()
+                    Text(L("被俘（无人阵亡）", "Taken prisoner (nobody is killed)") + " · " + model.society.realm.nations.map { n in "\(n.name(zh: GameModel.zh)) \(ledger.fallen(n.id))" }.joined(separator: " · ")
+                         + (held.isEmpty ? "" : L(" · 现押战俘 ", " · held now ") + held.sorted { $0.key < $1.key }.map { "\(model.society.nationName($0.key)) \($0.value)" }.joined(separator: " · ")))
                         .font(.system(size: 11, weight: .medium, design: .rounded)).opacity(0.85)
                         .accessibilityIdentifier("war-fallen")
                     ForEach(ledger.battles.suffix(3).reversed(), id: \.key) { b in

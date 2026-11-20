@@ -192,7 +192,9 @@ extension Society {
         let soldier = a.legion != nil
         let hp = (a.hp ?? realm.cfg.civilianHP) - dmg
         if hp <= 0 {
-            die(a, "battle")
+            // nobody is killed in war: a soldier who goes down is taken prisoner (by the traveller's nation, or
+            // disarmed and sent home); anyone else is only knocked down
+            if soldier { takePrisoner(a, by: realm.player.nation != 0 ? realm.player.nation : nil) } else { a.hp = 1; a.stunUntil = world.time + 20 }
             realm.player.kills += 1
             addRep(s, soldier ? -0.12 : -0.3)
             if realm.player.nation != 0 {

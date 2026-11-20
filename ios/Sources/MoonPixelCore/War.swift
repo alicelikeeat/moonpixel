@@ -77,17 +77,19 @@ extension Society {
         if let k = realm.ni(nation) { realm.nations[k].fatigue = min(1.5, max(0, realm.nations[k].fatigue + v)) }
     }
 
+    /// Soldiers beaten in the fighting: nobody is killed in war; they are taken prisoner by the other side.
     func kill(from lg: Legion, _ count: Int) {
+        let captor = captorOf(lg)
         for _ in 0..<count {
             guard !lg.members.isEmpty else { return }
             let id = lg.members[realm.rng.index(lg.members.count)]
             if let a = agents[id] {
                 let wasLeader = lg.leader == id
-                die(a, "battle")
+                takePrisoner(a, by: captor)
                 if wasLeader { lg.morale = max(0, (lg.morale ?? realm.cfg.moraleStart) - realm.cfg.moraleLeader); lg.leader = lg.members.sorted().first }
             } else { lg.members.removeAll { $0 == id } }
         }
-        // weapons are lost with the fallen
+        // weapons are lost with the prisoners
         if count > 0, let h = settlements[lg.home] { h.addGood("weapons", -Double(count) * 0.5) }
     }
 

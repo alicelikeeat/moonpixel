@@ -89,6 +89,7 @@ extension Society {
         // underground, near the player, the nations' digging is carved into the rock as it goes
         if realm.player.depth == 1, let t = explorer { digUnderground(around: t) }
         worldDemoHourly()
+        releasePrisoners()
         refreshStanding(c)
         c.born.removeAll()
     }

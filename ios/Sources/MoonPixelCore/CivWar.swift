@@ -234,8 +234,8 @@ extension Civ {
             c.ledger.discharged += f.crew.total; c.today.discharged += f.crew.total; totals.discharged += f.crew.total
             put(f.food, into: c)
         } else {
-            // no city of theirs is left: they scatter, and are counted as lost with the war
-            if f.crew.total > 0 { totals.deaths["battle", default: 0] += f.crew.total }
+            // no city of theirs is left: they give themselves up to whoever holds the land (nobody dies in war)
+            takePrisoners(f.crew, of: f.nation, by: controller(f.region), near: f.region)
             for (k, v) in f.food { totals.add(\.lost, k, v) }
         }
         f.crew = CivPeople(); f.food = [:]
@@ -509,7 +509,7 @@ extension Civ {
         if wrecks.count > 200 { wrecks.removeFirst(wrecks.count - 200) }
     }
 
-    /// A machine is lost: its crew dies with it (once), a carrier takes its parked aircraft down with it and
+    /// A machine is lost: its crew is taken prisoner (once), a carrier takes its parked aircraft down with it and
     /// its aircraft in the air look for somewhere else to land.
     func destroyed(_ id: Int, by n: Int, region: Int64) {
         guard let u = units[id], let fid = u.force, let f = forces[fid] else { units[id] = nil; return }
@@ -528,8 +528,9 @@ extension Civ {
                 }
             }
         }
+        // its crew is taken prisoner by the side that beat it (nobody is killed in war)
         let gone = f.crew.takeAdults(lost)
-        totals.deaths["battle", default: 0] += gone.total
+        takePrisoners(gone, of: u.nation, by: n, near: region)
         if f.units.isEmpty { disband(f) }
     }
 

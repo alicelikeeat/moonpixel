@@ -202,8 +202,14 @@ extension GameModel {
 
     func playerDied() {
         guard let sc = scene else { return }
-        sc.player = society.spawnPoint(near: sc.player)
         following = false
+        // beaten by soldiers: taken prisoner (nobody is killed in war), carried to a town of theirs
+        if let c = society.takeTravellerCaptor() {
+            sc.player = c.pos
+            showToast(String(format: L("你被 %@ 的军队俘虏了，被押到他们的城镇；背包被搜走一半。你可以自行离开。", "The army of %@ took you prisoner and brought you to one of their towns; they searched your pack and kept half. You are free to walk out."), society.nationName(c.nation)))
+            return
+        }
+        sc.player = society.spawnPoint(near: sc.player)
         showToast(L("你倒下了，在安全的城镇醒来，背包丢了一半", "You fell and woke up in a safe town with half your pack gone"))
     }
 

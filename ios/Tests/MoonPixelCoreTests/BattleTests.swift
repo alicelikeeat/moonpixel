@@ -61,7 +61,7 @@ final class BattleTests: XCTestCase {
     func testResultsDoNotDependOnTheCameraAndTheLedgerIsTheTruth() {
         func run(_ watch: Int) -> (String, CasualtyLedger, Int) {
             let (s, a, b) = stress(200)
-            let battle0 = s.stats.battle ?? 0
+            let battle0 = s.stats.captured ?? 0
             for i in 0..<240 {
                 switch watch {
                 case 0: s.viewer = (a.pos + b.pos) * 0.5
@@ -72,7 +72,9 @@ final class BattleTests: XCTestCase {
                 s.tick(0.5)
             }
             let l = s.realm.ledger
-            XCTAssertEqual(l.total, (s.stats.battle ?? 0) - battle0 + 0, "every battle death is in the ledger once")
+            // nobody is killed in war: every soldier lost is a prisoner, and each is in the ledger once
+            XCTAssertEqual(l.total, (s.stats.captured ?? 0) - battle0 + 0, "every prisoner is in the ledger once")
+            XCTAssertEqual(s.stats.battle ?? 0, 0, "nobody died in battle")
             for lg in [a, b] {
                 let gone = lg.startN - lg.members.filter { s.agents[$0] != nil }.count
                 let key = "field:\(min(a.id, b.id))-\(max(a.id, b.id))"

@@ -56,6 +56,8 @@ public struct CivLedger: Codable, Equatable {
     public var births = 0, newly = 0, migIn = 0, migOut = 0, enlisted = 0, discharged = 0
     /// People and goods handed to the detailed world (a town shown near the traveller) and handed back.
     public var toDetail: Int?, fromDetail: Int?
+    /// Taken prisoner in war (nobody dies in war) and sent home again at peace.
+    public var captured: Int?, freed: Int?
     public var goodsToDetail: [String: Double]?, goodsFromDetail: [String: Double]?
     public var deaths: [String: Int] = [:]                 // by cause: old, illness, hunger, battle, journey, accident
     public var made: [String: Double] = [:], cameIn: [String: Double] = [:], wentOut: [String: Double] = [:]
@@ -243,6 +245,8 @@ public final class Civ: Codable {
     public var chronicle: [CivEvent] = []
     /// Trade routes between nations, goods at sea, and spies abroad (Resources.swift).
     public var tradeRoutes: [CivTradeRoute] = []
+    /// Prisoners of war held in cities (nobody is killed in war).
+    public var prisoners: [CivPrisoners]?
     public var shipments: [CivShipment] = []
     public var spies: [CivSpy] = []
     public var nextRoute = 1, nextSpy = 1
@@ -255,7 +259,7 @@ public final class Civ: Codable {
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
         case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
-        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle, underNations, tradeRoutes, shipments, spies, nextRoute, nextSpy
+        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle, underNations, tradeRoutes, shipments, spies, nextRoute, nextSpy, prisoners
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -282,6 +286,7 @@ public final class Civ: Codable {
         try c.encode(drops, forKey: .drops); try c.encode(giants, forKey: .giants); try c.encode(nextDrop, forKey: .nextDrop); try c.encode(nextGiant, forKey: .nextGiant)
         try c.encode(heldPasses.keys.sorted().map { [$0, Int64(heldPasses[$0]!)] }, forKey: .heldPasses); try c.encode(chronicle, forKey: .chronicle)
         try c.encode(underNations, forKey: .underNations)
+        try c.encodeIfPresent(prisoners, forKey: .prisoners)
         try c.encode(tradeRoutes, forKey: .tradeRoutes); try c.encode(shipments, forKey: .shipments); try c.encode(spies, forKey: .spies)
         try c.encode(nextRoute, forKey: .nextRoute); try c.encode(nextSpy, forKey: .nextSpy)
     }
@@ -336,6 +341,7 @@ public final class Civ: Codable {
         chronicle = try c.decodeIfPresent([CivEvent].self, forKey: .chronicle) ?? []
         underNations = try c.decodeIfPresent(Bool.self, forKey: .underNations) ?? false
         tradeRoutes = try c.decodeIfPresent([CivTradeRoute].self, forKey: .tradeRoutes) ?? []
+        prisoners = try c.decodeIfPresent([CivPrisoners].self, forKey: .prisoners)
         shipments = try c.decodeIfPresent([CivShipment].self, forKey: .shipments) ?? []
         spies = try c.decodeIfPresent([CivSpy].self, forKey: .spies) ?? []
         nextRoute = try c.decodeIfPresent(Int.self, forKey: .nextRoute) ?? (tradeRoutes.map { $0.id }.max() ?? 0) + 1
@@ -483,6 +489,7 @@ public final class Civ: Codable {
         refreshTerritory()
         politicsDaily()
         if envoys { vassalsDaily(); resourcesDaily(); envoyChoices() }
+        releasePrisoners()
         if underNations { undergroundDaily() }
         tripsDaily()
         industryDaily()

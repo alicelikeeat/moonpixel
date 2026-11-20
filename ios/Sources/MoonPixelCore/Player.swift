@@ -134,7 +134,9 @@ extension Society {
             let soldier = a.legion != nil
             if hp <= 0 {
                 out.hits.append((a.id, a.pos, st.0, true))
-                die(a, "battle")
+                // nobody is killed in war: a soldier who goes down is taken prisoner (by the traveller's nation, or
+                // disarmed and sent home); anyone else is only knocked down
+                if soldier { takePrisoner(a, by: realm.player.nation != 0 ? realm.player.nation : nil) } else { a.hp = 1; a.stunUntil = world.time + 20 }
                 realm.player.kills += 1
                 addRep(s, soldier ? -0.12 : -0.3)
                 if realm.player.nation != 0 {
@@ -172,7 +174,7 @@ extension Society {
         return out
     }
 
-    public struct Threat { public var damage = 0.0, attackers = 0, died = false; public init() {} }
+    public struct Threat { public var damage = 0.0, attackers = 0, died = false; public var captor: Int?; public init() {} }
     /// Set by the scene from its own clock while a ward lasts.
     public var playerWarded: Bool { get { wardActive } set { wardActive = newValue } }
 
@@ -180,7 +182,7 @@ extension Society {
     public func playerThreat(at pos: Vec2, dt: Double) -> Threat {
         var out = Threat()
         for lg in realm.legions where hostileToPlayer(lg.nation) {
-            for id in lg.members { if let a = agents[id], a.pos.distance(to: pos) <= 34 { out.attackers += 1 } }
+            for id in lg.members { if let a = agents[id], a.pos.distance(to: pos) <= 34 { out.attackers += 1; if out.captor == nil { out.captor = lg.nation } } }
         }
         if out.attackers == 0 {
             realm.player.hp = min(realm.cfg.playerHP, realm.player.hp + realm.cfg.playerRegen * dt)
@@ -200,7 +202,8 @@ extension Society {
         realm.player.hp -= out.damage
         if realm.player.hp <= 0 {
             out.died = true
-            realm.player.deaths += 1
+            // beaten by soldiers: taken prisoner (nobody is killed in war); the pack is searched all the same
+            if let c = t.captor { travellerCaptor = c } else { realm.player.deaths += 1 }
             realm.player.hp = realm.cfg.playerHP
             realm.player.food = (realm.player.food / 2).rounded(.down); realm.player.wood = (realm.player.wood / 2).rounded(.down); realm.player.stone = (realm.player.stone / 2).rounded(.down)
         }

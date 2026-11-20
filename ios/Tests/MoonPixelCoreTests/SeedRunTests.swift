@@ -54,7 +54,7 @@ final class SeedRunTests: XCTestCase {
             XCTAssertLessThanOrEqual(longestUnity, s.realm.cfg.unityMax + 0.5, "seed \(seed): unity never locks")
             if minGap < 999 { XCTAssertGreaterThanOrEqual(minGap, s.realm.cfg.minTruce + s.realm.cfg.peaceCooldown - 0.1, "seed \(seed): no war right after a truce") }
             XCTAssertEqual(auditFails, 0, "seed \(seed): references stay whole")
-            XCTAssertEqual(s.realm.ledger.total, s.stats.battle ?? 0, "seed \(seed): every battle death is in the casualty ledger exactly once")
+            XCTAssertEqual(s.realm.ledger.total, s.stats.captured ?? 0, "seed \(seed): every prisoner of war is in the casualty ledger exactly once (nobody is killed in war)")
         }
     }
 }
