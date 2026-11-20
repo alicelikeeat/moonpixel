@@ -61,7 +61,7 @@ public final class Generator {
     /// Climate shifts chosen when the world was created (see WorldRecipe).
     public var tempBias = 0.0, moistBias = 0.0, elevBias = 0.0
     public var depth = 0
-    /// Oceans and continents (worlds made from v2.16 on; WorldRecipe.oceans): a slow continental swell is added
+    /// Oceans and continents (worlds made from v2.15 on; WorldRecipe.oceans): a slow continental swell is added
     /// to the land's height, so open seas join up between continents. Off, the land is as it always was.
     public var oceans = false
     /// Ground levelled for monuments (set from the realm's monuments: Society.syncFlats).
