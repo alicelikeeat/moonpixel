@@ -363,7 +363,8 @@ extension Society {
         }
         // 6. an airport (a runway three tiles wide, a taxiway and an apron): every city has one, early
         if (d.population >= 50 || open >= 3) && !tried.contains("airport") && site("runway1") == nil {
-            if let field = airfield(d, length: 128, avoid: nil) {          // 256 m: a runway for life-sized planes (shortened, as agreed)
+            // 256 m for life-sized planes (shortened, as agreed); where the land will not take that, 192 m or 128 m
+            if let field = airfield(d, length: 128, avoid: nil) ?? airfield(d, length: 96, avoid: nil) ?? airfield(d, length: 64, avoid: nil) {
                 // all of it or nothing: a runway started alone would block every site found later. What the
                 // store lacks for the whole field is bought in first, when the money is there; else it saves up.
                 var total: [String: Double] = [:]
@@ -433,7 +434,7 @@ extension Society {
         if d.population >= 250, airport(d) != nil, d.id == net.districts.filter({ $0.nation == d.nation }).max(by: { ($0.population, -$0.id) < ($1.population, -$1.id) })?.id {
             if site("base1") == nil && !tried.contains("airbase") {
                 let civil = site("runway1")?.cells.map { $0.t } ?? []
-                if let field = airfield(d, length: 112, avoid: civil) {
+                if let field = airfield(d, length: 112, avoid: civil) ?? airfield(d, length: 56, avoid: civil) {
                     for (k, p) in field.enumerated() { _ = start(["base0", "base1", "base2", "basetaxi", "baseapron"][k], p) }
                     d.note("began a military airbase")
                 } else { tried.insert("airbase"); d.note("no room for an airbase") }

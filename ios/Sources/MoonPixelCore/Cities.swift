@@ -60,13 +60,13 @@ extension Society {
     public func isCapital(_ s: Settlement) -> Bool { realm.nations.contains { $0.capital == s.id } }
 
     static let landmarkSpecs: [String: RoomSpec] = [
-        "palace": RoomSpec(w: 20, h: 15, wall: "wall_stone", floor: "brick_floor", items: [(3, 1, "throne"), (1, 1, "banner"), (6, 1, "banner"), (1, 4, "bookshelf"), (6, 4, "table")]),
-        "fortress": RoomSpec(w: 20, h: 16, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "tower"), (6, 1, "tower"), (3, 2, "anvil"), (1, 3, "bed"), (6, 3, "bed"), (4, 1, "banner")]),
-        "barracks": RoomSpec(w: 12, h: 8, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "bed"), (2, 1, "bed"), (4, 1, "bed"), (4, 2, "crate")]),
+        "palace": RoomSpec(w: 12, h: 10, wall: "wall_stone", floor: "brick_floor", items: [(3, 1, "throne"), (1, 1, "banner"), (6, 1, "banner"), (1, 4, "bookshelf"), (6, 4, "table")]),
+        "fortress": RoomSpec(w: 12, h: 9, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "tower"), (6, 1, "tower"), (3, 2, "anvil"), (1, 3, "bed"), (6, 3, "bed"), (4, 1, "banner")]),
+        "barracks": RoomSpec(w: 8, h: 6, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "bed"), (2, 1, "bed"), (4, 1, "bed"), (4, 2, "crate")]),
         "watchtower": RoomSpec(w: 4, h: 4, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "tower"), (2, 1, "banner")]),
         "granary": RoomSpec(w: 8, h: 6, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 1, "barrel"), (4, 1, "barrel"), (1, 3, "crate"), (4, 3, "crate")]),
         "windmill": RoomSpec(w: 4, h: 4, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "mill")]),
-        "market": RoomSpec(w: 12, h: 8, wall: "fence", floor: "stone_floor", items: [(1, 1, "market_stall"), (3, 1, "market_stall"), (5, 1, "market_stall"), (1, 3, "crate"), (5, 3, "banner")]),
+        "market": RoomSpec(w: 10, h: 7, wall: "fence", floor: "stone_floor", items: [(1, 1, "market_stall"), (3, 1, "market_stall"), (5, 1, "market_stall"), (1, 3, "crate"), (5, 3, "banner")]),
     ]
     public static let landmarkNames: [String: (String, String)] = [
         "palace": ("Palace", "王宫"), "fortress": ("Fortress", "要塞"), "barracks": ("Barracks", "军营"), "watchtower": ("Watchtower", "瞭望塔"),
