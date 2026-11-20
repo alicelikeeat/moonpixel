@@ -686,11 +686,12 @@ public final class Society {
         for (g, _) in ranked {
             let key = "\(g.x),\(g.y)"
             if s.usedSlots.contains(key) { continue }
-            s.usedSlots.insert(key)
             let x = s.center.x + g.x * 9 - w / 2, y = s.center.y + g.y * 8 - h / 2
-            // never over the flag pole on the square (a life-sized hall is wider than its slot)
+            // never over the flag pole on the square (a life-sized hall is wider than its slot); the slot stays
+            // free for something smaller
             let pole = s.center + TilePos(0, -3)
-            if pole.x >= x - 1 && pole.x <= x + w && pole.y >= y - 1 && pole.y <= y + h { continue }
+            if pole.x >= x && pole.x < x + w && pole.y >= y && pole.y < y + h { continue }
+            s.usedSlots.insert(key)
             if footprintOK(s, x, y, w, h) { return TilePos(x, y) }
         }
         return .none
@@ -905,10 +906,11 @@ public final class Society {
                 if !(houses.count >= 4 && addStorey(s, houses)) { queue(s, "house") }
             }
             else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
-            else if pop >= 30 && s.count("church") == 0 && s.wood >= 20 { queue(s, "church") }
             else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }
             else if let tb = Society.techBuildings.first(where: { has($0.0) && pop >= $0.2 && s.count($0.1) == 0 }) { queue(s, tb.1) }
             else if let lm = wantedLandmark(s, pop: pop), s.wood >= 20 { queue(s, lm) }
+            // a church once the town has its workshops and landmarks under way (it never holds those back)
+            else if pop >= 30 && s.count("church") == 0 && s.wood >= 20 { queue(s, "church") }
         }
         let n = workers.count
         let project = s.activeProject
@@ -1406,7 +1408,8 @@ public final class Society {
         var chem = 0.06 + 0.1 * a.soc * b.soc + rng.range(-0.05, 0.08)
         // family get on better (and are glad to see each other)
         let family = related(a, b) || a.partner == b.id || a.mother == b.id || a.father == b.id || b.mother == a.id || b.father == a.id
-        if family { chem += 0.1; if rng.unit() < 0.15 { a.think(now, "t_family", [zh ? b.nameZh : b.nameEn]) } }
+        // (no dice drawn for it: the town's other chances stay as they were)
+        if family { chem += 0.1; if MP.h2(Int(now / 600), a.id, b.id) % 7 == 0 { a.think(now, "t_family", [zh ? b.nameZh : b.nameEn]) } }
         if rng.unit() < 0.07 { chem = -0.2; a.think(now, "t_quarrel", [zh ? b.nameZh : b.nameEn]) }
         else if rng.unit() < 0.3 { a.think(now, "t_chat", [zh ? b.nameZh : b.nameEn]) }
         a.rel[b.id] = min(1, max(-1, (a.rel[b.id] ?? 0) + chem))

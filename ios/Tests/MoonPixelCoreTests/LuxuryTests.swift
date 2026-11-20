@@ -15,7 +15,7 @@ final class LuxuryTests: XCTestCase {
         XCTAssertEqual(b.floors.count, 2)
         XCTAssertEqual(s.world.tile(2, b.x, b.y), s.content.tid("fence"), "a fenced garden")
         XCTAssertEqual(s.world.tile(2, b.entrance.x, b.entrance.y), s.content.tid("fence_gate"))
-        XCTAssertEqual(s.world.tile(0, b.x + 11, b.y + 7), s.content.tid("shallow_water"), "a pool")
+        XCTAssertEqual(s.world.tile(0, b.entrance.x + 3, b.y + 7), s.content.tid("shallow_water"), "a pool beside the drive")
         XCTAssertEqual(s.world.tile(0, b.x + 1, b.y + 8), s.content.tid("grass"), "a lawn")
         XCTAssertEqual(s.world.tile(2, b.x + 2, b.y + 1), s.content.tid("wall_limestone"), "a stone house")
         var flowers = 0

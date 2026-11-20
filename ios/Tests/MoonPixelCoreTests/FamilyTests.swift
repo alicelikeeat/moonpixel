@@ -46,13 +46,13 @@ final class FamilyTests: XCTestCase {
         XCTAssertGreaterThan(w.at, s.world.time, "the wedding is to come")
         XCTAssertTrue(s.talk(bride.id, speak: false)!.family[0].contains("💍"))
         // the hour before: dressed in white; family among the guests
-        s.world.time = w.at - 1800
+        s.world.time = w.at - Society.hour / 2
         s.weddingsHourly()
         XCTAssertEqual(bride.look.shirt, "#fbfaf6", "the bride in white")
         XCTAssertNotNil(s.weddingNow(for: f["mum"]!), "her mother is a guest")
         XCTAssertTrue(s.weddingNow(for: bride)!.couple)
         // two hours on: married
-        s.world.time = w.at + 7300
+        s.world.time = w.at + 2 * Society.hour + 1
         s.weddingsHourly()
         XCTAssertEqual(bride.partner, groom.id); XCTAssertEqual(groom.partner, bride.id)
         XCTAssertNotNil(bride.spouseSince)

@@ -113,7 +113,7 @@ extension Society {
 
     /// The wedding someone has a part in now (the couple, or a guest: kin, or a friend), if it is under way.
     func weddingNow(for a: Agent) -> (Wedding, couple: Bool)? {
-        for w in realm.weddings ?? [] where world.time >= w.at - 1800 && world.time < w.at + 7200 && a.sid == w.town {
+        for w in realm.weddings ?? [] where world.time >= w.at - Society.hour / 2 && world.time < w.at + 2 * Society.hour && a.sid == w.town {
             if a.id == w.a || a.id == w.b { return (w, true) }
             guard let x = agents[w.a], let y = agents[w.b] else { continue }
             if isKin(a, x) || isKin(a, y) || (a.rel[x.id] ?? 0) > 0.3 || (a.rel[y.id] ?? 0) > 0.3 { return (w, false) }
@@ -128,7 +128,7 @@ extension Society {
         var keep: [Wedding] = []
         for var w in list {
             guard let a = agents[w.a], let b = agents[w.b], let s = settlements[w.town], !s.abandoned else { continue }   // called off
-            if now >= w.at - 3600 && w.dressed != true {
+            if now >= w.at - Society.hour && w.dressed != true {
                 // dressed for the day: the bride in white, the groom in dark; flowers at the door
                 w.shirtA = a.look.shirt; w.shirtB = b.look.shirt
                 a.look.shirt = a.female ? "#fbfaf6" : "#2a2a34"; b.look.shirt = b.female ? "#fbfaf6" : "#2a2a34"
@@ -139,7 +139,7 @@ extension Society {
                     if world.tile(2, t.x, t.y) == 0 && world.tile(3, t.x, t.y) == 0 { world.setTile(3, t.x, t.y, content.tid(dx < 0 ? "flower_red" : "flower_yellow")) }
                 }
             }
-            if now >= w.at + 7200 {
+            if now >= w.at + 2 * Society.hour {                 // (game hours: a day is 1200 s)
                 // married
                 let guests = s.members.compactMap { agents[$0] }.filter { $0.id != a.id && $0.id != b.id && $0.task?.act == "wedding" }
                 if a.partner == 0 && b.partner == 0 { pair(a, b, announce: true) }

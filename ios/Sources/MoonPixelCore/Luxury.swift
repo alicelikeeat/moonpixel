@@ -79,7 +79,7 @@ extension Society {
         let wall = content.tid("wall_limestone"), glass = content.tid("wall_glass"), door = content.tid("door_wood")
         let pool = content.tid("shallow_water")
         let flowers = [content.tid("flower_red"), content.tid("flower_yellow"), content.tid("flower_blue")]
-        // the house: x 2..9, y 1..5 of the lot; the pool: x 10..12, y 6..8; the drive: x 2..3 from the house to the gate
+        // the house: x 2..9, y 1..5 of the lot; the pool beside the drive; the drive from the house to the gate
         let hx0 = 2, hx1 = 9, hy0 = 1, hy1 = 5
         let gateX = b.entrance.x - b.x
         for y in 0..<b.d { for x in 0..<b.w {
@@ -88,7 +88,8 @@ extension Society {
             if let o = content.tile(world.tile(2, t.x, t.y)), o.natural { world.setTile(2, t.x, t.y, 0) }
             let edge = x == 0 || y == 0 || x == b.w - 1 || y == b.d - 1
             let house = x >= hx0 && x <= hx1 && y >= hy0 && y <= hy1
-            let inPool = x >= 10 && x <= 12 && y >= 6 && y <= 8
+            // the pool (10 x 6 m) beside the drive, never across it (the lot is life-sized now: the gate is wider in)
+            let inPool = x >= gateX + 2 && x <= gateX + 6 && x < b.w - 1 && y >= 6 && y <= 8
             let drive = (x == gateX || x == gateX - 1) && y > hy1 && !edge
             world.setTile(0, t.x, t.y, house ? woodF : (inPool ? pool : (drive ? stoneF : grass)))
             if edge {
