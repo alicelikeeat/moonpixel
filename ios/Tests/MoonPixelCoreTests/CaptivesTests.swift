@@ -34,8 +34,12 @@ final class CaptivesTests: XCTestCase {
         XCTAssertEqual(soldiers.filter { $0.captiveOf != nil }.count, 3)
         war(s, na, nb, false)
         s.releasePrisoners()
-        XCTAssertTrue(taken.allSatisfy { $0.captiveOf == nil && $0.sid == ta.id }, "sent home")
-        XCTAssertEqual(s.stats.freed, 3)
+        XCTAssertTrue(taken.allSatisfy { $0.captiveOf == nil }, "nobody is held after the war")
+        // half stay with the side that took them (now of its nation), the rest go home
+        let stayed = taken.filter { $0.nation == nb }, home = taken.filter { $0.nation == na }
+        XCTAssertEqual(stayed.count + home.count, 3)
+        XCTAssertTrue(stayed.allSatisfy { $0.sid == tb.id }); XCTAssertTrue(home.allSatisfy { $0.sid == ta.id })
+        XCTAssertEqual(s.stats.freed ?? 0, home.count)
     }
 
     func testTheTravellerBeatenBySoldiersIsTakenPrisoner() {
@@ -69,7 +73,10 @@ final class CaptivesTests: XCTestCase {
         c.relations[CivRelation.key(a, b)]!.state = 0
         c.releasePrisoners()
         XCTAssertNil(c.prisonersHeld()[b])
-        XCTAssertEqual(ca.pop, 300, "home again")
+        // ten go home, ten stay, and two of family each come to join those who stay
+        XCTAssertEqual(ca.pop, 280 + 10 - 20, "half home again; families leave to join the rest")
+        XCTAssertEqual(cb.pop, 320 - 10 + 20)
+        XCTAssertEqual(c.people, people, "everyone still counted")
         XCTAssertEqual(c.totals.deaths["battle"] ?? 0, 0)
     }
 }

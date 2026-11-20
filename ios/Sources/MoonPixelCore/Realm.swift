@@ -297,6 +297,8 @@ public struct Realm: Codable {
     public var monuments: [Monument]?
     /// Places the traveller saved for teleporting back to, and the last places teleported to (Teleport.swift).
     public var waypoints: [Waypoint]?
+    /// Weddings to come (Family.swift).
+    public var weddings: [Wedding]?
     public var teleportLog: [Waypoint]?
     /// The battle of the twin ports played in this world, step by step (WorldDemo.swift).
     public var worldDemo: WorldDemoState?

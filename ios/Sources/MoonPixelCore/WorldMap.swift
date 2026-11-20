@@ -57,7 +57,7 @@ public final class WorldMap {
         "granary": ("Granary", "粮仓"), "market": ("Market", "集市"), "warehouse": ("Warehouse", "仓库"), "mine": ("Mine", "矿井"),
         "workshop": ("Workshop", "工坊"), "tavern": ("Tavern", "酒馆"), "school": ("School", "学堂"), "factory": ("Factory", "工厂"),
         "lab": ("Laboratory", "研究所"), "ai_center": ("AI centre", "人工智能中心"), "windmill": ("Windmill", "风车磨坊"),
-        "palace": ("Palace", "王宫"), "fortress": ("Fortress", "要塞"), "barracks": ("Barracks", "兵营"), "watchtower": ("Watchtower", "瞭望塔"),
+        "palace": ("Palace", "王宫"), "church": ("Church", "教堂"), "fortress": ("Fortress", "要塞"), "barracks": ("Barracks", "兵营"), "watchtower": ("Watchtower", "瞭望塔"),
     ]
 
     /// A tile's colour on the map: its ground, then what stands on it.

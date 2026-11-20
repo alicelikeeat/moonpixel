@@ -160,6 +160,8 @@ public final class Agent: Codable {
     public var lent: Int?
     /// Taken prisoner in a war (nobody is killed in war): the nation holding them, and the town they came from.
     public var captiveOf: Int?, captiveHome: Int?
+    /// Married on this day (a wedding; nil for couples who paired before weddings, or not married).
+    public var spouseSince: Double?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
@@ -174,7 +176,7 @@ public final class Agent: Codable {
     enum CodingKeys: String, CodingKey {
         case id, nameEn, nameZh, clanEn, clanZh, female, birth, sid, home, partner, mother, father, children, pos, hunger, energy, social,
              health, grief, dil, soc, look, job, rel, thoughts, pregnantDue, birthFather, lastBirth, travelling, travelTo, carryKind, carryN,
-             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent, captiveOf, captiveHome
+             nation, hp, legion, refugee, fun, crush, crushSince, unit, lent, captiveOf, captiveHome, spouseSince
     }
 
     public init() {}
@@ -289,6 +291,8 @@ public struct SocietyStats: Codable {
     public var battle: Int?
     /// Soldiers taken prisoner in war, and prisoners sent home again.
     public var captured: Int?, freed: Int?
+    /// Weddings held, and prisoners (with their families) who stayed with their captors.
+    public var weddings: Int?, defected: Int?
     public var crafted: Int?
     public var births = 0, deaths = 0, old = 0, hunger = 0, ill = 0, pairs = 0, buildings = 0, founded = 0, immigrants = 0, tilesPlaced = 0
 }
@@ -482,7 +486,7 @@ public final class Society {
     }
 
     public func tx(_ key: String, _ args: [String] = []) -> String {
-        guard let p = Society.text[key] ?? Society.realmText[key] else { return key }
+        guard let p = Society.text[key] ?? Society.realmText[key] ?? Society.familyText[key] else { return key }
         var s = zh ? p.1 : p.0
         for a in args { if let r = s.range(of: "%@") { s.replaceSubrange(r, with: a) } }
         return s
@@ -825,6 +829,10 @@ public final class Society {
     struct RoomSpec { let w: Int, h: Int, wall: String, floor: String, items: [(Int, Int, String)] }
     static let roomSpecs: [String: RoomSpec] = [
 "tavern": RoomSpec(w: 8, h: 6, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 2, "table"), (4, 2, "chair"), (4, 1, "kitchen")]),
+        // a church 20 x 28 m: the altar at the far end with lamps and flowers, two rows of pews down the nave
+        "church": RoomSpec(w: 10, h: 14, wall: "wall_stone", floor: "stone_floor", items: [(5, 1, "altar"), (4, 1, "flower_pot"), (6, 1, "flower_pot"), (1, 1, "lantern_post"), (8, 1, "lantern_post"),
+            (2, 4, "chair"), (3, 4, "chair"), (6, 4, "chair"), (7, 4, "chair"), (2, 6, "chair"), (3, 6, "chair"), (6, 6, "chair"), (7, 6, "chair"),
+            (2, 8, "chair"), (3, 8, "chair"), (6, 8, "chair"), (7, 8, "chair"), (2, 10, "chair"), (3, 10, "chair"), (6, 10, "chair"), (7, 10, "chair")]),
         "warehouse": RoomSpec(w: 8, h: 6, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "chest"), (2, 1, "chest"), (4, 1, "crate"), (1, 3, "crate"), (4, 3, "barrel")]),
         "mine": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "stone_floor", items: [(2, 2, "stairs_down"), (4, 1, "crate"), (1, 1, "torch")]),
         "school": RoomSpec(w: 8, h: 6, wall: "wall_stone", floor: "wood_floor", items: [(1, 1, "bookshelf"), (2, 2, "desk"), (4, 2, "desk")]),
@@ -897,6 +905,7 @@ public final class Society {
                 if !(houses.count >= 4 && addStorey(s, houses)) { queue(s, "house") }
             }
             else if pop >= 14 && s.count("well") == 0 { queue(s, "well") }
+            else if pop >= 30 && s.count("church") == 0 && s.wood >= 20 { queue(s, "church") }
             else if (pop >= 22 || has("electricity")) && s.count("lights") == 0 { queue(s, "lights") }
             else if let tb = Society.techBuildings.first(where: { has($0.0) && pop >= $0.2 && s.count($0.1) == 0 }) { queue(s, tb.1) }
             else if let lm = wantedLandmark(s, pop: pop), s.wood >= 20 { queue(s, lm) }
@@ -1102,6 +1111,8 @@ public final class Society {
             else if a.home == -2, !s.freeBeds.isEmpty { spot = s.freeBeds[a.id % s.freeBeds.count] + TilePos(0, 1) }
             if go(a, s, spot, "sleep", 9999) { return }
         }
+        // a wedding to go to (the couple, their family and friends), or Sunday service at the church
+        if a.task == nil, ceremony(a, s) { return }
         if st == "child" { wander(a, s, 7, "play"); return }
         if a.legion != nil { wander(a, s, 9, "patrol"); return }
         if a.refugee != nil { wander(a, s, 12, "idle"); return }
@@ -1269,6 +1280,7 @@ public final class Society {
         s.claims[t] = nil
         a.task = nil
         switch task.act {
+        case "worship": worshipped(a)
         case "eat":
             if s.food >= 1 { s.food -= 1; a.hunger = max(0, a.hunger - 0.6); if rng.unit() < 0.2 { a.think(now, "t_ate") } }
         case "deliver":
@@ -1392,6 +1404,9 @@ public final class Society {
         guard let b = best else { return }
         let now = world.time
         var chem = 0.06 + 0.1 * a.soc * b.soc + rng.range(-0.05, 0.08)
+        // family get on better (and are glad to see each other)
+        let family = related(a, b) || a.partner == b.id || a.mother == b.id || a.father == b.id || b.mother == a.id || b.father == a.id
+        if family { chem += 0.1; if rng.unit() < 0.15 { a.think(now, "t_family", [zh ? b.nameZh : b.nameEn]) } }
         if rng.unit() < 0.07 { chem = -0.2; a.think(now, "t_quarrel", [zh ? b.nameZh : b.nameEn]) }
         else if rng.unit() < 0.3 { a.think(now, "t_chat", [zh ? b.nameZh : b.nameEn]) }
         a.rel[b.id] = min(1, max(-1, (a.rel[b.id] ?? 0) + chem))
@@ -1402,7 +1417,8 @@ public final class Society {
             if aa >= 18 && ab >= 18 && abs(aa - ab) < 16 && (a.rel[b.id] ?? 0) > 0.45 && (b.rel[a.id] ?? 0) > 0.45 && realm.player.partner != a.id && realm.player.partner != b.id {
                 // love takes a season: first they court, then they marry - unless one heart is already elsewhere
                 if a.crush == b.id && b.crush == a.id {
-                    if now - (a.crushSince ?? now) >= 0.12 * MP.year { a.crush = nil; b.crush = nil; pair(a, b, announce: true) }
+                    // a season of courting: they are engaged, and married at their wedding the next day
+                    if now - (a.crushSince ?? now) >= 0.12 * MP.year { a.crush = nil; b.crush = nil; engage(a, b) }
                 } else if let other = b.crush, other != a.id, agents[other] != nil, (b.rel[other] ?? 0) >= (b.rel[a.id] ?? 0) {
                     a.grief = min(1, a.grief + 0.15)
                     a.think(now, "t_rejected", [zh ? b.nameZh : b.nameEn])
@@ -1436,6 +1452,7 @@ public final class Society {
 
     func hourly() {
         travellerHourly()
+        weddingsHourly()
         let now = world.time
         let dty = Society.hour / MP.year
         let crowd = min(1, max(0, 1 - Double(agents.count) / Double(world.budget.maxAgents)))
@@ -1508,7 +1525,9 @@ public final class Society {
         stats.deaths += 1
         if cause == "old" { stats.old += 1 } else if cause == "hunger" { stats.hunger += 1 } else if cause == "battle" { stats.battle = (stats.battle ?? 0) + 1 } else { stats.ill += 1 }
         realmDeath(a, s, cause)
-        for rid in [a.partner, a.mother, a.father] + a.children where rid != 0 {
+        let siblings = [a.mother, a.father].compactMap { agents[$0] }.flatMap { $0.children }.filter { $0 != a.id }
+        let grand = [a.mother, a.father].compactMap { agents[$0] }.flatMap { [$0.mother, $0.father] }
+        for rid in Set([a.partner, a.mother, a.father] + a.children + siblings + grand) where rid != 0 {
             if let r = agents[rid] {
                 r.grief = 1
                 r.think(world.time, "t_grief", [zh ? a.nameZh : a.nameEn])
@@ -1603,8 +1622,15 @@ public final class Society {
         info.name = a.name(zh: zh); info.age = age; info.female = a.female; info.job = jobLabel(a)
         info.mood = a.mood; info.hunger = a.hunger; info.energy = a.energy; info.settlement = s.name(zh: zh); info.line = line
         info.thoughts = a.thoughts.suffix(3).map { tx($0.k, $0.a) }
-        if let p = agents[a.partner] { info.family.append("♥ " + p.name(zh: zh)) }
-        for cid in a.children { if let c = agents[cid] { info.family.append("· \(c.name(zh: zh)) (\(Int(c.age(now))))") } }
+        // family and relatives: what each is to them, their age and their town (♥ the spouse, and since when)
+        for k in kin(of: a).prefix(16) {
+            let wed = k.agent.id == a.partner ? (a.spouseSince.map { _ in zh ? "（已婚）" : " (married)" } ?? "") : ""
+            let town = k.agent.sid != a.sid ? " · " + (settlements[k.agent.sid]?.name(zh: zh) ?? "") : ""
+            info.family.append((k.agent.id == a.partner ? "♥ " : "· ") + k.relation + " " + k.agent.name(zh: zh) + " (\(Int(k.agent.age(now))))" + wed + town)
+        }
+        if let w = (realm.weddings ?? []).first(where: { $0.a == a.id || $0.b == a.id }), let o = agents[w.a == a.id ? w.b : w.a] {
+            info.family.insert((zh ? "💍 已与 " : "💍 engaged to ") + o.name(zh: zh) + (zh ? "订婚，明天上午十点举行婚礼" : ": the wedding is tomorrow at ten"), at: 0)
+        }
         info.pregnant = a.pregnantDue > 0
         info.stock = zh ? "粮 \(Int(s.food)) · 木 \(Int(s.wood)) · 石 \(Int(s.stone))" : "food \(Int(s.food)) · wood \(Int(s.wood)) · stone \(Int(s.stone))"
         return info

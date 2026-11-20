@@ -58,6 +58,8 @@ public struct CivLedger: Codable, Equatable {
     public var toDetail: Int?, fromDetail: Int?
     /// Taken prisoner in war (nobody dies in war) and sent home again at peace.
     public var captured: Int?, freed: Int?
+    /// Prisoners who stayed with their captors, with the family who came to join them.
+    public var defected: Int?
     public var goodsToDetail: [String: Double]?, goodsFromDetail: [String: Double]?
     public var deaths: [String: Int] = [:]                 // by cause: old, illness, hunger, battle, journey, accident
     public var made: [String: Double] = [:], cameIn: [String: Double] = [:], wentOut: [String: Double] = [:]

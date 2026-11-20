@@ -69,6 +69,11 @@ extension Society {
             guard let s = settlements[a.sid] else { continue }
             let home = a.captiveHome.flatMap { settlements[$0] }.flatMap { !$0.abandoned && $0.nation == own ? $0 : nil }
                 ?? settlements.values.filter { !$0.abandoned && $0.nation == own }.min { $0.center.center.distance(to: a.pos) < $1.center.center.distance(to: a.pos) }
+            // half of them stay with the nation that took them, and their family and relatives join them
+            if MP.h2(world.seed &+ 3131, a.id, captor) % 2 == 0, s.nation == captor {
+                defect(a, to: captor, in: s)
+                continue
+            }
             a.captiveOf = nil; a.captiveHome = nil
             stats.freed = (stats.freed ?? 0) + 1
             if let h = home, h.id != s.id { move(a, from: s, to: h) }
@@ -127,10 +132,18 @@ extension Civ {
             guard let c = cities[p.city] else { return true }
             let home = cities.values.filter { $0.nation == p.nation && $0.detail == nil }
                 .min { dist($0.regionKey, c.regionKey) != dist($1.regionKey, c.regionKey) ? dist($0.regionKey, c.regionKey) < dist($1.regionKey, c.regionKey) : $0.id < $1.id }
+            // half stay with the nation that took them; their families (two for each) come from home to join them
+            let stay = p.count / 2, go = p.count - stay
             if let h = home {
-                let back = c.people.takeAdults(p.count)
+                let back = c.people.takeAdults(go)
                 h.people.add(back)
                 totals.freed = (totals.freed ?? 0) + back.total
+                let family = h.people.take(min(stay * 2, max(0, h.pop - 1)), from: Array(0..<h.people.n.count))
+                c.people.add(family)
+                h.ledger.migOut += family.total; c.ledger.migIn += family.total
+                totals.defected = (totals.defected ?? 0) + stay + family.total
+            } else {
+                totals.defected = (totals.defected ?? 0) + p.count
             }
             return true
         }

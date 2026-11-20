@@ -90,7 +90,7 @@ extension TransportScene {
         pb.floors = [{ var f = CityFloor(); f.jobs = p.jobsPerFloor; return f }()]
         sc.a.buildings.append(pb); sc.a.staffing[999] = 1
         // people in the west city to staff it from day to day
-        let flats = s.placeCityBuilding(sc.a, kind: "flats", at: sc.t(20, 90))!
+        let flats = s.placeCityBuilding(sc.a, kind: "flats", at: sc.t(50, 90))!           // beside the (life-sized) power station
         let fi = sc.a.buildings.firstIndex { $0.id == flats }!
         for k in sc.a.buildings[fi].floors.indices { sc.a.buildings[fi].floors[k].residents = 12; sc.a.buildings[fi].floors[k].food = 200 }
         sc.a.ledger.imported = sc.a.population
