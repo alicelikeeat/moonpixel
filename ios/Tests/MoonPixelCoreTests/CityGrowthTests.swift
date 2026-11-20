@@ -132,9 +132,10 @@ final class CityGrowthTests: XCTestCase {
         let s = makeSociety(5)
         let o = s.world.findFree(near: TilePos(-300, 260), maxR: 40)
         let d = s.foundDistrict(name: "Glass", at: o, nation: 1, money: 100_000, store: ["stone": 5000, "iron": 2000, "parts": 2000, "planks": 2000])
-        let site = s.findSite(d, w: 12, h: 12) ?? TilePos(o.x + 4, o.y + 4)
+        let def = CityKind.byKey["skyscraper"]!
+        let site = s.findSite(d, w: def.w, h: def.d) ?? TilePos(o.x + 4, o.y + 4)
         guard let id = s.placeCityBuilding(d, kind: "skyscraper", at: site), let b = d.building(id) else { return XCTFail("built") }
-        XCTAssertEqual(b.floors.count, 30)
+        XCTAssertEqual(b.floors.count, def.storeys, "life-sized: 50 storeys (200 m)")
         let f5 = s.storeyWorld(5)
         let edge = (0..<b.w).map { f5.tile(2, b.x + $0, b.y) }
         XCTAssertTrue(edge.contains(s.content.tid("wall_glass")), "a glass curtain wall")
@@ -142,7 +143,7 @@ final class CityGrowthTests: XCTestCase {
         XCTAssertEqual(f5.tile(2, b.x + b.w / 2, b.y + 1), s.content.tid("wall_concrete"), "the floor is split into rooms")
         XCTAssertTrue((0..<b.d).contains { y in (0..<b.w).contains { x in f5.tile(2, b.x + x, b.y + y) == s.content.tid("stairs_up") } }, "stairs up from floor 5")
         XCTAssertNotNil(b.lift, "a lift up the outside")
-        XCTAssertEqual(b.lift.flatMap { s.lift($0) }?.stops.count, 30, "it stops at every floor")
+        XCTAssertEqual(b.lift.flatMap { s.lift($0) }?.stops.count, def.storeys, "it stops at every floor")
     }
 
     func testStandingTowersAndTallHousesGetLiftsAndWindows() {
