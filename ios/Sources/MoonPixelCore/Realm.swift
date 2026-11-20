@@ -208,6 +208,8 @@ public struct PlayerState: Codable {
     public var nation = 0                  // 0 = free traveller
     /// The flying saucer the traveller rides (its id), if any.
     public var ufo: Int?
+    /// How big the pack has been made (Inventory.swift: PackTune); nil is the first size.
+    public var packLevel: Int?
     public var hp = 100.0
     public var food = 0.0, wood = 0.0, stone = 0.0
     public var nextAttack = 0.0

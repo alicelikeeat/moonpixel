@@ -159,6 +159,7 @@ enum ContentData {
         TileDef(id: 176, key: "kelp", layer: 3, solid: false, water: false, bridge: false, natural: true, big: false, built: false, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "tuft", c1: "#2f7a4a", c2: "#56a868", c3: "", stage: 0, nameEn: "Kelp", nameZh: "海带"),
         TileDef(id: 177, key: "pearl_lamp", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 7, growTo: "", growTime: 0.0, after: "", artKind: "lamp", c1: "#c8d8f0", c2: "#f2fbff", c3: "", stage: 0, nameEn: "Pearl Lamp", nameZh: "珍珠灯"),
         TileDef(id: 178, key: "seabed", layer: 0, solid: false, water: true, bridge: false, natural: false, big: false, built: false, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "speck", c1: "#3a78a8", c2: "#6aa8c8", c3: "", stage: 0, nameEn: "Seabed Plaza", nameZh: "海床广场"),
+        TileDef(id: 179, key: "supply_box", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "crate", c1: "#e0a840", c2: "#8a5a24", c3: "#fff0b0", stage: 0, nameEn: "Supply Box", nameZh: "物资箱"),
     ]
 
     static let biomes: [BiomeDef] = [

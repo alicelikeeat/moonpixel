@@ -155,6 +155,7 @@ struct BackpackPanel: View {
                     }
                 }
                 equipment
+                packSize
                 let stacks = model.society?.packStacks(zh: GameModel.zh, filter: kind, search: search) ?? []
                 if stacks.isEmpty { Text(L("这里什么都没有", "Nothing here")).font(.system(size: 12, design: .rounded)).opacity(0.7) }
                 LazyVStack(alignment: .leading, spacing: 4) {
@@ -188,6 +189,22 @@ struct BackpackPanel: View {
         return String(format: L("负重 %.0f / %.0f · 饥饿 %.0f%%", "Load %.0f / %.0f · hunger %.0f%%"), s.packWeight(), s.invCfg.capacity, s.inv.hunger * 100)
     }
 
+    /// The pack's size, and making it bigger (for carrying what large machines are built from).
+    private var packSize: some View {
+        let s = model.society
+        let lv = s?.realm.player.packLevel ?? 0
+        let next = lv + 1 < PackTune.capacity.count
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(String(format: L("背包：%@ · 上限 %.0f", "Pack: %@ · holds %.0f"), GameModel.zh ? PackTune.names[min(lv, PackTune.names.count - 1)].1 : PackTune.names[min(lv, PackTune.names.count - 1)].0, s?.invCfg.capacity ?? 0))
+                .font(.system(size: 12, weight: .semibold, design: .rounded)).accessibilityIdentifier("pack-size")
+            if next {
+                let cost = PackTune.cost(from: lv).sorted { $0.key < $1.key }.map { (GameModel.zh ? Items.def($0.key).zh : Items.def($0.key).en) + String(format: " %.0f", $0.value) }.joined(separator: L("、", ", "))
+                Chip(title: String(format: L("升级为「%@」（上限 %.0f）：%@", "Make it a %@ (holds %.0f): %@"), GameModel.zh ? PackTune.names[lv + 1].1 : PackTune.names[lv + 1].0, PackTune.capacity[lv + 1], cost),
+                     icon: "bag.fill.badge.plus", id: "pack-upgrade") { model.upgradePack() }
+            }
+        }
+    }
+
     private var equipment: some View {
         HStack(spacing: 6) {
             ForEach(["hand", "body"], id: \.self) { slot in
@@ -206,6 +223,7 @@ struct BackpackPanel: View {
                 if d.equip != nil { Chip(title: L("装备", "Equip"), icon: "hand.raised.fill", id: "equip-\(key)") { model.invoke(.equip(key)) } }
                 Chip(title: L("放下 1", "Drop 1"), icon: "arrow.down.to.line", id: "drop1-\(key)") { model.invoke(.drop(key, 1)) }
                 Chip(title: L("放下一半", "Drop half"), icon: "square.split.2x1", id: "drophalf-\(key)") { model.invoke(.drop(key, max(1, ((model.society?.carried(key) ?? 0) / 2).rounded(.down)))) }
+                Chip(title: L("全部放下", "Drop all"), icon: "shippingbox.fill", id: "dropall-\(key)") { model.invoke(.drop(key, model.society?.carried(key) ?? 0)) }
                 Menu {
                     ForEach(0..<8, id: \.self) { i in Button(String(format: L("放到第 %d 格", "To slot %d"), i + 1)) { model.invoke(.bind(i, key)) } }
                 } label: { Label(L("快捷栏", "Hotbar"), systemImage: "rectangle.grid.1x2.fill").font(.system(size: 12, weight: .semibold, design: .rounded)) }

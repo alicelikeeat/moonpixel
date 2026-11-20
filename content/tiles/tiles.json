@@ -2930,6 +2930,23 @@
 "en": "Seabed Plaza",
 "zh": "海床广场"
 }
+},
+{
+"id": 179,
+"key": "supply_box",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"art": [
+"crate",
+"#e0a840",
+"#8a5a24",
+"#fff0b0"
+],
+"name": {
+"en": "Supply Box",
+"zh": "物资箱"
+}
 }
 ]
 }

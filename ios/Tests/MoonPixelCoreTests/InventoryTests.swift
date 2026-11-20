@@ -48,7 +48,8 @@ final class InventoryTests: XCTestCase {
 
     func testAFullPackTakesOnlyWhatFitsAndSaysHowMuch() {
         let (s, b) = setUpWorld()
-        s.carry("stone", 200)                                       // 300 of 400
+        s.carry("stone", (s.invCfg.capacity - 100 - s.packWeight()) / 1.5)    // 100 short of full
+        let had = s.carried("stone")
         s.realm.player.invBox = InventoryState()
         var st = s.inv
         st.dropped = [Dropped(id: 1, key: "stone", amount: 100, x: b.x, y: b.y, depth: 0, t: 0)]; st.nextDrop = 2
@@ -57,7 +58,7 @@ final class InventoryTests: XCTestCase {
         XCTAssertTrue(r.ok); XCTAssertEqual(r.reason, "pack full")
         XCTAssertEqual(r.amount, 100.0 / 1.5, accuracy: 1e-6, "only what the weight allows")
         XCTAssertEqual(s.inv.dropped[0].amount, 100 - r.amount, accuracy: 1e-6, "the rest stays on the ground")
-        XCTAssertEqual(s.carried("stone") + s.inv.dropped[0].amount, 300, accuracy: 1e-6)
+        XCTAssertEqual(s.carried("stone") + s.inv.dropped[0].amount, had + 100, accuracy: 1e-6)
     }
 
     func testNothingIsDroppedIntoTheAirOrIntoAWall() {

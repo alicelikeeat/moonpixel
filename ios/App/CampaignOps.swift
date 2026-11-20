@@ -82,6 +82,10 @@ extension GameModel {
         guard let sc = scene, let s = society, (t - sc.player.tile).lengthSquared <= 9 else { return false }
         let w = activeWorld
         let key = Content.shared.tile(w.tile(2, t.x, t.y))?.key ?? ""
+        if key == "supply_box" {
+            invoke(.openBox(t.x, t.y, depth: depth))
+            return true
+        }
         if key == "stairs_down" || key == "stairs_up" {
             if let r = s.useStairs(at: t.center) { switchLayer(to: r.pos) }
             return true

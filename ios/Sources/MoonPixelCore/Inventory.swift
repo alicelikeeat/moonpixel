@@ -47,12 +47,31 @@ public enum Items {
     }
 }
 
-/// A stack lying in the world. It belongs to nobody until picked up.
+/// A stack lying in the world. It belongs to nobody until picked up. It lies in a supply box: a block on the
+/// tile (`bx`, `by`) of its layer, which anyone sees and which a tap opens; several stacks share a box.
 public struct Dropped: Codable, Equatable {
     public var id = 0
     public var key = "", amount = 0.0
     public var x = 0.0, y = 0.0, depth = 0
     public var t = 0.0
+    /// The supply box it lies in (nil: dropped before boxes, lying loose).
+    public var bx: Int?, by: Int?
+}
+
+/// The pack's sizes: each one bigger, each made from the pack's own materials (sewn, framed and reinforced),
+/// so that the traveller can carry what large machines are built from (an aircraft carrier takes some 840).
+public enum PackTune {
+    public static let capacity: [Double] = [2000, 6000, 15000, 40000, 100000, 250000]
+    public static let names: [(String, String)] = [("Satchel", "行囊"), ("Pack frame", "背架"), ("Expedition pack", "远征背包"), ("Cargo harness", "货运背具"),
+                                                    ("Pocket hold", "随身货舱"), ("Folded warehouse", "折叠仓库")]
+    /// What making the next size costs (from the size now).
+    public static func cost(from level: Int) -> [String: Double] {
+        let n = Double(level + 1)
+        var c: [String: Double] = ["wood": 80 * n, "iron": 30 * n]
+        if level >= 1 { c["parts"] = 15 * n }
+        if level >= 3 { c["moonsteel"] = 10 * n }
+        return c
+    }
 }
 
 public struct InventoryState: Codable, Equatable {
@@ -81,6 +100,7 @@ public enum InvOp: Codable, Equatable {
     case bind(Int, String)                         // hotbar place, key ("" clears)
     case drop(String, Double)                      // at the body's place
     case pickUp(Int)                               // dropped id
+    case openBox(Int, Int, depth: Int)             // everything in the supply box on that tile
     case deposit(String, Double, town: Int)        // pack -> town store
     case withdraw(String, Double, town: Int)       // town store -> pack
 }
@@ -103,7 +123,43 @@ public struct InventoryConfig: Codable, Equatable {
 
 extension Society {
     public var inv: InventoryState { get { realm.player.invBox ?? InventoryState() } set { realm.player.invBox = newValue } }
-    public var invCfg: InventoryConfig { InventoryConfig() }
+    public var invCfg: InventoryConfig {
+        var c = InventoryConfig()
+        c.capacity = PackTune.capacity[max(0, min(PackTune.capacity.count - 1, realm.player.packLevel ?? 0))]
+        return c
+    }
+
+    /// Make the pack the next size bigger, from what it holds. Returns why not, or nil when done.
+    @discardableResult public func upgradePack() -> String? {
+        let lv = realm.player.packLevel ?? 0
+        guard lv + 1 < PackTune.capacity.count else { return "largest" }
+        let cost = PackTune.cost(from: lv)
+        for (k, v) in cost where carried(k) + 1e-9 < v { return "need " + k }
+        for (k, v) in cost { carry(k, -v) }
+        realm.player.packLevel = lv + 1
+        return nil
+    }
+
+    /// Where a supply box goes when something is dropped: an existing box beside the traveller (on their
+    /// layer), else the first free tile round them (nothing standing there, a floor under it, not water).
+    func boxTile(for b: Body, _ st: InventoryState) -> TilePos? {
+        let t = b.pos.tile
+        let ring = [TilePos(1, 0), TilePos(-1, 0), TilePos(0, 1), TilePos(0, -1), TilePos(1, 1), TilePos(-1, 1), TilePos(1, -1), TilePos(-1, -1),
+                    TilePos(2, 0), TilePos(-2, 0), TilePos(0, 2), TilePos(0, -2)]
+        for d in ring.prefix(8) {
+            let q = t + d
+            if st.dropped.contains(where: { $0.depth == b.depth && $0.bx == q.x && $0.by == q.y }) { return q }
+        }
+        let w = layer(b.depth), g = WorldGround(self)
+        for d in ring {
+            let q = t + d
+            if w.tile(2, q.x, q.y) == 0 && g.floor(b.depth, q) != nil && !content.water[Int(w.tile(0, q.x, q.y))] && !g.blocked(b.depth, q) { return q }
+        }
+        return nil
+    }
+
+    /// The stacks in the supply box on a tile of a layer.
+    public func boxContents(_ t: TilePos, depth: Int) -> [Dropped] { inv.dropped.filter { $0.depth == depth && $0.bx == t.x && $0.by == t.y } }
 
     /// Everything the pack holds, by key (the one store).
     public func packContents() -> [String: Double] {
@@ -202,7 +258,18 @@ extension Society {
             let g = WorldGround(self), t = b.pos.tile
             guard b.platform == nil, g.floor(b.depth, t) != nil, !g.blocked(b.depth, t) else { r.reason = "nowhere to put it"; return r }
             carry(key, -n)
-            st.dropped.append(Dropped(id: st.nextDrop, key: key, amount: n, x: b.x, y: b.y, depth: b.depth, t: world.time))
+            var d = Dropped(id: st.nextDrop, key: key, amount: n, x: b.x, y: b.y, depth: b.depth, t: world.time)
+            // into a supply box: a block beside the traveller, which a tap opens (the same kind joins its stack)
+            if let q = boxTile(for: b, st) {
+                d.bx = q.x; d.by = q.y; d.x = q.center.x; d.y = q.center.y
+                layer(b.depth).setTile(2, q.x, q.y, content.tid("supply_box"))
+                if let j = st.dropped.firstIndex(where: { $0.depth == b.depth && $0.bx == q.x && $0.by == q.y && $0.key == key }) {
+                    st.dropped[j].amount += n; st.dropped[j].t = world.time
+                    r.ok = true; r.amount = n
+                    return r
+                }
+            }
+            st.dropped.append(d)
             st.nextDrop += 1
             r.ok = true; r.amount = n
         case .pickUp(let did):
@@ -213,7 +280,21 @@ extension Society {
             guard n > 1e-9 else { r.reason = "pack full"; return r }
             carry(d.key, n)
             if d.amount - n > 1e-9 { st.dropped[i].amount -= n; r.reason = "pack full" } else { st.dropped.remove(at: i) }
+            clearEmptyBox(d, st)
             r.ok = true; r.amount = n
+        case .openBox(let x, let y, let depth):
+            let here = st.dropped.filter { $0.depth == depth && $0.bx == x && $0.by == y }
+            guard !here.isEmpty else { r.reason = "gone"; return r }
+            guard depth == b.depth, TilePos(x, y).center.distance(to: b.pos) <= cfg.reach + 16 else { r.reason = "out of reach"; return r }
+            for d in here {
+                guard let i = st.dropped.firstIndex(where: { $0.id == d.id }) else { continue }
+                let n = min(d.amount, roomFor(d.key))
+                guard n > 1e-9 else { r.reason = "pack full"; continue }
+                carry(d.key, n); r.amount += n
+                if d.amount - n > 1e-9 { st.dropped[i].amount -= n; r.reason = "pack full" } else { st.dropped.remove(at: i) }
+            }
+            clearEmptyBox(here[0], st)
+            r.ok = r.amount > 0
         case .deposit(let key, let want, let town), .withdraw(let key, let want, let town):
             guard let s = settlements[town], !s.abandoned else { r.reason = "no store"; return r }
             guard b.depth == 0 || b.depth >= OpenWorld.storeyBase, s.center.center.distance(to: b.pos) <= Double(Settlement.span) * 8 else { r.reason = "out of reach"; return r }
@@ -231,6 +312,13 @@ extension Society {
             if n < want { r.reason = "only part" }
         }
         return r
+    }
+
+    /// A supply box with nothing left in it goes.
+    func clearEmptyBox(_ d: Dropped, _ st: InventoryState) {
+        guard let x = d.bx, let y = d.by, !st.dropped.contains(where: { $0.depth == d.depth && $0.bx == x && $0.by == y }) else { return }
+        let w = layer(d.depth)
+        if w.tile(2, x, y) == content.tid("supply_box") { w.setTile(2, x, y, 0) }
     }
 
     // MARK: hunger and spoilage

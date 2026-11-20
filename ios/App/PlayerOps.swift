@@ -21,15 +21,33 @@ extension GameModel {
         case .unequip:
             if r.ok { showToast(L("已卸下", "Taken off")) }
         case .drop(let k, _):
-            showToast(r.ok ? String(format: L("放下了 %@ %.0f", "Put down %@ %.0f"), name(k), r.amount) : L("这里放不下东西（悬空、墙里或电梯中）", "Nothing can be put down here (air, a wall or a moving car)"))
+            showToast(r.ok ? String(format: L("放下了 %@ %.0f（装进旁边的物资箱，点箱子可取回）", "Put down %@ %.0f (in the supply box beside you: tap it to take it back)"), name(k), r.amount) : L("这里放不下东西（悬空、墙里或电梯中）", "Nothing can be put down here (air, a wall or a moving car)"))
         case .pickUp:
             showToast(r.ok ? String(format: L("拾取 %.0f%@", "Picked up %.0f%@"), r.amount, r.reason == "pack full" ? L("（背包满，剩下的留在原地）", " (pack full: the rest stays)") : "") : L("够不着或背包已满", "Out of reach, or the pack is full"))
+        case .openBox:
+            let what = r.ok ? String(format: L("打开物资箱：拿到 %.0f 件%@", "Opened the supply box: took %.0f%@"), r.amount, r.reason == "pack full" ? L("（背包满，剩下的还在箱里）", " (pack full: the rest stays in the box)") : "")
+                            : (r.reason == "pack full" ? L("背包满了：先扩容或放下点东西", "The pack is full: make it bigger or put something down") : L("够不着这个物资箱", "That supply box is out of reach"))
+            showToast(what)
         case .deposit(_, _, _), .withdraw(_, _, _):
             showToast(r.ok ? String(format: L("搬运 %.0f%@", "Moved %.0f%@"), r.amount, r.reason == "only part" ? L("（只放得下这么多）", " (only that much fitted)") : "") : L("搬不了：", "Cannot move: ") + r.reason)
         case .bind: break
         }
         refreshHUD()
         return r
+    }
+
+    /// Make the pack the next size bigger, from its own materials.
+    func upgradePack() {
+        guard society != nil, !worldLocked else { return }
+        if let why = society.upgradePack() {
+            if why == "largest" { showToast(L("背包已经是最大了", "The pack is as big as it gets")); return }
+            let k = String(why.dropFirst(5))
+            showToast(String(format: L("材料不够：还需要%@", "Not enough: more %@ needed"), GameModel.zh ? Items.def(k).zh : Items.def(k).en))
+        } else {
+            let lv = society.realm.player.packLevel ?? 0
+            showToast(String(format: L("背包升级为「%@」：负重上限 %.0f", "The pack is now a %@: it carries up to %.0f"), GameModel.zh ? PackTune.names[lv].1 : PackTune.names[lv].0, society.invCfg.capacity))
+        }
+        refreshHUD()
     }
 
     /// A hotbar place: food is eaten, a tool or weapon is taken in hand, anything else is shown.
