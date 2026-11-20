@@ -112,6 +112,13 @@ jobs:
                   shutil.copy('uishots/' + a['exportedFileName'], 'ui-' + name + '.png')
           " 2>/dev/null; ls ui-*.png 2>/dev/null
           python3 scripts/crash-report.py || true
+          # on failure, the screenshots go into this log too (small JPEGs in base64), for anyone who cannot download artifacts
+          if [ $rc -ne 0 ]; then
+            for f in ui-*.png; do
+              sips -s format jpeg -s formatOptions 35 -Z 640 "$f" --out /tmp/shot.jpg > /dev/null 2>&1 || continue
+              echo "SHOT-BEGIN $f"; base64 -b 120 -i /tmp/shot.jpg; echo "SHOT-END $f"
+            done
+          fi
           exit $rc
       - uses: actions/upload-artifact@v4
         if: always()
