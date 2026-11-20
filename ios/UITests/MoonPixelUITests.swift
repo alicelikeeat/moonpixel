@@ -16,9 +16,13 @@ final class MoonPixelUITests: XCTestCase {
     private func more(_ app: XCUIApplication, _ name: String) {
         let open = app.buttons["more"]
         XCTAssertTrue(open.waitForExistence(timeout: 10), "the More button is there")
-        open.tap()
         let b = app.buttons[name].firstMatch
-        XCTAssertTrue(b.waitForExistence(timeout: 10), "\(name) is in the More panel")
+        // a world still being made (a large one takes a while at real scale) may not take the first tap: try again
+        for _ in 0..<4 where !b.exists {
+            if open.isHittable { open.tap() }
+            if b.waitForExistence(timeout: 8) { break }
+        }
+        XCTAssertTrue(b.exists, "\(name) is in the More panel")
         sleep(1)                                          // let the panel finish sliding in before judging where things are
         // the More panel has grown: scroll it only when the button is really below (or above) the screen
         let win = app.windows.firstMatch.frame
@@ -207,6 +211,8 @@ final class MoonPixelUITests: XCTestCase {
         XCTAssertTrue(text(app, containing: "Climate: Snow").exists, "the sentence was analysed (climate)")
         XCTAssertTrue(text(app, containing: "Industrial age").exists, "the sentence was analysed (era)")
         app.buttons["create-world"].tap(); sleep(6)
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 60), "the sentence world is made")
+        sleep(2)
         shot("06c-sentence-world")
         more(app, "Worlds")
         // leaving waits for the save of this (larger, industrial-age) world before the list appears
