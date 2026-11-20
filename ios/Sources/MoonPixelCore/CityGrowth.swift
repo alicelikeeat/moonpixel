@@ -292,7 +292,7 @@ extension Society {
             if site(tag) == nil {
                 // each railway has its own stations, apart from the others' (a terminus each, never a shared track)
                 let slot = (o.id % 5) * 7 - 14, back = (d.id % 5) * 7 - 14
-                let from = TilePos(d.center.x + slot, d.center.y - 16), to = TilePos(o.center.x + back, o.center.y - 22)
+                let from = clearEnd(TilePos(d.center.x + slot, d.center.y - 16)), to = clearEnd(TilePos(o.center.x + back, o.center.y - 22))
                 // (saving up for it does not hold back the steps after it)
                 if start(tag, planWay(.rail, from: from, to: to, join: false)) || tried.contains(tag) { return }
                 continue
@@ -317,7 +317,7 @@ extension Society {
             let tag = "hsr:\(o.id)"
             if (o.works?["hsr:\(d.id)"]) == nil && !tried.contains(tag) {
                 if site(tag) == nil {
-                    let from = TilePos(d.center.x - 24, d.center.y + 26), to = TilePos(o.center.x + 24, o.center.y + 30)
+                    let from = clearEnd(TilePos(d.center.x - 24, d.center.y + 26)), to = clearEnd(TilePos(o.center.x + 24, o.center.y + 30))
                     if start(tag, planWay(.hsr, from: from, to: to, join: false)) || tried.contains(tag) { return }
                 } else if done(tag), !realm.transport.lines.contains(where: { $0.payer == .district(d.id) && $0.name.hasSuffix("⚡\(o.id)") }) {
                     let track = site(tag)!.cells.map { $0.t }.filter { wayKind(at: $0) == .hsr && bridge(at: $0) == nil && tunnel(at: $0) == nil }
@@ -344,7 +344,7 @@ extension Society {
                 // planning a long road is costly: after a try that could not be paid for, wait a day to try again
                 let cool = "road-\(d.id)-\(o.id)"
                 if world.time < (realm.cool[cool] ?? 0) { continue }
-                let from = TilePos(d.center.x + 20, d.center.y + 4), to = TilePos(o.center.x - 20, o.center.y + 4)
+                let from = clearEnd(TilePos(d.center.x + 20, d.center.y + 4)), to = clearEnd(TilePos(o.center.x - 20, o.center.y + 4))
                 if start(tag, planWay(.highway, from: from, to: to, join: true)) || tried.contains(tag) { return }
                 realm.cool[cool] = world.time + MP.daySeconds
                 continue
@@ -476,6 +476,21 @@ extension Society {
 
     /// Plans for an airfield near a district: three parallel runway rows `length` long, a taxiway down from the
     /// western end and an apron beside it; all on free level land outside the towns (nil if there is none near).
+    /// The end of a new line near a place: the place itself, or the nearest ground round it that no building of
+    /// any district stands on (with a tile to spare) and no water covers (buildings are life-sized now, and the
+    /// spot a station was meant for may be inside one).
+    func clearEnd(_ t: TilePos) -> TilePos {
+        func free(_ p: TilePos) -> Bool {
+            waterDepth(p) == 0 && !net.districts.contains { d in d.buildings.contains { $0.contains(p, margin: 1) } }
+        }
+        if free(t) { return t }
+        for r in 1...60 { for dy in -r...r { for dx in -r...r where max(abs(dx), abs(dy)) == r {
+            let p = TilePos(t.x + dx, t.y + dy)
+            if free(p) { return p }
+        } } }
+        return t
+    }
+
     func airfield(_ d: District, length: Int, avoid: [TilePos]?) -> [WayPlan]? {
         let live = settlements.values.filter { !$0.abandoned }
         for r in stride(from: 40, through: 480, by: 16) {
