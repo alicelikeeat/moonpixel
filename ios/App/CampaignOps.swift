@@ -276,7 +276,10 @@ extension GameModel {
         guard let s = society else { return }
         warRows = s.legionInfos().map { l in
             let u = l.units
-            let mix = String(format: L("步 %d · 弓 %d · 骑 %d · 器械 %d · 补给 %d", "foot %d · bow %d · horse %d · engines %d · supply %d"), u[0], u[1], u[2], l.engines, u[4])
+            var mix = String(format: L("步 %d · 弓 %d · 骑 %d · 器械 %d · 补给 %d", "foot %d · bow %d · horse %d · engines %d · supply %d"), u[0], u[1], u[2], l.engines, u[4])
+            // the machines it took to war (by its nation's age): tanks, Humvees, troop carriers, rocket trucks, fighters, drones
+            if !l.kit.isEmpty { mix = L("装备：", "Kit: ") + l.kit.map { WarKit.name($0.kind, zh: GameModel.zh) + " \($0.count)" }.joined(separator: L("、", ", ")) + " · " + mix }
+            else { mix = L("冷兵器时代（工业时代后才有装甲车辆）· ", "before industry (armour comes with industry) · ") + mix }
             return WarRow(id: l.id, title: String(format: L("%@ 军团 · %d 人 · %@%@", "%@ army · %d · %@%@"), l.name, l.count, l.state, l.target.isEmpty ? "" : " → " + l.target),
                           detail: mix + String(format: L(" · 士气 %d%% · 军粮 %d · 补给 %d%%%@", " · morale %d%% · rations %d · supply %d%%%@"), Int(l.morale * 100), Int(l.food), Int(l.supply * 100),
                                                      l.forded ? L(" · 无路可走，涉水行军", " · no road, wading") : ""),

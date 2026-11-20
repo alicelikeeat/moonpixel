@@ -94,6 +94,7 @@ final class SolidRenderer {
     /// Outside elevators: the car (moved to its real height every frame) and the shaft's rails.
     private var liftEntities: [Int: (car: ModelEntity, rails: [ModelEntity], top: Float)] = [:]
     private var vehicleEntities: [Int: ModelEntity] = [:]
+    private var warEntities: [Int: ModelEntity] = [:]
     /// The saucers of the UFO airports in view, and their light beams.
     private var ufoEntities: [Int: (ship: ModelEntity, beam: ModelEntity)] = [:]
     private var monumentEntities: [Int: [ModelEntity]] = [:]
@@ -391,6 +392,7 @@ final class SolidRenderer {
         updateStandards(world, society, model, reach: reach)
         updateLifts(society, model, reach: reach)
         updateVehicles(world, society, model, reach: reach)
+        updateWarMachines(world, society, model, reach: reach)
         updateUfos(world, society, model, reach: reach)
         updateMonuments(world, society, model, reach: reach)
         updateMachines(world, society, model, reach: reach)
@@ -1035,6 +1037,29 @@ final class SolidRenderer {
 
     /// The saucers: the modelled ship (metal hull, glass dome, rim lights, legs) turning as it flies, and a
     /// pale beam under it while it lifts off or lands.
+    /// The armies' machines on campaign: tanks, Humvees, troop carriers, rocket trucks, fighters, drones.
+    private func updateWarMachines(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
+        guard model.depth == 0, let vp = model.scene?.viewPos else {
+            for e in warEntities.values { e.removeFromParent() }; warEntities = [:]; return
+        }
+        var seen = Set<Int>()
+        for w in society.warMachines(center: vp, reach: reach) {
+            seen.insert(w.id)
+            let e = warEntities[w.id] ?? {
+                let m = ModelEntity()
+                m.model = model3D(key: "war-\(w.kind)-\(w.color)") { Figure3D.warMachine(w.kind, color: w.color) }
+                root.addChild(m)
+                warEntities[w.id] = m
+                return m
+            }()
+            e.position = SIMD3(Float(w.pos.x / 16), groundY(world, w.pos) + Float(w.z), Float(w.pos.y / 16))
+            var q = simd_quatf(angle: Float(-w.heading), axis: [0, 1, 0])
+            if w.z > 0 { q = q * simd_quatf(angle: -0.35, axis: [1, 0, 0]) }          // aircraft bank into their circle
+            e.orientation = q
+        }
+        for (id, e) in warEntities where !seen.contains(id) { e.removeFromParent(); warEntities[id] = nil }
+    }
+
     private func updateUfos(_ world: OpenWorld, _ society: Society, _ model: GameModel, reach: Double) {
         guard model.depth == 0, let vp = model.scene?.viewPos else {
             for e in ufoEntities.values { e.ship.removeFromParent(); e.beam.removeFromParent() }; ufoEntities = [:]; return

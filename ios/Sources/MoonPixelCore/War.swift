@@ -724,6 +724,9 @@ extension Society {
         public var phase = -1, forded = false
         public var foe: Vec2?
         public var targetPos: Vec2?
+        /// The machines it took to war (WarKit), by kind, and its nation's age.
+        public var kit: [(kind: String, count: Int)] = []
+        public var era = 0
     }
 
     public func legionInfos() -> [LegionInfo] {
@@ -740,6 +743,7 @@ extension Society {
             i.pos = lg.pos; i.route = lg.route ?? []; i.phase = lg.phase ?? -1; i.forded = lg.forded == true
             i.foe = lg.foe.flatMap { realm.legion($0) }?.pos
             i.targetPos = settlements[lg.target]?.center.center
+            i.kit = legionKit(lg); i.era = era(ofNation: lg.nation)
             if let at = lg.convoyAt, let h = settlements[lg.home] { i.convoy = point(on: [h.center.center] + (lg.route ?? [lg.pos]).prefix(max(1, (lg.routeI ?? 0) + 1)) + [lg.pos], at: at) }
             return i
         }

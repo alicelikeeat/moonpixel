@@ -72,6 +72,8 @@ final class GameScene: SKScene {
     var vehicleNodes: [Int: SKNode] = [:]
     /// The saucers of the UFO airports in view, by id.
     var ufoNodes: [Int: SKSpriteNode] = [:]
+    var warNodes: [Int: SKSpriteNode] = [:]
+    var warTextures: [String: SKTexture] = [:]
     var monumentNodes: [Int: [SKSpriteNode]] = [:]
     var driveAcc = 0.0
     var simDebt = 0.0
@@ -325,6 +327,7 @@ final class GameScene: SKScene {
             model.perf.time("actors") { updateActors(world, society, model) }
             if !model.plainRender {
                 model.perf.time("soldiers") { updateSoldiers(society, model) }
+                updateWarMachines(society, model)
                 model.perf.time("roofs") { updateRoofs(society, model) }
                 updateLifts2D(society, model)
                 updateVehicles2D(society, model)
@@ -465,6 +468,34 @@ final class GameScene: SKScene {
     /// buildings (a tile is 2 m), still big enough to see and tap.
     static let personScale: CGFloat = 0.78
     static func personSize(_ t: SKTexture) -> CGSize { let z = t.size(); return CGSize(width: z.width * personScale, height: z.height * personScale) }
+
+    /// The armies' machines on campaign, seen from above (aircraft drawn over everything, with a shadow).
+    func updateWarMachines(_ society: Society, _ model: GameModel) {
+        guard model.depth == 0 else { for n in warNodes.values { n.removeFromParent() }; warNodes = [:]; return }
+        let reach = Double(max(size.width, size.height) / zoom) + 200
+        var seen = Set<Int>()
+        for w in society.warMachines(center: viewPos, reach: reach) {
+            seen.insert(w.id)
+            let key = w.kind + w.color
+            let tex = warTextures[key] ?? {
+                let t = AnimeArt.warMachineTop(w.kind, color: w.color).cgImage.map { SKTexture(cgImage: $0) } ?? SKTexture()
+                warTextures[key] = t
+                return t
+            }()
+            let n = warNodes[w.id] ?? {
+                let n = SKSpriteNode(texture: tex)
+                n.size = CGSize(width: tex.size().width / 2, height: tex.size().height / 2)       // drawn at 32 px a tile; the map is 16
+                addChild(n)
+                warNodes[w.id] = n
+                return n
+            }()
+            n.position = CGPoint(x: w.pos.x, y: -w.pos.y + w.z * 6)
+            n.zRotation = CGFloat(-w.heading)
+            n.zPosition = w.z > 0 ? 60 : 11 + CGFloat(w.pos.y) * 0.001
+            n.alpha = 1
+        }
+        for (id, n) in warNodes where !seen.contains(id) { n.removeFromParent(); warNodes[id] = nil }
+    }
 
     private func charTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> SKTexture {
         let dir = abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down")
