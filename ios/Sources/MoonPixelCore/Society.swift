@@ -434,6 +434,10 @@ public final class Society {
     var sprung: [TilePos] = []
     /// The underground layer, once someone has gone down.
     public internal(set) var under: OpenWorld?
+    /// The open lands below, as last read from the nations (refreshed when their digging moves on).
+    var underlandCache: (stamp: Int, zones: [UnderlandZone])?
+    /// Where and how far the underlands were last carved into chunks already in use (so an unchanged hour costs nothing).
+    var underlandDone: Int?
     /// Storeys above the surface, by number (1, 2, ...), created as someone builds up to them.
     public internal(set) var storeys: [Int: OpenWorld] = [:]
     var wardActive = false

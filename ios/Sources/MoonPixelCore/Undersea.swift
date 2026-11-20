@@ -42,6 +42,9 @@ extension Generator {
             if d <= 13 && ob[i] == 0 && r.unit() < 0.03 { de[i] = shell }
         } }
         ob[16 * 32 + 15] = lamp                                         // light in the dome
+        // inside the dome the floor is dry, and a stairway leads down to the nation's underland
+        for y in 13...19 { for x in 13...19 { let dx = Double(x) - 15.5, dy = Double(y) - 15.5; if (dx * dx + dy * dy).squareRoot() < 3 { g[y * 32 + x] = c.tid("sand"); de[y * 32 + x] = 0 } } }
+        ob[16 * 32 + 16] = c.tid("stairs_down")
         // coral houses round the dome: small rings of coral wall, each with a door towards the centre
         for (hx, hy) in [(7, 7), (21, 7), (7, 21), (21, 21), (15, 6), (15, 24)] {
             for y in hy..<(hy + 4) { for x in hx..<(hx + 4) {
@@ -84,6 +87,7 @@ extension Civ {
         for (k, v) in c.stock where CivFood.isFood(k) { totals.add(\.found, k, v) }
         c.cropDue = Double(day) + 3; c.cropPlots = c.has("farm")
         c.underAt = (cx, cy)
+        c.dug = 40                                                       // the dome's own underland, to begin with
         polities[n]!.capital = c.id
         say("sea_nation", [polities[n]!.nameEn, polities[n]!.nameZh], [n], region: key)
     }

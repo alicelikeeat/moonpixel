@@ -303,6 +303,7 @@ extension Society {
         let u = OpenWorld(seed: world.seed, budget: world.budget, depth: 1)
         u.diskLimitBytes = world.diskLimitBytes
         if let st = world.store { u.open(store: st) }          // one store, one commit for both layers
+        u.overlay = { [unowned self] ch in self.stampUnderland(ch) }   // the nations' underlands, as they reach
         under = u
         return u
     }

@@ -87,7 +87,16 @@ extension GameModel {
         }
         let t = TilePos(t0.x, t0.y + 6)        // on the plaza, before the gatehouse's open gate
         mapPick = t
-        mapPickText = L("地下城入口（门楼里有通往地下的楼梯）", "Underground city entrance (the stairway down is in the gatehouse)") + String(format: " (%d, %d)", t.x, t.y)
+        mapPickText = L("地下城入口（门楼里有通往地下的楼梯；地下国家挖开的地底世界有草地、道路、房屋和人造天光）", "Underground city entrance (the stairway down is in the gatehouse; the underland its nation has dug has grass, roads, houses and a sky of lamps)") + String(format: " (%d, %d)", t.x, t.y)
+    }
+
+    func pickNearestSeaCity() {
+        guard let sc = scene, let t0 = society.nearestSeaCity(cx: Int((sc.player.x / 512).rounded(.down)), cy: Int((sc.player.y / 512).rounded(.down))) else {
+            showToast(L("附近没有海底城（只有有海洋的新世界才有）", "No sea-floor city nearby (only new worlds with oceans have them)")); return
+        }
+        let t = TilePos(t0.x, t0.y + 1)        // inside the pearl dome, beside the stairway down
+        mapPick = t
+        mapPickText = L("海底城入口（珍珠穹顶里有通往海底世界的楼梯）", "Sea-floor city entrance (the stairway down to its underland is in the pearl dome)") + String(format: " (%d, %d)", t.x, t.y)
     }
 
     func pickNearestVolcano() {

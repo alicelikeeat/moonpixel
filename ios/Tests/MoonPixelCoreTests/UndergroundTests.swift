@@ -78,25 +78,81 @@ final class UndergroundTests: XCTestCase {
         XCTAssertEqual(c.audit(), [])
     }
 
-    func testTheHallIsDugRingByRingAndGlassHoldsTheSea() {
-        let s = makeSociety(7)
+    /// An underground nation with one city at chunk (320, 320) under plain land, `dug` tiles out.
+    func underNation(_ s: Society, dug: Double, sea: Bool = false) -> CivCity {
         let c = s.civ
         c.underNations = true
-        let n = c.newPolity(origin: "underground", near: nil); c.polities[n]!.underground = true
+        let n = c.newPolity(origin: sea ? "undersea" : "underground", near: nil)
+        if sea { c.polities[n]!.undersea = true } else { c.polities[n]!.underground = true }
         var r = CivRegion(); r.rx = 40; r.ry = 40; r.land = 1; c.regions[r.key] = r
-        let city = c.newCity(at: r.key, nation: n, people: CivPeople(adults: 50), firstCount: true, under: true)
-        city.underAt = (320, 320); city.dug = 24
+        let city = c.newCity(at: r.key, nation: n, people: CivPeople(adults: 50), firstCount: true, under: !sea, sea: sea)
+        city.underAt = (320, 320); city.dug = dug
+        return city
+    }
+
+    func testTheUnderlandIsOpenLandWithRoadsHousesAndLamps() {
+        let s = makeSociety(7)
+        _ = underNation(s, dug: 100)                         // a little over three chunks every way
         let u = s.underworld()
-        let centre = TilePos(320 * 32 + 16, 320 * 32 + 16)
-        // a pool of water just outside the city's walls, rock elsewhere
-        for dy in -30...30 { for dx in -30...30 { let x = centre.x + dx, y = centre.y + dy
-            if dx * dx + dy * dy > 16 * 16 { u.setTile(0, x, y, s.content.tid("cave_floor")); u.setTile(2, x, y, s.content.tid("cave_wall")) } } }
-        for dy in -3...3 { for dx in 18...26 { u.setTile(0, centre.x + dx, centre.y + dy, s.content.tid("cave_water")); u.setTile(2, centre.x + dx, centre.y + dy, 0) } }
-        let n1 = s.digUnderground(around: centre)
-        XCTAssertGreaterThan(n1, 0)
-        XCTAssertEqual(city.carved, 24)
-        XCTAssertEqual(u.tile(2, centre.x - 20, centre.y), 0, "rock dug out of the hall")
-        XCTAssertEqual(u.tile(2, centre.x + 20, centre.y), s.content.tid("wall_glass"), "a glass wall where the hall meets water")
-        XCTAssertEqual(s.digUnderground(around: centre), 0, "each ring is dug once")
+        let ct = s.content
+        let near = u.chunk(322, 320), far = u.chunk(326, 320)
+        let natural = Set(["cave_floor", "cave_water"])
+        XCTAssertTrue(near.layers[0].allSatisfy { !natural.contains(ct.tile($0)?.key ?? "") }, "no cave left within reach")
+        XCTAssertTrue(near.layers[0].contains(ct.tid("grass")), "grass, as on the surface")
+        XCTAssertEqual(near.layers[1][5 * 32 + 15], ct.tid("cobble_road"), "roads in a grid")
+        XCTAssertEqual(near.layers[2][14 * 32 + 14], ct.tid("lamp_on"), "lamps for a sky")
+        XCTAssertTrue(far.layers[0].contains(ct.tid("cave_floor")) || far.layers[2].contains(ct.tid("cave_wall")), "beyond its reach the cave goes on")
+        // the town, the farms and the parks: across the reach there are houses, fields and trees
+        var kinds = Set<String>()
+        for y in 317...323 { for x in 317...323 { for id in u.chunk(x, y).layers[2] { kinds.insert(ct.tile(id)?.key ?? "") } } }
+        XCTAssertTrue(kinds.contains("bed"), "houses")
+        XCTAssertTrue(kinds.contains("wheat_2") || kinds.contains("tree_oak") || kinds.contains("tree_willow"), "fields or parks: \(kinds.sorted())")
+        // the light down there is the nation's own: bright by day, dimmed at night; none outside the underland
+        s.world.time = MP.daySeconds * 0.5
+        XCTAssertEqual(s.underSky(at: TilePos(322 * 32, 320 * 32))?.light ?? 0, 1, accuracy: 0.001)
+        s.world.time = MP.daySeconds * 2 / 24
+        XCTAssertEqual(s.underSky(at: TilePos(322 * 32, 320 * 32))?.light ?? 0, 0.45, accuracy: 0.001)
+        XCTAssertNil(s.underSky(at: TilePos(330 * 32, 320 * 32)))
+    }
+
+    func testTheUnderlandGrowsIntoChunksInUseAndSparesWhatWasBuilt() {
+        let s = makeSociety(8)
+        let city = underNation(s, dug: 40)
+        let u = s.underworld()
+        let ct = s.content
+        let ch = u.chunk(323, 320)
+        XCTAssertFalse(ch.layers[0].contains(ct.tid("grass")), "out of reach: still cave")
+        let x = 323 * 32 + 5, y = 320 * 32 + 5
+        u.setTile(2, x, y, ct.tid("wall_stone"))                  // the traveller built a wall here
+        city.dug = 130                                            // the nation digs on
+        s.underlandCache = nil
+        XCTAssertGreaterThan(s.digUnderground(around: TilePos(323 * 32, 320 * 32)), 0)
+        XCTAssertEqual(u.tile(0, 323 * 32 + 20, 320 * 32 + 20) == ct.tid("grass") || ct.tile(u.tile(0, 323 * 32 + 20, 320 * 32 + 20))?.built == true || u.tile(0, 323 * 32 + 20, 320 * 32 + 20) == ct.tid("farmland"), true, "the cave became land")
+        XCTAssertEqual(u.tile(2, x, y), ct.tid("wall_stone"), "what was built stays")
+        XCTAssertEqual(s.digUnderground(around: TilePos(323 * 32, 320 * 32)), 0, "nothing more until it digs again")
+    }
+
+    func testSeaFloorNationsHaveADomeStairAndAGlassWalledUnderland() {
+        let s = makeSociety(9)
+        let city = underNation(s, dug: 40, sea: true)
+        let u = s.underworld()
+        let ct = s.content
+        let home = u.chunk(320, 320)
+        XCTAssertTrue(home.layers[0].contains(ct.tid("sand")), "sand underfoot")
+        let edge = u.chunk(321, 320)                               // r = 1.25: the next chunk east is the edge
+        XCTAssertEqual(edge.layers[2][10 * 32 + 31], ct.tid("wall_glass"), "glass holds the flooded rock out")
+        XCTAssertEqual(s.underSky(at: TilePos(320 * 32 + 16, 320 * 32 + 16))?.sea, true)
+        // the sea-floor nations dig on, without war
+        let before = city.dug
+        s.civ.advance(to: s.civ.time + 3 * day)
+        XCTAssertGreaterThan(city.dug, before)
+        // a sea city on the surface has a dry dome with the stairway down
+        let gen = Generator(seed: 3); gen.oceans = true
+        var found: (Int, Int)?
+        for cy in -80...80 where found == nil { for cx in -80...80 where found == nil && gen.isSeaCity(cx, cy) { found = (cx, cy) } }
+        guard let (cx, cy) = found else { return }
+        let sc = gen.generate(cx, cy)
+        XCTAssertEqual(sc.layers[2][16 * 32 + 16], ct.tid("stairs_down"))
+        XCTAssertEqual(sc.layers[0][17 * 32 + 16], ct.tid("sand"), "dry floor in the dome")
     }
 }

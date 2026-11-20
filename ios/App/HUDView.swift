@@ -718,6 +718,7 @@ struct HUDView: View {
             Text(L("找地方", "Find")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
             LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
                 gridPill(L("地下城", "Underground city"), "arrow.down.to.line") { model.pickNearestUnderCity() }
+                gridPill(L("海底城", "Sea-floor city"), "water.waves") { model.pickNearestSeaCity() }
                 gridPill(L("UFO机场", "UFO port"), "circle.circle.fill") { model.pickNearestUfoPort() }
                 gridPill(L("火山", "Volcano"), "flame.fill") { model.pickNearestVolcano() }
             }

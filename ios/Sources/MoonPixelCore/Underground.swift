@@ -18,9 +18,12 @@ extension Generator {
 }
 
 public struct UnderTune {
-    public static let digPerDay = 3.0            // tiles a day a city's hall widens (more with more people)
-    public static let maxDug = 72.0              // tiles: a hall this wide is a whole town
+    public static let digPerDay = 10.0           // tiles a day a city's underland widens (up to 3x with more people)
+    public static let maxDug = 320.0             // tiles: ten chunks every way round each city
     public static let townAt = 40.0              // dug this far, a city may found a new town next door
+    public static let townEvery = 60.0           // and one more for every 60 tiles beyond
+    public static let seaDigShare = 0.8          // the sea-floor nations dig a little slower (no war, fewer mines)
+    public static let glassPerDay = 2.0          // sea glass a day for digging under the sea (without it, a third the pace)
     public static let glassForSea = 120.0        // sea glass a town under the sea needs
 }
 
@@ -51,17 +54,28 @@ extension Civ {
 
     /// Once a day: the underground cities dig, make sea glass, and found new towns next door.
     func undergroundDaily() {
-        for c in cities.values.sorted(by: { $0.id < $1.id }) where c.under == true {
+        for c in cities.values.sorted(by: { $0.id < $1.id }) where c.under == true || c.sea == true {
             guard let p = polities[c.nation], p.status == .active else { continue }
-            // dig: more hands, faster
             let hands = Double(c.people.band(1))
-            c.dug = min(UnderTune.maxDug, c.dug + UnderTune.digPerDay * min(3, 0.5 + hands / 60))
+            var pace = UnderTune.digPerDay * min(3, 0.5 + hands / 60)
+            if c.sea == true {
+                // the sea-floor nations dig their underland out of the flooded rock with coral and glass of their own
+                c.dug = min(UnderTune.maxDug, c.dug + pace * UnderTune.seaDigShare)
+                continue
+            }
             c.stock["stone", default: 0] += 4
             // sea glass: stone and heat (two stone a pane), when the city is under or beside the sea
             let wet = (regions[c.regionKey].map { $0.water >= 0.35 } ?? false) || Civ.four.contains { d in regions[MP.chunkKey(c.rx + d.0, c.ry + d.1)].map { $0.water >= 0.35 } ?? false }
             if wet, (c.stock["stone"] ?? 0) >= 10 { c.stock["stone"]! -= 10; c.stock["sea_glass", default: 0] += 5 }
-            // a new town next door, when the hall is wide and the city has people to spare
-            guard c.dug >= UnderTune.townAt, c.pop >= 60 else { continue }
+            // digging under the sea needs glass to wall the water out; without it the work crawls
+            if wet {
+                if (c.stock["sea_glass"] ?? 0) >= UnderTune.glassPerDay { c.stock["sea_glass"]! -= UnderTune.glassPerDay } else { pace /= 3 }
+            }
+            c.dug = min(UnderTune.maxDug, c.dug + pace)
+            // a new town next door, when the underland is wide and the city has people to spare (one more for
+            // every stretch it digs beyond)
+            let founded = Civ.four.filter { d in regions[MP.chunkKey(c.rx + d.0, c.ry + d.1)].flatMap { $0.underCity }.flatMap { cities[$0] }?.nation == c.nation }.count
+            guard c.dug >= UnderTune.townAt + UnderTune.townEvery * Double(founded), c.pop >= 60 else { continue }
             for (dx, dy) in Civ.four {
                 let k = MP.chunkKey(c.rx + dx, c.ry + dy)
                 guard let r = regions[k], r.underCity == nil else { continue }
@@ -78,7 +92,6 @@ extension Civ {
                 town.dug = 6
                 town.underAt = (r.rx * (cfg.regionTiles / 32) + cfg.regionTiles / 64, r.ry * (cfg.regionTiles / 32) + cfg.regionTiles / 64)
                 town.sealed = sea
-                c.dug = UnderTune.townAt * 0.6
                 say(sea ? "under_sea_town" : "under_town", [p.nameEn, p.nameZh, town.nameEn, town.nameZh], [c.nation], region: k)
                 break
             }
@@ -90,39 +103,23 @@ extension Civ {
 }
 
 extension Society {
-    /// Near the player, underground, the digging is real: each underground city's hall grows ring by ring to
-    /// the width its nation has dug; rock is cleared to floor, and where the ring meets water a glass wall holds
-    /// the sea out. Each ring is dug once (the city remembers how far its hall has been carved).
+    /// Near the player, underground, the nations' digging is real: every chunk already in use within their
+    /// reach is made underland (Underland.swift); chunks not yet made are made so when first needed. An
+    /// hour in which nothing has moved costs nothing.
     @discardableResult public func digUnderground(around t: TilePos, reach: Int = 160) -> Int {
         guard let c = realm.civBox, c.underNations else { return 0 }
+        let zones = underlandZones()
         let u = underworld()
-        let ct = Content.shared
-        let floor = ct.tid("cave_floor"), glass = ct.tid("wall_glass")
+        let pcx = t.x >> 5, pcy = t.y >> 5, rc = max(1, reach / 32)
+        var sig = pcx &* 73_856_093 ^ pcy &* 19_349_663
+        for z in zones where abs(z.cx - pcx) <= rc + Int(z.r) + 1 && abs(z.cy - pcy) <= rc + Int(z.r) + 1 { sig = sig &* 31 &+ Int(z.r * 32) &+ z.cx &* 7 &+ z.cy }
+        if underlandDone == sig { return 0 }
+        underlandDone = sig
         var changed = 0
-        for city in c.undergroundCities() {
-            guard let (cx, cy) = city.underAt else { continue }
-            let centre = TilePos(cx * 32 + 16, cy * 32 + 16)
-            guard abs(centre.x - t.x) <= reach && abs(centre.y - t.y) <= reach else { continue }
-            let want = Int(city.dug)
-            var r = max(city.carved, 15)                      // the city's own walls stand within 15 tiles
-            while r < want {
-                r += 1
-                let n = Int(Double(r) * 6.3) + 8
-                for k in 0..<n {
-                    let a = Double(k) / Double(n) * 2 * .pi
-                    let x = centre.x + Int((cos(a) * Double(r)).rounded()), y = centre.y + Int((sin(a) * Double(r)).rounded())
-                    let g = u.tile(0, x, y), o = u.tile(2, x, y)
-                    if ct.water[Int(g)] {
-                        // the sea (or a flooded cavern): a glass wall on the hall's edge holds it back
-                        if o != glass { u.setTile(2, x, y, glass); changed += 1 }
-                    } else if o != 0, let d = ct.tile(o), !d.built {
-                        u.setTile(2, x, y, 0); changed += 1          // rock and ore are dug out
-                        if g == 0 { u.setTile(0, x, y, floor) }
-                    }
-                }
-            }
-            city.carved = r
-        }
+        for cy in (pcy - rc)...(pcy + rc) { for cx in (pcx - rc)...(pcx + rc) where u.touched(cx, cy) {
+            guard let z = underland(cx, cy) else { continue }
+            changed += carveUnderland(cx, cy, z, in: u)
+        } }
         return changed
     }
 }

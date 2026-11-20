@@ -30,7 +30,8 @@ final class GameScene: SKScene {
     private let playerRing = SKShapeNode(circleOfRadius: 8)
     private let selectRing = SKShapeNode(circleOfRadius: 9)
     private let staffGlow = SKShapeNode(circleOfRadius: 5)
-    private let night = SKSpriteNode(color: UIColor(red: 0.04, green: 0.07, blue: 0.25, alpha: 1), size: CGSize(width: 4000, height: 4000))
+    private let nightColor = UIColor(red: 0.04, green: 0.07, blue: 0.25, alpha: 1)
+    private lazy var night = SKSpriteNode(color: nightColor, size: CGSize(width: 4000, height: 4000))
     private let joyBase = SKShapeNode(circleOfRadius: 46)
     private let joyKnob = SKShapeNode(circleOfRadius: 20)
     private let ghost = SKSpriteNode()
@@ -311,7 +312,14 @@ final class GameScene: SKScene {
         let flat = !model.render3D
         if flat == drawn3D { drawn3D = !flat; show2D(flat) }
         if flat {
-            night.alpha = under ? 0.42 : CGFloat((1 - world.daylight) * 0.55)
+            // underground the cave is dim, but within a nation's underland its own lamps make a day of their own
+            if under, let sky = society.underSky(at: viewPos.tile) {
+                night.alpha = CGFloat((1 - sky.light) * 0.5)
+                night.color = sky.sea ? UIColor(red: 0.0, green: 0.12, blue: 0.2, alpha: 1) : UIColor(red: 0.08, green: 0.05, blue: 0.0, alpha: 1)
+            } else {
+                night.alpha = under ? 0.42 : CGFloat((1 - world.daylight) * 0.55)
+                night.color = nightColor
+            }
             layoutJoystick()
             model.perf.time("chunks") { updateChunks(world, model) }
             model.perf.time("actors") { updateActors(world, society, model) }

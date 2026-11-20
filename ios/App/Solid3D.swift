@@ -309,14 +309,18 @@ final class SolidRenderer {
         // light and sky
         let under = model.depth == 1
         let w = society.weather(at: scene.player)
-        var l = under ? 0.62 : Float(0.25 + 0.75 * world.daylight)
+        // within a nation's underland the light is its own: an artificial day, bright, then dimmed at night
+        let made = under ? society.underSky(at: scene.viewPos.tile) : nil
+        var l = made.map { Float(0.4 + 0.6 * $0.light) } ?? (under ? 0.62 : Float(0.25 + 0.75 * world.daylight))
         if !under { l *= 1 - Float(w.dim) * 0.6 }
         let day = CGFloat(under ? 0 : world.daylight)
         // dawn and dusk: the sky warms to orange and rose while the sun is low
         let dusk = CGFloat(day > 0.02 && day < 0.98 ? sin(Double(day) * .pi) : 0) * 0.55
-        let sky = under ? UIColor(red: 0.03, green: 0.03, blue: 0.05, alpha: 1)
+        let sky = made.map { m in m.sea ? UIColor(red: 0.08 * m.light, green: 0.42 * m.light, blue: 0.55 * m.light, alpha: 1)
+                                        : UIColor(red: 0.62 * m.light, green: 0.6 * m.light, blue: 0.5 * m.light, alpha: 1) }
+            ?? (under ? UIColor(red: 0.03, green: 0.03, blue: 0.05, alpha: 1)
             : (w.fall == 3 ? UIColor(white: 0.78 * day + 0.08, alpha: 1)
-               : UIColor(red: min(1, 0.05 + 0.51 * day + 0.55 * dusk), green: 0.07 + 0.67 * day + 0.12 * dusk, blue: max(0, 0.18 + 0.72 * day - 0.25 * dusk), alpha: 1))
+               : UIColor(red: min(1, 0.05 + 0.51 * day + 0.55 * dusk), green: 0.07 + 0.67 * day + 0.12 * dusk, blue: max(0, 0.18 + 0.72 * day - 0.25 * dusk), alpha: 1)))
         setLight(l, sky: sky)
 
         if model.inputReset != seenReset { seenReset = model.inputReset; host?.releaseTouches() }
