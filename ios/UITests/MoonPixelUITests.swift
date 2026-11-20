@@ -19,8 +19,13 @@ final class MoonPixelUITests: XCTestCase {
         open.tap()
         let b = app.buttons[name].firstMatch
         XCTAssertTrue(b.waitForExistence(timeout: 10), "\(name) is in the More panel")
-        let until = Date().addingTimeInterval(8)
-        while !b.isHittable && Date() < until { usleep(200_000) }
+        let until = Date().addingTimeInterval(12)
+        // the More panel has grown: scroll it until the button is on screen
+        var scrolls = 0
+        while !b.isHittable && Date() < until {
+            usleep(300_000)
+            if !b.isHittable && scrolls < 8 { app.scrollViews.firstMatch.swipeUp(); scrolls += 1 }
+        }
         usleep(600_000)                                   // let the slide finish
         b.tap()
     }
