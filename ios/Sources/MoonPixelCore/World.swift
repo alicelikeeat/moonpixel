@@ -734,7 +734,7 @@ public final class OpenWorld {
     }
 
     // MARK: survey
-    static func floorDiv(_ a: Int, _ b: Int) -> Int { Int((Double(a) / Double(b)).rounded(.down)) }
+    public static func floorDiv(_ a: Int, _ b: Int) -> Int { Int((Double(a) / Double(b)).rounded(.down)) }
     static func posMod(_ a: Int, _ b: Int) -> Int { ((a % b) + b) % b }
 
     @discardableResult func mark(_ cx: Int, _ cy: Int) -> Bool {

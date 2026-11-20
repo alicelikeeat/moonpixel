@@ -44,6 +44,9 @@ public struct TeleportTarget: Equatable {
     public var tile: TilePos
     public var depth: Int
     public var detail: String
+    public init(group: Group, name: String, tile: TilePos, depth: Int, detail: String) {
+        self.group = group; self.name = name; self.tile = tile; self.depth = depth; self.detail = detail
+    }
 }
 
 extension Society {
