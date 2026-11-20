@@ -134,7 +134,7 @@ extension Society {
         let lv = realm.player.packLevel ?? 0
         guard lv + 1 < PackTune.capacity.count else { return "largest" }
         let cost = PackTune.cost(from: lv)
-        for (k, v) in cost where carried(k) + 1e-9 < v { return "need " + k }
+        for (k, v) in cost.sorted(by: { $0.key < $1.key }) where carried(k) + 1e-9 < v { return "need " + k }     // in a fixed order: the first short, by name
         for (k, v) in cost { carry(k, -v) }
         realm.player.packLevel = lv + 1
         return nil
