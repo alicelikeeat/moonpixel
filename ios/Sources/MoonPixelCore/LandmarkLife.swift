@@ -1,6 +1,6 @@
 import Foundation
 
-// Landmarks are lived in, built onto, and can be taken down in part.
+// Landmarks are lived in, built onto, and can be taken down in part (v3.0).
 //
 // * Homes: a landmark's rooms have beds (the palace city's courtyard houses, a keeper's lodge at each of the
 //   others, and every house built inside it later). People of its town who have no home move into a free bed:
