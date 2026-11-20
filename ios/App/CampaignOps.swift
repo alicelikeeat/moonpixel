@@ -568,6 +568,10 @@ struct MorePanel: View {
                     Chip(title: model.artStyle == .anime ? L("像素风格", "Pixel style") : L("动漫风格", "Anime style"), icon: "paintbrush.pointed.fill", id: "ArtStyle") {
                         model.showMore = false; model.artStyle = model.artStyle == .anime ? .pixel : .anime
                     }
+                    Chip(title: L("3D 精细度：", "3D detail: ") + [L("标准", "standard"), L("高", "high"), L("极高", "very high")][max(0, min(2, model.modelDetail - 1))], icon: "cube.transparent.fill", id: "ModelDetail") {
+                        // standard -> high (4x faces on curves) -> very high (9x) -> standard
+                        model.modelDetail = model.modelDetail % 3 + 1
+                    }
                     Chip(title: L("我的角色：", "My figure: ") + (CharacterModels.of(model.playerLook.model).map { GameModel.zh ? $0.zh : $0.en } ?? L("普通", "everyday")), icon: "person.fill.questionmark", id: "PlayerModel") {
                         // everyday -> wayfarer -> sage -> knight -> tinker -> puffling -> everyday (the sea floor's own five are for its people)
                         let keys: [String?] = [nil] + CharacterModels.land.map { $0.key }

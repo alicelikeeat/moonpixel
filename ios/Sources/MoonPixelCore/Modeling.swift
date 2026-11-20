@@ -61,7 +61,8 @@ extension Mesh3D {
 
     /// A frustum from `p0` (radius `r0`) to `p1` (radius `r1`) with `seg` sides, its ends closed: a cylinder when
     /// the radii are equal, a cone when one is 0. Arms, legs, wheels, trunks, masts.
-    public mutating func frustum(_ p0: SIMD3<Float>, _ p1: SIMD3<Float>, _ r0: Float, _ r1: Float, _ color: RGBA, seg: Int = 10, caps: Bool = true, capColor: RGBA? = nil) {
+    public mutating func frustum(_ p0: SIMD3<Float>, _ p1: SIMD3<Float>, _ r0: Float, _ r1: Float, _ color: RGBA, seg asked: Int = 10, caps: Bool = true, capColor: RGBA? = nil) {
+        let seg = asked * detail
         let axis = p1 - p0
         guard vlen(axis) > 1e-6 else { return }
         let (u, v) = Mesh3D.across(axis)
@@ -82,7 +83,8 @@ extension Mesh3D {
 
     /// An ellipsoid round `c` with radii `r` (x, y, z): `rings` bands from the bottom to the top, `seg` around.
     /// `from`/`to` (0 bottom ... 1 top) keep only a band of it (a dome is 0.5...1).
-    public mutating func ellipsoid(_ c: SIMD3<Float>, _ r: SIMD3<Float>, _ color: RGBA, seg: Int = 12, rings: Int = 8, from: Float = 0, to: Float = 1) {
+    public mutating func ellipsoid(_ c: SIMD3<Float>, _ r: SIMD3<Float>, _ color: RGBA, seg askedSeg: Int = 12, rings askedRings: Int = 8, from: Float = 0, to: Float = 1) {
+        let seg = askedSeg * detail, rings = askedRings * detail
         func p(_ i: Int, _ t: Float) -> SIMD3<Float> {
             let lat = (t - 0.5) * .pi, lon = Float(i) / Float(seg) * 2 * .pi
             return c + SIMD3(cos(lat) * cos(lon) * r.x, sin(lat) * r.y, cos(lat) * sin(lon) * r.z)
@@ -135,8 +137,8 @@ extension Mesh3D {
     /// A box with its edges bevelled by `r` (a loft of rounded sections), from (x0, y0, z0) to (x1, y1, z1).
     public mutating func roundedBox(_ x0: Float, _ y0: Float, _ z0: Float, _ x1: Float, _ y1: Float, _ z1: Float, r: Float, _ color: RGBA) {
         let w = z1 - z0, zc = (z0 + z1) / 2
-        let sec = Mesh3D.roundedSection(w: w, y0: y0, y1: y1, r: r, k: 2).map { SIMD2($0.x, $0.y + zc) }
-        let shrunk = Mesh3D.roundedSection(w: w - 2 * r, y0: y0 + r, y1: y1 - r, r: r * 0.3, k: 2).map { SIMD2($0.x, $0.y + zc) }
+        let sec = Mesh3D.roundedSection(w: w, y0: y0, y1: y1, r: r, k: 2 * detail).map { SIMD2($0.x, $0.y + zc) }
+        let shrunk = Mesh3D.roundedSection(w: w - 2 * r, y0: y0 + r, y1: y1 - r, r: r * 0.3, k: 2 * detail).map { SIMD2($0.x, $0.y + zc) }
         loft([(x0, shrunk), (x0 + r, sec), (x1 - r, sec), (x1, shrunk)], color)
     }
 

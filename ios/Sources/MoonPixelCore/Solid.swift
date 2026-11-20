@@ -18,7 +18,12 @@ public struct Mesh3D {
     public var cel = false
     /// Drawn in its own colours whichever way it faces (the sun, the moon, the planets: lights in the sky).
     public var unshaded = false
+    /// How finely curved shapes are cut: each cylinder, cone and ellipsoid gets `detail` times the sides and
+    /// bands it is asked for (so 2 is four times the faces on a round surface). People, animals, vehicles and
+    /// machines are built at `Figure3D.detail`; everything else at 1.
+    public var detail = 1
     public init() {}
+    public init(detail: Int) { self.detail = Swift.max(1, Swift.min(4, detail)) }
     public var isEmpty: Bool { indices.isEmpty }
     public var triangles: Int { indices.count / 3 }
 
@@ -688,12 +693,15 @@ enum TileShapes {
 /// south (+z); the renderer turns it. Sizes are in sixteenths of a tile, like the tile shapes.
 public enum Figure3D {
     public static let adultHeight: Float = 24.0 / 16
+    /// How finely people, animals, vehicles and machines are modelled (Mesh3D.detail): 1 standard, 2 high (four
+    /// times the faces on every curve), 3 very high. A setting of the game; tests build at 1.
+    nonisolated(unsafe) public static var detail = 1
 
     /// frame: 0 standing, 1 and 2 the two steps of a walk, 3 working or striking.
     public static func human(_ look: Look, frame: Int, held: String, child: Bool, female: Bool, face: Bitmap? = nil) -> Mesh3D {
         let cm = CharacterModels.of(look.model)
         if let r = cm, r.round { return roundling(r, frame: frame, child: child) }
-        var m = Mesh3D()
+        var m = Mesh3D(detail: Figure3D.detail)
         let k: Float = child ? 0.68 : 1
         let o = SIMD3<Float>(0, 0, 0)
         func b(_ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA) { m.px(o, x, y, z, w, h, d, c, scale: k, faces: .all) }
@@ -784,7 +792,7 @@ public enum Figure3D {
 
     /// A four-legged animal looking south; the golem and the chicken walk on two.
     public static func animal(_ sp: Species, frame: Int) -> Mesh3D {
-        var m = Mesh3D()
+        var m = Mesh3D(detail: Figure3D.detail)
         let o = SIMD3<Float>(0, 0, 0)
         func b(_ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA) { m.px(o, x, y, z, w, h, d, c, faces: .all) }
         let body = RGBA(hex: sp.body), accent = RGBA(hex: sp.accent), ink = RGBA(hex: "#2a2233")
@@ -908,7 +916,7 @@ public enum Figure3D {
     /// x, z = 0: a frame is a figure four tiles tall, a carrier a long hull with a flat deck and an island,
     /// a sky carrier a broad hull with wings and glowing lifters, the rest simpler shapes of their kind.
     public static func machine(_ kind: String, color: RGBA) -> Mesh3D {
-        var m = Mesh3D()
+        var m = Mesh3D(detail: Figure3D.detail)
         let dark = color.darkened(0.35), light = color.lightened(0.3), steel = RGBA(120, 126, 140), ink = RGBA(40, 42, 54), glow = RGBA(120, 220, 255)
         let def = CivUnitDef.byKey[kind]
         if kind == "giantess" {
@@ -1019,7 +1027,7 @@ public enum Figure3D {
     /// A vehicle, centred on the origin, its length along +x (forward), its width along z, its wheels on y = 0.
     /// Its size is the vehicle's own (`VehicleSpec.length` and `deckW`), so what is drawn is what collides.
     public static func vehicle(_ k: VehicleKind, livery: RGBA = RGBA(200, 60, 50)) -> Mesh3D {
-        var m = Mesh3D()
+        var m = Mesh3D(detail: Figure3D.detail)
         let sp = k.spec
         let L = Float(sp.length), W = Float(max(0.5, sp.deckW + 0.2)), hl = L / 2, hw = W / 2
         let glass = RGBA(150, 200, 230), dark = RGBA(40, 42, 48), white = RGBA(235, 236, 240), steel = RGBA(150, 156, 170)

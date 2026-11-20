@@ -154,6 +154,14 @@ final class GameModel: ObservableObject {
             scene?.restyle()
         }
     }
+    /// How finely people, animals, vehicles and machines are modelled in 3D: 1 standard, 2 high (four times the
+    /// faces on every curve, the default), 3 very high (nine times); kept between sessions.
+    @Published var modelDetail: Int = UserDefaults.standard.object(forKey: "modelDetail") as? Int ?? 2 {
+        didSet {
+            UserDefaults.standard.set(modelDetail, forKey: "modelDetail")
+            Figure3D.detail = modelDetail
+        }
+    }
     /// How people are drawn in the anime look (soft moe figures, or hero proportions); kept between sessions.
     @Published var figureStyle: AnimeArt.Figure = AnimeArt.Figure(rawValue: UserDefaults.standard.string(forKey: "figureStyle") ?? "") ?? .moe {
         didSet {
@@ -361,6 +369,7 @@ final class GameModel: ObservableObject {
         // (--anime / --pixel choose it for this run only, without changing the saved setting; UI tests start in pixel art)
         Bitmap.animeStyle = args.contains("--anime") || (!(args.contains("--pixel") || args.contains("--autostart")) && artStyle == .anime)
         AnimeArt.figure = args.contains("--hero") ? .hero : figureStyle
+        Figure3D.detail = modelDetail
         if args.contains("--3d") { render3D = true } else if args.contains("--2d") || args.contains("--autostart") { render3D = false }
         if args.contains("--autostart") && !args.contains("--first-person") { viewMode = .third }
         if let i = args.firstIndex(of: "--swarm-count"), i + 1 < args.count, let n = Int(args[i + 1]) { swarmCount = max(1024, min(SwarmShapes.sizes[3], n)); swarmFixed = true }

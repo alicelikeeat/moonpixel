@@ -217,7 +217,8 @@ final class SolidRenderer {
     private func model3D(key k: String, _ make: () -> Mesh3D) -> ModelComponent? {
         // the anime look draws every model with an ink outline (cached apart from the plain one)
         let anime = Bitmap.animeStyle
-        let key = anime ? "ink:" + k : k
+        // the modelling detail is part of the key: a new setting builds new models, the old ones age out
+        let key = (anime ? "ink:" : "") + "d\(Figure3D.detail):" + k
         if let r = meshes.get(key) { return ModelComponent(mesh: r, materials: [solidMaterial]) }
         let m = anime ? make().inked(width: 0.025) : make()
         guard let r = resource(m) else { return nil }

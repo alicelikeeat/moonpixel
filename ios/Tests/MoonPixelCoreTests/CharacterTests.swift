@@ -60,4 +60,22 @@ final class CharacterTests: XCTestCase {
         XCTAssertFalse(folk.isEmpty)
         XCTAssertTrue(folk.allSatisfy { CharacterModels.of($0.look.model)?.sea == true }, "the sea floor's own people")
     }
+
+    func testHigherDetailCutsCurvesFiner() {
+        defer { Figure3D.detail = 1 }
+        var l = Look(); l.model = "knight"
+        Figure3D.detail = 1
+        let one = Figure3D.human(l, frame: 0, held: "sword", child: false, female: false).triangles
+        Figure3D.detail = 2
+        let two = Figure3D.human(l, frame: 0, held: "sword", child: false, female: false).triangles
+        Figure3D.detail = 3
+        let three = Figure3D.human(l, frame: 0, held: "sword", child: false, female: false).triangles
+        XCTAssertGreaterThan(Double(two), Double(one) * 3, "high: about four times the faces")
+        XCTAssertGreaterThan(Double(three), Double(two) * 1.8, "very high: more again")
+        Figure3D.detail = 2
+        let fish = Figure3D.animal(Species.all.first { $0.key == "whale" } ?? Species.all[0], frame: 0)
+        XCTAssertFalse(fish.isEmpty)
+        let car = Figure3D.vehicle(.carrier)
+        XCTAssertFalse(car.isEmpty, "vehicles are built at the same detail")
+    }
 }
