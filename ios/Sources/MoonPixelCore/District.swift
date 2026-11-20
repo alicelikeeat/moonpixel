@@ -940,7 +940,7 @@ extension Society {
     }
 
     /// The amenities of a town, each once, when it has this many people.
-    static let amenities: [(String, Double)] = [("grocery", 30), ("restaurant", 80), ("clothing", 150), ("supermarket", 300), ("cinema", 500), ("arcade", 700),
+    static let amenities: [(String, Double)] = [("grocery", 60), ("restaurant", 120), ("clothing", 200), ("supermarket", 300), ("cinema", 500), ("arcade", 700),
                                                ("funpark", 2000), ("stadium", 3000)]
 
     /// The next kind of a group: the ones the district is big enough for (a small one builds low, a city of
@@ -982,7 +982,7 @@ extension Society {
                 return
             }
             if nearRoad(b.front, 1) { d.buildings[bi].state = .waiting; return }
-            guard let to = nearestRoadTile(b.front, 30) else { d.note("no street within reach of building \(b.id)"); return }
+            guard let to = nearestRoadTile(b.front, 60) else { d.note("no street within reach of building \(b.id)"); return }
             let plan = planWay(.street, from: b.front, to: to)
             guard plan.ok else { d.note("cannot bring a street to building \(b.id): \(plan.reason)"); return }
             if let sid = startWay(plan, payer: .district(d.id), nation: d.nation, by: "district:\(d.id)", rate: 60) { d.buildings[bi].site = sid }
@@ -1076,7 +1076,7 @@ extension Society {
             } }
             if !ok { continue }
             let front = TilePos(o.x + w / 2, o.y + h)
-            if !nearRoad(front, 30) { continue }
+            if !nearRoad(front, 60) { continue }                 // the district lays the street to its door (up to 120 m)
             return o
         }
         return nil
