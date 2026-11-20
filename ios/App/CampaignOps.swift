@@ -593,11 +593,14 @@ struct MorePanel: View {
                         model.showMore = false; model.viewMode = model.viewMode == .first ? .third : .first; if !model.render3D { model.render3D = true }
                     }
                     Chip(title: L("交通管理", "Transport"), icon: "tram.fill", id: "Transport") { model.showMore = false; model.showTransport = true }
-                    Chip(title: L("瞬移中心", "Teleport centre"), icon: "sparkles", id: "TeleportCentre") { model.showMore = false; model.showTeleport = true }
                     Chip(title: L("都市并入开放世界", "Bring the metro city in"), icon: "building.2.fill", id: "MetroImport") { model.showMore = false; model.importMetroCity() }
                     Chip(title: model.artStyle == .anime ? L("像素风格", "Pixel style") : L("动漫风格", "Anime style"), icon: "paintbrush.pointed.fill", id: "ArtStyle") {
                         model.showMore = false; model.artStyle = model.artStyle == .anime ? .pixel : .anime
                     }
+                }
+                // (its own row: one row per group, and the row above was already as wide as a phone)
+                group(L("角色与瞬移", "Figures and teleport")) {
+                    Chip(title: L("瞬移中心", "Teleport centre"), icon: "sparkles", id: "TeleportCentre") { model.showMore = false; model.showTeleport = true }
                     Chip(title: L("3D 精细度：", "3D detail: ") + [L("标准", "standard"), L("高", "high"), L("极高", "very high")][max(0, min(2, model.modelDetail - 1))], icon: "cube.transparent.fill", id: "ModelDetail") {
                         // standard -> high (4x faces on curves) -> very high (9x) -> standard
                         model.modelDetail = model.modelDetail % 3 + 1

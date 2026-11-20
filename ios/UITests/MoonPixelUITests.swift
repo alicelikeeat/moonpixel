@@ -596,7 +596,12 @@ final class MoonPixelUITests: XCTestCase {
         // the bar folds itself five seconds after opening: open it and tap at once, a few times if need be
         for _ in 0..<4 {
             let b = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
-            if b.exists && b.isHittable { b.tap(); return }
+            // tap where it was seen (the HUD redraws often: a button re-found at tap time can be a moment gone)
+            if b.exists && b.isHittable {
+                let f = b.frame
+                app.windows.firstMatch.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+                return
+            }
             let opener = app.buttons["speed"]
             if opener.exists && opener.isHittable { opener.tap(); usleep(800_000) } else { sleep(1) }
         }
