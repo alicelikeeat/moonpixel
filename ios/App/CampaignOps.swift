@@ -277,6 +277,18 @@ extension GameModel {
         }
     }
 
+    /// The war panel's line of losses: prisoners taken from each side (nobody is killed), and held now.
+    func prisonerLine(_ ledger: CasualtyLedger) -> String {
+        let taken: [String] = society.realm.nations.map { n in n.name(zh: GameModel.zh) + " \(ledger.fallen(n.id))" }
+        var line: String = L("被俘（无人阵亡）", "Taken prisoner (nobody is killed)") + " · " + taken.joined(separator: " · ")
+        let held = society.prisoners().sorted { $0.key < $1.key }
+        if !held.isEmpty {
+            let parts: [String] = held.map { society.nationName($0.key) + " \($0.value)" }
+            line += L(" · 现押战俘 ", " · held now ") + parts.joined(separator: " · ")
+        }
+        return line
+    }
+
     func refreshWar() {
         guard let s = society else { return }
         warRows = s.legionInfos().map { l in
@@ -522,9 +534,7 @@ struct WarPanel: View {
                 let ledger = model.society.realm.ledger
                 if ledger.total > 0 {
                     // nobody is killed in war: the losses are prisoners (held now, by whom)
-                    let held = model.society.prisoners()
-                    Text(L("被俘（无人阵亡）", "Taken prisoner (nobody is killed)") + " · " + model.society.realm.nations.map { n in "\(n.name(zh: GameModel.zh)) \(ledger.fallen(n.id))" }.joined(separator: " · ")
-                         + (held.isEmpty ? "" : L(" · 现押战俘 ", " · held now ") + held.sorted { $0.key < $1.key }.map { "\(model.society.nationName($0.key)) \($0.value)" }.joined(separator: " · ")))
+                    Text(model.prisonerLine(ledger))
                         .font(.system(size: 11, weight: .medium, design: .rounded)).opacity(0.85)
                         .accessibilityIdentifier("war-fallen")
                     ForEach(ledger.battles.suffix(3).reversed(), id: \.key) { b in
