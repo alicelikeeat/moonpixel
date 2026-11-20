@@ -1079,6 +1079,17 @@ public enum Figure3D {
                 for z in [Float(-1.2), 1.2] { m.box(-0.2, 0.55, z - 0.2, 0.6, 0.85, z + 0.2, dark, faces: .all) }
             }
             m.box(hl - 0.8, 0, -0.08, hl - 0.6, 0.6, 0.08, dark, faces: .all); m.box(-0.3, 0, -0.5, 0, 0.6, -0.3, dark, faces: .all); m.box(-0.3, 0, 0.3, 0, 0.6, 0.5, dark, faces: .all)
+        case .carrier:
+            let grey = RGBA(120, 126, 136), deck = RGBA(70, 74, 80)
+            m.box(-hl, -0.6, -hw + 0.3, hl - 1.2, 1.4, hw - 0.3, grey, faces: .all)          // the hull
+            m.box(hl - 1.2, -0.6, -hw + 0.8, hl, 1.4, hw - 0.8, grey, faces: .all)            // the bow
+            m.box(-hl, 1.4, -hw, hl, 1.6, hw, deck, faces: .all)                               // the flight deck, overhanging
+            m.box(-hl + 0.5, 1.61, -0.04, hl - 0.5, 1.63, 0.04, white, faces: .all)            // the centre line
+            m.box(-1.5, 1.6, hw - 0.9, 0.5, 3.4, hw - 0.2, grey, faces: .all)                 // the island
+            m.box(-1.2, 3.4, hw - 0.7, 0.2, 3.8, hw - 0.4, glass, faces: .all)
+            m.box(-0.6, 3.8, hw - 0.6, -0.4, 4.8, hw - 0.5, dark, faces: .all)                // the mast
+            for i in 0..<3 { let x = -hl + 1.2 + Float(i) * 1.6; m.box(x, 1.6, -hw + 0.4, x + 1.0, 1.85, -hw + 1.0, steel, faces: .all) }  // aircraft on deck
+            m.box(-hl, -0.6, -hw + 0.29, hl - 1.2, -0.3, hw - 0.29, livery, faces: .all)
         case .ferry, .liner, .freighter:
             m.box(-hl, -0.5, -hw, hl - 0.4, 0.6, hw, k == .freighter ? RGBA(60, 70, 90) : white, faces: .all)
             m.box(hl - 0.4, -0.5, -hw + 0.3, hl, 0.6, hw - 0.3, k == .freighter ? RGBA(60, 70, 90) : white, faces: .all)

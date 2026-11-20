@@ -421,6 +421,14 @@ extension Society {
             }
         }
 
+        // 7a/7b. a harbour and shipping lines (Shipping.swift)
+        if d.population >= 40 || open >= 3 {
+            d.works = works.isEmpty ? nil : works; d.tried = tried.isEmpty ? nil : Array(tried).sorted()
+            let did = planShipping(d)
+            works = d.works ?? [:]; tried = Set(d.tried ?? [])
+            if did { return }
+        }
+
         // 8. the nation's air force: its biggest district builds a military airbase, apart from the airport, and its fighters
         if d.population >= 250, airport(d) != nil, d.id == net.districts.filter({ $0.nation == d.nation }).max(by: { ($0.population, -$0.id) < ($1.population, -$1.id) })?.id {
             if site("base1") == nil && !tried.contains("airbase") {

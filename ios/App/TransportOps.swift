@@ -288,6 +288,22 @@ extension GameModel {
         } else { showToast(L("这里造不了车：需要在路上，并要铁 4、构件 3", "No car here: it needs a road and 4 iron, 3 parts")) }
     }
 
+    /// A ship from the pack's materials, afloat on the nearest water deep enough for it.
+    func buildShipHere(_ kind: VehicleKind) {
+        guard let s = society else { return }
+        let (v, why) = s.buildShipNear(kind)
+        if let v {
+            showToast(String(format: L("造好了一艘%@（燃料 %.0f）：在附近水面上，点“驾驶”出航", "Built a %@ (fuel %.0f): it is on the water near you, tap Drive to sail"), kind.name(zh: GameModel.zh), v.fuel))
+            refreshTravel(); return
+        }
+        let need = kind.spec.build.keys.sorted().map { "\(Recipe.goodName($0, zh: GameModel.zh)) \(Int(kind.spec.build[$0]!))" }.joined(separator: GameModel.zh ? "、" : ", ")
+        switch why {
+        case "no_water": showToast(String(format: L("附近没有够深的水：%@ 吃水 %.1f 格，去海边或大河边再造", "No water deep enough near: a %@ draws %.1f tiles; go to the sea or a big river"), kind.name(zh: GameModel.zh), kind.spec.draft))
+        case "materials": showToast(String(format: L("材料不够：造%@需要 %@", "Not enough materials: a %@ takes %@"), kind.name(zh: GameModel.zh), need))
+        default: showToast(L("水面上有别的船挡着", "Another ship is in the way"))
+        }
+    }
+
     /// Bring this world's metro-mode city into the open world (once): its streets, buildings, people, money and
     /// services become a district on the same land. A copy of the save is kept first.
     func importMetroCity() {

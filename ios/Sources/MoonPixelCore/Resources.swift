@@ -266,11 +266,15 @@ extension Civ {
                       : "resources: crude \(fmt(held(n, "crude"))) · fuel \(fmt(held(n, "fuel"))) · gold \(fmt(held(n, "gold"))) · ore \(fmt(held(n, "ore")))"]
         let short = shortages(n)
         if !short.isEmpty { out.append((zh ? "短缺：" : "short of: ") + short.joined(separator: zh ? "、" : ", ")) }
-        for r in tradeRoutes where r.active && (cities[r.seller]?.nation == n || cities[r.buyer]?.nation == n) {
+        // the routes it runs now, then the last few that have closed
+        let mine = tradeRoutes.filter { cities[$0.seller]?.nation == n || cities[$0.buyer]?.nation == n }
+        for r in mine.filter({ $0.active }) + mine.filter({ !$0.active }).suffix(3) {
             let other = cities[r.seller]?.nation == n ? cities[r.buyer] : cities[r.seller]
             let who = other.flatMap { polities[$0.nation]?.name(zh: zh) } ?? "?"
             let dir = cities[r.seller]?.nation == n ? (zh ? "卖给" : "sells to") : (zh ? "买自" : "buys from")
-            out.append((r.sea ? "⚓ " : "🛤 ") + "\(dir) \(who)：\(r.good) · " + (zh ? "已运 \(fmt(r.shipped))，被击沉 \(r.lost) 次" : "\(fmt(r.shipped)) shipped, \(r.lost) sunk"))
+            let good = CivItem.byKey[r.good].map { zh ? $0.zh : $0.en } ?? r.good
+            let state = r.active ? "" : (zh ? "（已结束）" : " (closed)")
+            out.append((r.sea ? "⚓ " : "🛤 ") + "\(dir) \(who)：\(good)\(state) · " + (zh ? "已运 \(fmt(r.shipped))，被击沉 \(r.lost) 次" : "\(fmt(r.shipped)) shipped, \(r.lost) sunk"))
         }
         let sent = spies.filter { $0.from == n }, caught = sent.filter { $0.outcome == "caught" }.count
         let theirs = spies.filter { $0.to == n && $0.outcome == "caught" }.count

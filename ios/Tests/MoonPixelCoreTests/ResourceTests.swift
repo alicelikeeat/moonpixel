@@ -39,13 +39,12 @@ final class ResourceTests: XCTestCase {
         XCTAssertTrue(c.shortages(a).contains("crude"))
         let way = c.tradeWay(from: cb, to: ca)
         XCTAssertEqual(way?.sea, true, "their ports share the sea")
-        let tb0 = c.polities[b]!.treasury
         c.advance(to: c.time + 6 * day)
         guard let r = c.tradeRoutes.first(where: { $0.good == "crude" }) else { return XCTFail("no route") }
         XCTAssertTrue(r.sea)
         XCTAssertEqual(cities(c, r.buyer)?.nation, a); XCTAssertEqual(cities(c, r.seller)?.nation, b)
         XCTAssertGreaterThan(ca.stock["crude"] ?? 0, 0, "the oil arrived")
-        XCTAssertGreaterThan(r.paid, 0, "and was paid for"); _ = tb0
+        XCTAssertGreaterThan(r.paid, 0, "and was paid for")
         XCTAssertGreaterThan(c.relation(a, b)?.trade ?? 0, 0)
         XCTAssertTrue(c.chronicle.contains { $0.kind == "sea_route" })
         XCTAssertTrue(c.resourceLines(a, zh: true).contains { $0.contains("买自") })

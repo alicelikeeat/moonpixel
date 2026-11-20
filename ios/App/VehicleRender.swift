@@ -171,6 +171,7 @@ extension GameScene {
         case .fighter: return UIColor(red: 0.46, green: 0.5, blue: 0.55, alpha: 1)
         case .ferry, .liner: return UIColor(white: 0.97, alpha: 1)
         case .freighter: return UIColor(red: 0.25, green: 0.3, blue: 0.4, alpha: 1)
+        case .carrier: return UIColor(red: 0.47, green: 0.49, blue: 0.53, alpha: 1)
         }
     }
 }

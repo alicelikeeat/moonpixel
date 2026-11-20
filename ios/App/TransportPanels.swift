@@ -20,6 +20,12 @@ struct TravelPanel: View {
                         }
                     }
                     Chip(title: L("用背包材料造一辆车", "Build a car from the pack"), icon: "car.fill", id: "build-car") { model.buildCarHere() }
+                    // ships, built on the nearest water: from a ferry to an aircraft carrier
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], alignment: .leading, spacing: 6) {
+                        ForEach(Society.playerShips, id: \.self) { k in
+                            Chip(title: L("造", "Build ") + k.name(zh: GameModel.zh), icon: k == .carrier ? "airplane.circle" : "ferry.fill", id: "build-ship-\(k.rawValue)") { model.buildShipHere(k) }
+                        }
+                    }
                     Divider().opacity(0.3)
                     // flying: a charter from the nearest airport to another city's
                     Text(L("坐飞机去别的城市", "Fly to another city")).font(.system(size: 13, weight: .bold, design: .rounded))

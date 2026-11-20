@@ -15,6 +15,8 @@ import Foundation
 
 public enum VehicleKind: String, Codable, CaseIterable {
     case car, bus, truck, train, hsr, airliner, cargoPlane, ferry, liner, freighter
+    /// The aircraft carrier: a flat deck the size of a street, for the player (and the age of industry).
+    case carrier
     /// Civil aircraft from small to large (the airliner is the narrow-body), and the military fighter.
     case turboprop, regionalJet, widebody, fighter
 
@@ -26,14 +28,14 @@ public enum VehicleKind: String, Codable, CaseIterable {
         case .car, .bus, .truck: return .road
         case .train, .hsr: return .rail
         case .airliner, .cargoPlane, .turboprop, .regionalJet, .widebody, .fighter: return .air
-        case .ferry, .liner, .freighter: return .water
+        case .ferry, .liner, .freighter, .carrier: return .water
         }
     }
     public var spec: VehicleSpec { VehicleSpec.table[self]! }
     public func name(zh: Bool) -> String {
         let n: [VehicleKind: (String, String)] = [.car: ("Car", "汽车"), .bus: ("Bus", "公交车"), .truck: ("Lorry", "货车"), .train: ("Train", "列车"), .hsr: ("High-speed train", "高铁"),
             .airliner: ("Narrow-body airliner", "窄体客机"), .cargoPlane: ("Cargo plane", "货机"),
-            .turboprop: ("Turboprop", "涡桨支线客机"), .regionalJet: ("Regional jet", "支线喷气客机"), .widebody: ("Wide-body airliner", "宽体客机"), .fighter: ("Fighter", "战斗机"), .ferry: ("Ferry", "渡轮"), .liner: ("Liner", "客轮"), .freighter: ("Freighter", "货轮")]
+            .turboprop: ("Turboprop", "涡桨支线客机"), .regionalJet: ("Regional jet", "支线喷气客机"), .widebody: ("Wide-body airliner", "宽体客机"), .fighter: ("Fighter", "战斗机"), .ferry: ("Ferry", "渡轮"), .liner: ("Liner", "客轮"), .freighter: ("Freighter", "货轮"), .carrier: ("Aircraft carrier", "航空母舰")]
         return zh ? n[self]!.1 : n[self]!.0
     }
 }
@@ -102,6 +104,9 @@ public struct VehicleSpec: Equatable {
         case .freighter: return VehicleSpec(maxSpeed: 4, reverseMax: 1.5, accel: 0.12, brake: 0.2, emergency: 0.3, wheelbase: 0, maxSteer: 1, radius: 0.8, length: 6,
                                             seats: 6, cargo: 3000, energy: .bunker, tank: 2500, burn: 0.07, draft: 4, airDraft: 5, vr: 0, stall: 0, cruise: 0, deckW: 1.6, deckL: 5.6, deckZ: 1,
                                             build: ["iron": 60, "planks": 20, "parts": 30], wearPerTile: 0.00001)
+        case .carrier: return VehicleSpec(maxSpeed: 7, reverseMax: 2, accel: 0.1, brake: 0.15, emergency: 0.25, wheelbase: 0, maxSteer: 0.8, radius: 1.4, length: 14,
+                                          seats: 3000, cargo: 2000, energy: .bunker, tank: 8000, burn: 0.15, draft: 5, airDraft: 7, vr: 0, stall: 0, cruise: 0, deckW: 3.2, deckL: 13.4, deckZ: 1.6,
+                                          build: ["iron": 400, "parts": 200, "moonsteel": 30], wearPerTile: 0.000008)
         }
     }
 }
@@ -238,6 +243,45 @@ extension Society {
         if fill { refuel(v) }
         tr.vehicles.append(v)
         return v
+    }
+
+    /// The ships a traveller can build from the pack, smallest first.
+    public static let playerShips: [VehicleKind] = [.ferry, .liner, .freighter, .carrier]
+
+    /// Build a ship from the pack's materials, afloat on the nearest water deep enough for it (within
+    /// `reach` tiles of where the traveller stands), its bow turned to the open water. The second value says
+    /// why not: "no_water" (nothing deep enough near), "materials" (the pack lacks them; `kind.spec.build`
+    /// says what it takes), "crowded" (another ship is in the way).
+    public func buildShipNear(_ kind: VehicleKind, reach: Int = 24) -> (Vehicle?, String?) {
+        guard kind.mode == .water, let b = realm.player.body else { return (nil, "no_water") }
+        let here = b.pos.tile, p = profile(kind)
+        var spots: [TilePos] = []
+        for r in 0...reach {
+            for dy in -r...r { for dx in -r...r where max(abs(dx), abs(dy)) == r {
+                let t = TilePos(here.x + dx, here.y + dy)
+                if passable(NetNode(t.x, t.y, 0), p) { spots.append(t) }
+            } }
+            if spots.count >= 6 { break }
+        }
+        guard !spots.isEmpty else { return (nil, "no_water") }
+        guard let h = holding(.pack) else { return (nil, "materials") }
+        if kind.spec.build.contains(where: { h.free($0.key) + 1e-9 < $0.value }) { return (nil, "materials") }
+        for t in spots {
+            // face the way the water goes on furthest
+            var best = (0, 0.0)
+            for a in 0..<8 {
+                let ang = Double(a) * .pi / 4
+                var run = 0
+                while run < 12 {
+                    let q = TilePos(t.x + Int((cos(ang) * Double(run + 1)).rounded()), t.y + Int((sin(ang) * Double(run + 1)).rounded()))
+                    if !passable(NetNode(q.x, q.y, 0), p) { break }
+                    run += 1
+                }
+                if run > best.0 { best = (run, ang) }
+            }
+            if let v = buildVehicle(kind, at: t, heading: best.1, payer: .pack, nation: realm.player.nation) { return (v, nil) }
+        }
+        return (nil, "crowded")
     }
 
     /// Fill the tank from the owner's store (as much as there is): fuel is a real good, made and moved.
