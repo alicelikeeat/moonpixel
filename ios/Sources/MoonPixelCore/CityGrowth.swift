@@ -363,7 +363,7 @@ extension Society {
         }
         // 6. an airport (a runway three tiles wide, a taxiway and an apron): every city has one, early
         if (d.population >= 50 || open >= 3) && !tried.contains("airport") && site("runway1") == nil {
-            if let field = airfield(d, length: 64, avoid: nil) {
+            if let field = airfield(d, length: 128, avoid: nil) {          // 256 m: a runway for life-sized planes (shortened, as agreed)
                 // all of it or nothing: a runway started alone would block every site found later. What the
                 // store lacks for the whole field is bought in first, when the money is there; else it saves up.
                 var total: [String: Double] = [:]
@@ -433,7 +433,7 @@ extension Society {
         if d.population >= 250, airport(d) != nil, d.id == net.districts.filter({ $0.nation == d.nation }).max(by: { ($0.population, -$0.id) < ($1.population, -$1.id) })?.id {
             if site("base1") == nil && !tried.contains("airbase") {
                 let civil = site("runway1")?.cells.map { $0.t } ?? []
-                if let field = airfield(d, length: 56, avoid: civil) {
+                if let field = airfield(d, length: 112, avoid: civil) {
                     for (k, p) in field.enumerated() { _ = start(["base0", "base1", "base2", "basetaxi", "baseapron"][k], p) }
                     d.note("began a military airbase")
                 } else { tried.insert("airbase"); d.note("no room for an airbase") }
@@ -478,7 +478,7 @@ extension Society {
     /// western end and an apron beside it; all on free level land outside the towns (nil if there is none near).
     func airfield(_ d: District, length: Int, avoid: [TilePos]?) -> [WayPlan]? {
         let live = settlements.values.filter { !$0.abandoned }
-        for r in stride(from: 30, through: 240, by: 12) {
+        for r in stride(from: 40, through: 480, by: 16) {
             for (dx, dy) in [(0, r), (0, -r), (-r, 0), (r, 0), (-r, r), (r, r), (-r, -r), (r, -r)] {
                 let x0 = d.center.x + dx - length / 2, y0 = d.center.y + dy
                 if let a = avoid, a.contains(where: { abs($0.y - y0) < 30 && $0.x > x0 - 20 && $0.x < x0 + length + 20 }) { continue }
@@ -490,7 +490,7 @@ extension Society {
                 var plans: [WayPlan] = []
                 for k in 0..<3 { plans.append(planStraightWay(.runway, from: TilePos(x0, y0 + k), to: TilePos(x0 + length, y0 + k))) }
                 plans.append(planStraightWay(.taxiway, from: TilePos(x0, y0 + 3), to: TilePos(x0, y0 + 5)))
-                plans.append(planStraightWay(.apron, from: TilePos(x0 + 1, y0 + 5), to: TilePos(x0 + 10, y0 + 5)))
+                plans.append(planStraightWay(.apron, from: TilePos(x0 + 1, y0 + 5), to: TilePos(x0 + 24, y0 + 5)))
                 // nothing but open land: no bridge, tunnel or other way to cross
                 if plans.allSatisfy({ $0.ok && $0.spans.isEmpty && $0.tunnels.isEmpty }) { return plans }
             }

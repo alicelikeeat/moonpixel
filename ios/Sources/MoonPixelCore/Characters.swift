@@ -218,7 +218,7 @@ extension Figure3D {
     /// A round little creature, about knee-high to a person: one soft body, a tiny face, stubby arms and feet.
     static func roundling(_ m: CharacterModel, frame: Int, child: Bool) -> Mesh3D {
         var mesh = Mesh3D(detail: Figure3D.detail)
-        let k: Float = child ? 0.8 : 1
+        let k: Float = (child ? 0.8 : 1) * personScale
         func P(_ x: Float, _ y: Float, _ z: Float) -> SIMD3<Float> { SIMD3(x, y, z) * (k / 16) }
         let u = k / 16
         let body = m.key == "kelpling" ? RGBA(150, 214, 190) : RGBA(250, 246, 238)

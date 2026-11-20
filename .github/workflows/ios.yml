@@ -63,7 +63,7 @@ jobs:
         run: |
           # every published release gets the next minor version of the current major: 2.0, 2.1, 2.2 ...
           # (the first of a major is .0; failed runs take no number)
-          MAJOR=2
+          MAJOR=3
           LAST=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' | sed -n "s/^v${MAJOR}\\.\\([0-9][0-9]*\\)$/\\1/p" | sort -n | tail -1)
           if [ -z "$LAST" ]; then NEXT=0; else NEXT=$(( LAST + 1 )); fi
           echo "MP_VERSION=$MAJOR.$NEXT" >> "$GITHUB_ENV"

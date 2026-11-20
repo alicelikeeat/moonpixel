@@ -711,7 +711,7 @@ public final class Society {
     @discardableResult func queue(_ s: Settlement, _ type: String) -> Bool {
         let b = Building()
         b.type = type
-        var w = type == "house" ? 7 : 6, h = type == "farm" ? 4 : (type == "house" ? 6 : 5)
+        var w = type == "house" ? 7 : (type == "farm" ? 12 : 6), h = type == "farm" ? 8 : (type == "house" ? 6 : 5)     // a house 14 x 12 m, a field 24 x 16 m
         if let spec = Society.roomSpecs[type] ?? Society.landmarkSpecs[type] { w = spec.w; h = spec.h }
         var pos = TilePos(0, 0)
         if type == "well" {
@@ -815,14 +815,14 @@ public final class Society {
 
     struct RoomSpec { let w: Int, h: Int, wall: String, floor: String, items: [(Int, Int, String)] }
     static let roomSpecs: [String: RoomSpec] = [
-"tavern": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 2, "table"), (4, 2, "chair"), (4, 1, "kitchen")]),
-        "warehouse": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "chest"), (2, 1, "chest"), (4, 1, "crate"), (1, 3, "crate"), (4, 3, "barrel")]),
+"tavern": RoomSpec(w: 8, h: 6, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "barrel"), (2, 2, "table"), (4, 2, "chair"), (4, 1, "kitchen")]),
+        "warehouse": RoomSpec(w: 12, h: 8, wall: "wall_wood", floor: "wood_floor", items: [(1, 1, "chest"), (2, 1, "chest"), (4, 1, "crate"), (1, 3, "crate"), (4, 3, "barrel")]),
         "mine": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "stone_floor", items: [(2, 2, "stairs_down"), (4, 1, "crate"), (1, 1, "torch")]),
-        "school": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "wood_floor", items: [(1, 1, "bookshelf"), (2, 2, "desk"), (4, 2, "desk")]),
-        "workshop": RoomSpec(w: 6, h: 5, wall: "wall_wood", floor: "stone_floor", items: [(1, 1, "anvil"), (4, 1, "workbench"), (3, 2, "furnace")]),
-        "factory": RoomSpec(w: 8, h: 6, wall: "wall_brick", floor: "stone_floor", items: [(1, 1, "chimney"), (3, 1, "machine"), (5, 1, "machine"), (2, 3, "machine"), (6, 3, "crate")]),
-        "lab": RoomSpec(w: 6, h: 5, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "server"), (4, 1, "server"), (2, 2, "desk")]),
-        "ai_center": RoomSpec(w: 8, h: 6, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "server"), (2, 1, "server"), (5, 1, "server"), (6, 1, "antenna"), (3, 3, "ai_core")]),
+        "school": RoomSpec(w: 12, h: 8, wall: "wall_stone", floor: "wood_floor", items: [(1, 1, "bookshelf"), (2, 2, "desk"), (4, 2, "desk")]),
+        "workshop": RoomSpec(w: 8, h: 6, wall: "wall_wood", floor: "stone_floor", items: [(1, 1, "anvil"), (4, 1, "workbench"), (3, 2, "furnace")]),
+        "factory": RoomSpec(w: 20, h: 12, wall: "wall_brick", floor: "stone_floor", items: [(1, 1, "chimney"), (3, 1, "machine"), (5, 1, "machine"), (2, 3, "machine"), (6, 3, "crate")]),
+        "lab": RoomSpec(w: 10, h: 8, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "server"), (4, 1, "server"), (2, 2, "desk")]),
+        "ai_center": RoomSpec(w: 16, h: 10, wall: "wall_stone", floor: "stone_floor", items: [(1, 1, "server"), (2, 1, "server"), (5, 1, "server"), (6, 1, "antenna"), (3, 3, "ai_core")]),
     ]
 
     /// Household id: couples share one, children belong to a parent's, everyone else has their own.

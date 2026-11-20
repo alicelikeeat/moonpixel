@@ -31,7 +31,7 @@ extension GameScene {
                 let held = ["sword", "bow", "sword", "hammer", "basket"][min(4, a.unit ?? 0)]
                 let tex = soldierTexture(a.look, a.facing, moving: a.moving, acting: fighting, held: held, female: a.female, phase: phase + a.id)
                 node.texture = tex
-                node.size = tex.size()
+                node.size = GameScene.personSize(tex)
                 let side = abs(a.facing.x) > abs(a.facing.y)
                 node.xScale = side && a.facing.x < 0 ? -1 : 1
                 node.position = CGPoint(x: a.pos.x, y: -(a.pos.y + 4))

@@ -48,7 +48,7 @@ public struct Body: Codable, Equatable {
 public struct MotionConfig: Codable, Equatable {
     public var gravity = 22.0              // tiles / s^2
     public var jumpSpeed = 7.0             // tiles / s: about 1.1 tiles high on open ground
-    public var height = 1.5                // head above feet, tiles (a storey is 2 tiles: indoors a small hop)
+    public var height = 0.9                // head above feet, tiles (1.75 m and a little: a tile is 2 m, a storey 4 m)
     public var airControl = 4.0            // how fast the air speed turns towards the stick (1/s)
     public var maxFall = 28.0              // tiles / s: never more than 0.25 tiles a step
     public var safeImpact = 10.5           // tiles / s of landing speed before it hurts (a drop of ~2.5 tiles: one storey is safe, two are not)

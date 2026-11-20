@@ -159,6 +159,13 @@ final class GameModel: ObservableObject {
             scene?.restyle()
         }
     }
+    /// A count for the HUD: 12,345 → "1.2万" in Chinese, "12.3k" in English (exact below ten thousand).
+    static func count(_ n: Int) -> String {
+        if n < 10_000 { return "\(n)" }
+        if zh { return n >= 100_000_000 ? String(format: "%.2f亿", Double(n) / 1e8) : String(format: "%.1f万", Double(n) / 1e4) }
+        return n >= 1_000_000 ? String(format: "%.2fM", Double(n) / 1e6) : String(format: "%.1fk", Double(n) / 1e3)
+    }
+
     /// How finely people, animals, vehicles and machines are modelled in 3D: 1 standard, 2 high (four times the
     /// faces on every curve, the default), 3 very high (nine times); kept between sessions.
     @Published var modelDetail: Int = UserDefaults.standard.object(forKey: "modelDetail") as? Int ?? 2 {
@@ -748,8 +755,12 @@ final class GameModel: ObservableObject {
         cameraLine = render3D ? (solid?.cameraState ?? "") : "2d"
         if showPerf, let sc = scene { perfLines = sc.perfReport().lines + (render3D ? [solid?.report ?? "3D"] : []) + (swarmReport.isEmpty ? [] : [swarmReport]) }
         let h = w.hour
-        status = String(format: L("第 %d 年 %02d:%02d · %d 人", "Year %d %02d:%02d · %d people"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60), s.agents.count)
-        if depth >= OpenWorld.storeyBase { status += String(format: L(" · 第 %d 层", " · storey %d"), depth - OpenWorld.storeyBase) }
+        // the people about you (the villagers of the towns drawn round you) and the whole known world (every
+        // nation's cities, the districts, the metro city): two numbers, each named, so they are never confused
+        status = String(format: L("第 %d 年 %02d:%02d · 附近 %@ 人 · 世界 %@ 人", "Year %d %02d:%02d · nearby %@ · world %@"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60),
+                        GameModel.count(s.agents.count), GameModel.count(s.knownPopulation))
+        if depth == SkyTune.depth { status += L(" · 天空城", " · sky city") }
+        else if depth >= OpenWorld.storeyBase { status += String(format: L(" · 第 %d 层", " · storey %d"), depth - OpenWorld.storeyBase) }
         else if depth == 1 { status += L(" · 地下", " · underground") }
         pollEvents()
         expireNotices()

@@ -62,50 +62,50 @@ public struct VehicleSpec: Equatable {
 
     public static func of(_ k: VehicleKind) -> VehicleSpec {
         switch k {
-        case .car: return VehicleSpec(maxSpeed: 16, reverseMax: 3, accel: 3.5, brake: 8, emergency: 10, wheelbase: 0.5, maxSteer: 0.8, radius: 0.2, length: 1,
-                                      seats: 4, cargo: 20, energy: .diesel, tank: 40, burn: 0.004, draft: 0, airDraft: 0.8, vr: 0, stall: 0, cruise: 0, deckW: 0.6, deckL: 0.8, deckZ: 0.3,
+        case .car: return VehicleSpec(maxSpeed: 16, reverseMax: 3, accel: 3.5, brake: 8, emergency: 10, wheelbase: 1.35, maxSteer: 0.8, radius: 0.45, length: 2.3,
+                                      seats: 4, cargo: 20, energy: .diesel, tank: 40, burn: 0.004, draft: 0, airDraft: 0.8, vr: 0, stall: 0, cruise: 0, deckW: 0.75, deckL: 1.8, deckZ: 0.3,
                                       build: ["iron": 4, "parts": 3], wearPerTile: 0.00002)
-        case .bus: return VehicleSpec(maxSpeed: 12, reverseMax: 2, accel: 1.8, brake: 5, emergency: 7, wheelbase: 0.8, maxSteer: 0.8, radius: 0.24, length: 2.5,
-                                      seats: 40, cargo: 0, energy: .diesel, tank: 150, burn: 0.012, draft: 0, airDraft: 1.6, vr: 0, stall: 0, cruise: 0, deckW: 0.8, deckL: 2.2, deckZ: 0.4,
+        case .bus: return VehicleSpec(maxSpeed: 12, reverseMax: 2, accel: 1.8, brake: 5, emergency: 7, wheelbase: 3.0, maxSteer: 0.8, radius: 0.65, length: 6.0,
+                                      seats: 40, cargo: 0, energy: .diesel, tank: 150, burn: 0.012, draft: 0, airDraft: 1.6, vr: 0, stall: 0, cruise: 0, deckW: 1.05, deckL: 5.6, deckZ: 0.4,
                                       build: ["iron": 10, "parts": 8], wearPerTile: 0.00002)
-        case .truck: return VehicleSpec(maxSpeed: 12, reverseMax: 2, accel: 1.5, brake: 4.5, emergency: 6, wheelbase: 0.8, maxSteer: 0.8, radius: 0.24, length: 2.5,
-                                        seats: 2, cargo: 200, energy: .diesel, tank: 200, burn: 0.015, draft: 0, airDraft: 1.8, vr: 0, stall: 0, cruise: 0, deckW: 0.8, deckL: 2.2, deckZ: 0.5,
+        case .truck: return VehicleSpec(maxSpeed: 12, reverseMax: 2, accel: 1.5, brake: 4.5, emergency: 6, wheelbase: 2.5, maxSteer: 0.8, radius: 0.6, length: 5.0,
+                                        seats: 2, cargo: 200, energy: .diesel, tank: 200, burn: 0.015, draft: 0, airDraft: 1.8, vr: 0, stall: 0, cruise: 0, deckW: 1.05, deckL: 4.4, deckZ: 0.5,
                                         build: ["iron": 10, "parts": 6], wearPerTile: 0.00003)
-        case .train: return VehicleSpec(maxSpeed: 16, reverseMax: 0, accel: 0.6, brake: 1.2, emergency: 2.0, wheelbase: 0, maxSteer: 0, radius: 0.4, length: 8,
-                                        seats: 300, cargo: 1200, energy: .diesel, tank: 2000, burn: 0.06, draft: 0, airDraft: 2.2, vr: 0, stall: 0, cruise: 0, deckW: 1.2, deckL: 7.5, deckZ: 0.6,
+        case .train: return VehicleSpec(maxSpeed: 16, reverseMax: 0, accel: 0.6, brake: 1.2, emergency: 2.0, wheelbase: 0, maxSteer: 0, radius: 0.7, length: 14.0,
+                                        seats: 300, cargo: 1200, energy: .diesel, tank: 2000, burn: 0.06, draft: 0, airDraft: 2.2, vr: 0, stall: 0, cruise: 0, deckW: 1.3, deckL: 13.5, deckZ: 0.6,
                                         build: ["iron": 40, "parts": 25, "planks": 10], wearPerTile: 0.00001)
-        case .hsr: return VehicleSpec(maxSpeed: 40, reverseMax: 0, accel: 0.7, brake: 1.0, emergency: 1.8, wheelbase: 0, maxSteer: 0, radius: 0.4, length: 10,
-                                      seats: 500, cargo: 0, energy: .electric, tank: 0, burn: 0.05, draft: 0, airDraft: 2.2, vr: 0, stall: 0, cruise: 0, deckW: 1.2, deckL: 9.5, deckZ: 0.6,
+        case .hsr: return VehicleSpec(maxSpeed: 40, reverseMax: 0, accel: 0.7, brake: 1.0, emergency: 1.8, wheelbase: 0, maxSteer: 0, radius: 0.7, length: 16.0,
+                                      seats: 500, cargo: 0, energy: .electric, tank: 0, burn: 0.05, draft: 0, airDraft: 2.2, vr: 0, stall: 0, cruise: 0, deckW: 1.3, deckL: 15.5, deckZ: 0.6,
                                       build: ["iron": 60, "parts": 50, "moonsteel": 4], wearPerTile: 0.00001)
-        case .airliner: return VehicleSpec(maxSpeed: 55, reverseMax: 1, accel: 10, brake: 10, emergency: 12, wheelbase: 1.5, maxSteer: 0.6, radius: 1.2, length: 5,
-                                           seats: 180, cargo: 60, energy: .jet, tank: 3000, burn: 0.08, draft: 0, airDraft: 4, vr: 22, stall: 18, cruise: 40, deckW: 1, deckL: 4.5, deckZ: 1,
+        case .airliner: return VehicleSpec(maxSpeed: 55, reverseMax: 1, accel: 10, brake: 10, emergency: 12, wheelbase: 3.0, maxSteer: 0.6, radius: 2.4, length: 10.0,
+                                           seats: 180, cargo: 60, energy: .jet, tank: 3000, burn: 0.08, draft: 0, airDraft: 4, vr: 22, stall: 18, cruise: 40, deckW: 1.1, deckL: 9.0, deckZ: 1,
                                            build: ["iron": 60, "parts": 60, "moonsteel": 8], wearPerTile: 0.000005)
-        case .cargoPlane: return VehicleSpec(maxSpeed: 50, reverseMax: 1, accel: 9, brake: 10, emergency: 12, wheelbase: 1.5, maxSteer: 0.6, radius: 1.2, length: 5,
-                                             seats: 4, cargo: 600, energy: .jet, tank: 3200, burn: 0.09, draft: 0, airDraft: 4, vr: 23, stall: 19, cruise: 38, deckW: 1, deckL: 4.5, deckZ: 1,
+        case .cargoPlane: return VehicleSpec(maxSpeed: 50, reverseMax: 1, accel: 9, brake: 10, emergency: 12, wheelbase: 3.6, maxSteer: 0.6, radius: 2.8, length: 12.0,
+                                             seats: 4, cargo: 600, energy: .jet, tank: 3200, burn: 0.09, draft: 0, airDraft: 4, vr: 23, stall: 19, cruise: 38, deckW: 1.2, deckL: 11.0, deckZ: 1,
                                              build: ["iron": 60, "parts": 60, "moonsteel": 8], wearPerTile: 0.000005)
-        case .turboprop: return VehicleSpec(maxSpeed: 36, reverseMax: 1, accel: 7, brake: 9, emergency: 11, wheelbase: 1.0, maxSteer: 0.7, radius: 0.9, length: 3.5,
-                                            seats: 70, cargo: 20, energy: .jet, tank: 1200, burn: 0.04, draft: 0, airDraft: 3, vr: 15, stall: 12, cruise: 28, deckW: 0.8, deckL: 3,
+        case .turboprop: return VehicleSpec(maxSpeed: 36, reverseMax: 1, accel: 7, brake: 9, emergency: 11, wheelbase: 2.0, maxSteer: 0.7, radius: 1.8, length: 7.0,
+                                            seats: 70, cargo: 20, energy: .jet, tank: 1200, burn: 0.04, draft: 0, airDraft: 3, vr: 15, stall: 12, cruise: 28, deckW: 0.9, deckL: 6.0,
                                             deckZ: 0.8, build: ["iron": 30, "parts": 30], wearPerTile: 0.000006)
-        case .regionalJet: return VehicleSpec(maxSpeed: 48, reverseMax: 1, accel: 9, brake: 10, emergency: 12, wheelbase: 1.2, maxSteer: 0.6, radius: 1.0, length: 4,
-                                              seats: 100, cargo: 30, energy: .jet, tank: 2000, burn: 0.06, draft: 0, airDraft: 3.5, vr: 19, stall: 15, cruise: 36, deckW: 0.9, deckL: 3.5,
+        case .regionalJet: return VehicleSpec(maxSpeed: 48, reverseMax: 1, accel: 9, brake: 10, emergency: 12, wheelbase: 2.4, maxSteer: 0.6, radius: 2.0, length: 8.0,
+                                              seats: 100, cargo: 30, energy: .jet, tank: 2000, burn: 0.06, draft: 0, airDraft: 3.5, vr: 19, stall: 15, cruise: 36, deckW: 1.0, deckL: 7.0,
                                               deckZ: 0.9, build: ["iron": 45, "parts": 45, "moonsteel": 4], wearPerTile: 0.000005)
-        case .widebody: return VehicleSpec(maxSpeed: 60, reverseMax: 1, accel: 8, brake: 10, emergency: 12, wheelbase: 2.0, maxSteer: 0.5, radius: 1.6, length: 7,
-                                           seats: 350, cargo: 150, energy: .jet, tank: 6000, burn: 0.14, draft: 0, airDraft: 5, vr: 24, stall: 19, cruise: 46, deckW: 1.4, deckL: 6.5,
+        case .widebody: return VehicleSpec(maxSpeed: 60, reverseMax: 1, accel: 8, brake: 10, emergency: 12, wheelbase: 5.0, maxSteer: 0.5, radius: 3.6, length: 16.0,
+                                           seats: 350, cargo: 150, energy: .jet, tank: 6000, burn: 0.14, draft: 0, airDraft: 5, vr: 24, stall: 19, cruise: 46, deckW: 1.6, deckL: 15.0,
                                            deckZ: 1.2, build: ["iron": 100, "parts": 100, "moonsteel": 16], wearPerTile: 0.000004)
-        case .fighter: return VehicleSpec(maxSpeed: 80, reverseMax: 1, accel: 18, brake: 12, emergency: 14, wheelbase: 0.8, maxSteer: 0.7, radius: 0.6, length: 2.5,
-                                          seats: 1, cargo: 0, energy: .jet, tank: 1500, burn: 0.12, draft: 0, airDraft: 2, vr: 24, stall: 16, cruise: 60, deckW: 0.4, deckL: 1,
+        case .fighter: return VehicleSpec(maxSpeed: 80, reverseMax: 1, accel: 18, brake: 12, emergency: 14, wheelbase: 1.6, maxSteer: 0.7, radius: 1.1, length: 5.0,
+                                          seats: 1, cargo: 0, energy: .jet, tank: 1500, burn: 0.12, draft: 0, airDraft: 2, vr: 24, stall: 16, cruise: 60, deckW: 0.6, deckL: 2.0,
                                           deckZ: 0.6, build: ["iron": 40, "parts": 60, "moonsteel": 10], wearPerTile: 0.000008)
-        case .ferry: return VehicleSpec(maxSpeed: 5, reverseMax: 2, accel: 0.25, brake: 0.35, emergency: 0.5, wheelbase: 0, maxSteer: 1, radius: 0.6, length: 3,
-                                        seats: 120, cargo: 150, energy: .bunker, tank: 600, burn: 0.03, draft: 1.5, airDraft: 2.5, vr: 0, stall: 0, cruise: 0, deckW: 1.4, deckL: 2.8, deckZ: 0.6,
+        case .ferry: return VehicleSpec(maxSpeed: 5, reverseMax: 2, accel: 0.25, brake: 0.35, emergency: 0.5, wheelbase: 0, maxSteer: 1, radius: 2.0, length: 20.0,
+                                        seats: 120, cargo: 150, energy: .bunker, tank: 600, burn: 0.03, draft: 1.5, airDraft: 2.5, vr: 0, stall: 0, cruise: 0, deckW: 4.0, deckL: 18.0, deckZ: 0.6,
                                         build: ["iron": 20, "planks": 30, "parts": 10], wearPerTile: 0.00001)
-        case .liner: return VehicleSpec(maxSpeed: 6, reverseMax: 2, accel: 0.2, brake: 0.3, emergency: 0.45, wheelbase: 0, maxSteer: 1, radius: 0.8, length: 5,
-                                        seats: 400, cargo: 100, energy: .bunker, tank: 1500, burn: 0.05, draft: 2.5, airDraft: 4, vr: 0, stall: 0, cruise: 0, deckW: 1.6, deckL: 4.6, deckZ: 1,
+        case .liner: return VehicleSpec(maxSpeed: 6, reverseMax: 2, accel: 0.2, brake: 0.3, emergency: 0.45, wheelbase: 0, maxSteer: 1, radius: 3.2, length: 40.0,
+                                        seats: 400, cargo: 100, energy: .bunker, tank: 1500, burn: 0.05, draft: 2.5, airDraft: 4, vr: 0, stall: 0, cruise: 0, deckW: 6.0, deckL: 37.0, deckZ: 1,
                                         build: ["iron": 50, "planks": 30, "parts": 30], wearPerTile: 0.00001)
-        case .freighter: return VehicleSpec(maxSpeed: 4, reverseMax: 1.5, accel: 0.12, brake: 0.2, emergency: 0.3, wheelbase: 0, maxSteer: 1, radius: 0.8, length: 6,
-                                            seats: 6, cargo: 3000, energy: .bunker, tank: 2500, burn: 0.07, draft: 4, airDraft: 5, vr: 0, stall: 0, cruise: 0, deckW: 1.6, deckL: 5.6, deckZ: 1,
+        case .freighter: return VehicleSpec(maxSpeed: 4, reverseMax: 1.5, accel: 0.12, brake: 0.2, emergency: 0.3, wheelbase: 0, maxSteer: 1, radius: 3.2, length: 45.0,
+                                            seats: 6, cargo: 3000, energy: .bunker, tank: 2500, burn: 0.07, draft: 4, airDraft: 5, vr: 0, stall: 0, cruise: 0, deckW: 6.0, deckL: 42.0, deckZ: 1,
                                             build: ["iron": 60, "planks": 20, "parts": 30], wearPerTile: 0.00001)
-        case .carrier: return VehicleSpec(maxSpeed: 7, reverseMax: 2, accel: 0.1, brake: 0.15, emergency: 0.25, wheelbase: 0, maxSteer: 0.8, radius: 1.4, length: 14,
-                                          seats: 3000, cargo: 2000, energy: .bunker, tank: 8000, burn: 0.15, draft: 5, airDraft: 7, vr: 0, stall: 0, cruise: 0, deckW: 3.2, deckL: 13.4, deckZ: 1.6,
+        case .carrier: return VehicleSpec(maxSpeed: 7, reverseMax: 2, accel: 0.1, brake: 0.15, emergency: 0.25, wheelbase: 0, maxSteer: 0.8, radius: 4.5, length: 60.0,
+                                          seats: 3000, cargo: 2000, energy: .bunker, tank: 8000, burn: 0.15, draft: 5, airDraft: 7, vr: 0, stall: 0, cruise: 0, deckW: 12.0, deckL: 57.0, deckZ: 1.6,
                                           build: ["iron": 400, "parts": 200, "moonsteel": 30], wearPerTile: 0.000008)
         }
     }

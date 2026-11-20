@@ -355,17 +355,17 @@ final class SolidRenderer {
                 if abs(ox) + abs(oz) > 0.01 { yaw = atan2(-ox, -oz) }
                 lookPitch = -0.12
             }
-            let eye = SIMD3<Float>(cx, Float(e.z) + 1.5, cz)
+            let eye = SIMD3<Float>(cx, Float(e.z) + 0.82, cz)          // eye height: 1.65 m (a tile is 2 m)
             let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
             camera.look(at: eye + dir, from: eye, relativeTo: nil)
         } else if first, let v = car, let b = body, b.seat == 0 {
             // the driver's seat: forward in the cab, at eye height above its floor
             let seat = v.world(v.spec.length * 0.3, -0.15)
-            let eye = SIMD3<Float>(Float(seat.x / 16), Float(b.z) + 1.15, Float(seat.y / 16))
+            let eye = SIMD3<Float>(Float(seat.x / 16), Float(b.z) + 0.65, Float(seat.y / 16))
             let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
             camera.look(at: eye + dir, from: eye, relativeTo: nil)
         } else if first {
-            let eye = SIMD3<Float>(want.x, feet + 1.35, want.z)
+            let eye = SIMD3<Float>(want.x, feet + 0.82, want.z)
             let dir = SIMD3<Float>(-sin(yaw) * cos(lookPitch), sin(lookPitch), -cos(yaw) * cos(lookPitch))
             camera.look(at: eye + dir, from: eye, relativeTo: nil)
         } else {
@@ -373,7 +373,7 @@ final class SolidRenderer {
             // never under the ground behind the traveller
             let under = groundY(world, Vec2(Double(eye.x * 16), Double(eye.z * 16))) + 0.4
             if eye.y < under { eye.y = under }
-            camera.look(at: target + SIMD3<Float>(0, 0.6, 0), from: eye, relativeTo: nil)
+            camera.look(at: target + SIMD3<Float>(0, 0.45, 0), from: eye, relativeTo: nil)
         }
         if ride == nil { liftViewFor = nil }
         player.isEnabled = !first && ride == nil      // through your own eyes your head is not in the way
@@ -775,7 +775,7 @@ final class SolidRenderer {
                 cardTextures[drawing] = pic.cgImage.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)) }
             }
             let mesh = cardMeshes[view.mirrored] ?? {
-                let r = try? MeshResource.generate(from: [descriptor(AnimeArt.cardMesh(height: child ? 1.4 : 1.9, mirrored: view.mirrored), material: 0)])
+                let r = try? MeshResource.generate(from: [descriptor(AnimeArt.cardMesh(height: (child ? 1.4 : 1.9) * Figure3D.personScale, mirrored: view.mirrored), material: 0)])
                 if let r = r, !child { cardMeshes[view.mirrored] = r }
                 return r
             }()

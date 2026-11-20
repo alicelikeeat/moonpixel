@@ -43,42 +43,54 @@ public struct CityKind: Equatable {
     public func name(zh z: Bool) -> String { z ? zh : en }
 
     public static let all: [CityKind] = [
-        CityKind(key: "flats", en: "Flats", zh: "住宅楼", use: .residential, w: 7, d: 7, storeys: 4, homesPerFloor: 12, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 400, goods: ["stone": 18, "planks": 8, "parts": 2], inputs: [:], outputs: [:]),
-        CityKind(key: "tower", en: "Apartment tower", zh: "高层公寓", use: .residential, w: 8, d: 8, storeys: 12, homesPerFloor: 16, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 700, goods: ["stone": 22, "iron": 4, "parts": 4], inputs: [:], outputs: [:]),
-        CityKind(key: "shops", en: "Shops", zh: "商店", use: .commercial, w: 6, d: 6, storeys: 2, homesPerFloor: 0, jobsPerFloor: 12, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 300, goods: ["stone": 14, "planks": 8], inputs: ["wares": 0.6], outputs: [:]),
-        CityKind(key: "offices", en: "Offices", zh: "写字楼", use: .commercial, w: 7, d: 7, storeys: 6, homesPerFloor: 0, jobsPerFloor: 20, service: nil, capacity: 0, radius: 0, upkeep: 4, money: 600, goods: ["stone": 18, "iron": 3, "parts": 3], inputs: [:], outputs: [:]),
-        CityKind(key: "mixed", en: "Shops with flats", zh: "底商住宅", use: .mixed, w: 7, d: 7, storeys: 5, homesPerFloor: 10, jobsPerFloor: 10, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 500, goods: ["stone": 18, "planks": 8, "parts": 2], inputs: ["wares": 0.3], outputs: [:]),
-        CityKind(key: "factory", en: "Factory", zh: "工厂", use: .industrial, w: 9, d: 8, storeys: 1, homesPerFloor: 0, jobsPerFloor: 40, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 800, goods: ["stone": 30, "iron": 10, "parts": 6], inputs: ["iron_ore": 0.5, "planks": 0.2], outputs: ["wares": 1.0]),
-        CityKind(key: "refinery", en: "Fuel refinery", zh: "炼油厂", use: .industrial, w: 8, d: 8, storeys: 1, homesPerFloor: 0, jobsPerFloor: 20, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 900, goods: ["stone": 30, "iron": 14, "parts": 8], inputs: ["oil": 1.0], outputs: ["fuel": 0.8]),
-        CityKind(key: "oilwell", en: "Oil well", zh: "油井", use: .industrial, w: 4, d: 4, storeys: 1, homesPerFloor: 0, jobsPerFloor: 6, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 400, goods: ["iron": 8, "parts": 4], inputs: [:], outputs: ["oil": 3.0]),
-        CityKind(key: "farm", en: "Farm", zh: "农场", use: .agricultural, w: 10, d: 10, storeys: 1, homesPerFloor: 0, jobsPerFloor: 16, service: nil, capacity: 0, radius: 0, upkeep: 1, money: 200, goods: ["planks": 10, "stone": 4], inputs: [:], outputs: ["food": 5.0]),
-        CityKind(key: "warehouse", en: "Warehouse", zh: "仓库", use: .logistics, w: 8, d: 6, storeys: 1, homesPerFloor: 0, jobsPerFloor: 10, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 300, goods: ["stone": 20, "planks": 10], inputs: [:], outputs: [:]),
-        CityKind(key: "power", en: "Power station", zh: "发电厂", use: .utility, w: 6, d: 6, storeys: 1, homesPerFloor: 0, jobsPerFloor: 15, service: "power", capacity: 600, radius: 0, upkeep: 20, money: 1500, goods: ["stone": 30, "iron": 16, "parts": 10], inputs: ["fuel": 0.3], outputs: [:]),
-        CityKind(key: "waterworks", en: "Waterworks", zh: "自来水厂", use: .utility, w: 5, d: 5, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: "water", capacity: 3000, radius: 0, upkeep: 10, money: 900, goods: ["stone": 24, "iron": 6, "parts": 4], inputs: [:], outputs: [:]),
-        CityKind(key: "sewage", en: "Sewage works", zh: "污水处理厂", use: .utility, w: 5, d: 5, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: "sewage", capacity: 3000, radius: 0, upkeep: 10, money: 900, goods: ["stone": 24, "iron": 6, "parts": 4], inputs: [:], outputs: [:]),
-        CityKind(key: "depot", en: "Refuse depot", zh: "垃圾站", use: .utility, w: 5, d: 5, storeys: 1, homesPerFloor: 0, jobsPerFloor: 10, service: "garbage", capacity: 3000, radius: 0, upkeep: 8, money: 600, goods: ["stone": 16, "planks": 6], inputs: [:], outputs: [:]),
-        CityKind(key: "firehall", en: "Fire station", zh: "消防站", use: .utility, w: 5, d: 5, storeys: 2, homesPerFloor: 0, jobsPerFloor: 8, service: "fire", capacity: 0, radius: 40, upkeep: 8, money: 700, goods: ["stone": 16, "iron": 4], inputs: [:], outputs: [:]),
-        CityKind(key: "clinic", en: "Hospital", zh: "医院", use: .utility, w: 6, d: 6, storeys: 3, homesPerFloor: 0, jobsPerFloor: 12, service: "health", capacity: 2000, radius: 0, upkeep: 14, money: 1200, goods: ["stone": 18, "iron": 4, "parts": 3], inputs: [:], outputs: [:]),
+        CityKind(key: "flats", en: "Flats", zh: "住宅楼", use: .residential, w: 16, d: 10, storeys: 6, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 400, goods: ["stone": 18, "planks": 8, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "tower", en: "Apartment tower", zh: "高层公寓", use: .residential, w: 16, d: 16, storeys: 18, homesPerFloor: 9, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 700, goods: ["stone": 22, "iron": 4, "parts": 4], inputs: [:], outputs: [:]),
+        CityKind(key: "shops", en: "Shops", zh: "商店", use: .commercial, w: 12, d: 8, storeys: 2, homesPerFloor: 0, jobsPerFloor: 10, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 300, goods: ["stone": 14, "planks": 8], inputs: ["wares": 0.6], outputs: [:]),
+        CityKind(key: "offices", en: "Offices", zh: "写字楼", use: .commercial, w: 20, d: 15, storeys: 12, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 4, money: 600, goods: ["stone": 18, "iron": 3, "parts": 3], inputs: [:], outputs: [:]),
+        CityKind(key: "mixed", en: "Shops with flats", zh: "底商住宅", use: .mixed, w: 16, d: 10, storeys: 6, homesPerFloor: 5, jobsPerFloor: 12, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 500, goods: ["stone": 18, "planks": 8, "parts": 2], inputs: ["wares": 0.3], outputs: [:]),
+        CityKind(key: "factory", en: "Factory", zh: "工厂", use: .industrial, w: 50, d: 30, storeys: 2, homesPerFloor: 0, jobsPerFloor: 60, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 800, goods: ["stone": 30, "iron": 10, "parts": 6], inputs: ["iron_ore": 0.5, "planks": 0.2], outputs: ["wares": 1.0]),
+        CityKind(key: "refinery", en: "Fuel refinery", zh: "炼油厂", use: .industrial, w: 60, d: 50, storeys: 1, homesPerFloor: 0, jobsPerFloor: 60, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 900, goods: ["stone": 30, "iron": 14, "parts": 8], inputs: ["oil": 1.0], outputs: ["fuel": 0.8]),
+        CityKind(key: "oilwell", en: "Oil well", zh: "油井", use: .industrial, w: 10, d: 10, storeys: 1, homesPerFloor: 0, jobsPerFloor: 6, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 400, goods: ["iron": 8, "parts": 4], inputs: [:], outputs: ["oil": 3.0]),
+        CityKind(key: "farm", en: "Farm", zh: "农场", use: .agricultural, w: 40, d: 30, storeys: 1, homesPerFloor: 0, jobsPerFloor: 16, service: nil, capacity: 0, radius: 0, upkeep: 1, money: 200, goods: ["planks": 10, "stone": 4], inputs: [:], outputs: ["food": 5.0]),
+        CityKind(key: "warehouse", en: "Warehouse", zh: "仓库", use: .logistics, w: 40, d: 20, storeys: 2, homesPerFloor: 0, jobsPerFloor: 12, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 300, goods: ["stone": 20, "planks": 10], inputs: [:], outputs: [:]),
+        CityKind(key: "power", en: "Power station", zh: "发电厂", use: .utility, w: 50, d: 40, storeys: 1, homesPerFloor: 0, jobsPerFloor: 15, service: "power", capacity: 600, radius: 0, upkeep: 20, money: 1500, goods: ["stone": 30, "iron": 16, "parts": 10], inputs: ["fuel": 0.3], outputs: [:]),
+        CityKind(key: "waterworks", en: "Waterworks", zh: "自来水厂", use: .utility, w: 30, d: 25, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: "water", capacity: 3000, radius: 0, upkeep: 10, money: 900, goods: ["stone": 24, "iron": 6, "parts": 4], inputs: [:], outputs: [:]),
+        CityKind(key: "sewage", en: "Sewage works", zh: "污水处理厂", use: .utility, w: 30, d: 25, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: "sewage", capacity: 3000, radius: 0, upkeep: 10, money: 900, goods: ["stone": 24, "iron": 6, "parts": 4], inputs: [:], outputs: [:]),
+        CityKind(key: "depot", en: "Refuse depot", zh: "垃圾站", use: .utility, w: 25, d: 20, storeys: 1, homesPerFloor: 0, jobsPerFloor: 10, service: "garbage", capacity: 3000, radius: 0, upkeep: 8, money: 600, goods: ["stone": 16, "planks": 6], inputs: [:], outputs: [:]),
+        CityKind(key: "firehall", en: "Fire station", zh: "消防站", use: .utility, w: 15, d: 10, storeys: 2, homesPerFloor: 0, jobsPerFloor: 8, service: "fire", capacity: 0, radius: 40, upkeep: 8, money: 700, goods: ["stone": 16, "iron": 4], inputs: [:], outputs: [:]),
+        CityKind(key: "clinic", en: "Hospital", zh: "医院", use: .utility, w: 40, d: 30, storeys: 6, homesPerFloor: 0, jobsPerFloor: 12, service: "health", capacity: 2000, radius: 0, upkeep: 14, money: 1200, goods: ["stone": 18, "iron": 4, "parts": 3], inputs: [:], outputs: [:]),
         // bigger and taller kinds, chosen as a district grows (more people, more of everything)
-        CityKind(key: "terrace", en: "Terraced houses", zh: "联排住宅", use: .residential, w: 12, d: 6, storeys: 3, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 450, goods: ["stone": 16, "planks": 10], inputs: [:], outputs: [:]),
-        CityKind(key: "highrise", en: "High-rise flats", zh: "超高层住宅", use: .residential, w: 10, d: 10, storeys: 20, homesPerFloor: 20, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 9, money: 1400, goods: ["stone": 26, "iron": 6, "parts": 5], inputs: [:], outputs: [:]),
-        CityKind(key: "skyscraper", en: "Skyscraper", zh: "摩天大楼", use: .commercial, w: 12, d: 12, storeys: 30, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 14, money: 2500, goods: ["stone": 30, "iron": 8, "parts": 6], inputs: [:], outputs: [:]),
-        CityKind(key: "mall", en: "Shopping mall", zh: "购物中心", use: .commercial, w: 16, d: 12, storeys: 3, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 8, money: 1200, goods: ["stone": 30, "planks": 10, "iron": 4], inputs: ["wares": 0.6], outputs: [:]),
+        CityKind(key: "terrace", en: "Terraced houses", zh: "联排住宅", use: .residential, w: 18, d: 6, storeys: 3, homesPerFloor: 2, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 450, goods: ["stone": 16, "planks": 10], inputs: [:], outputs: [:]),
+        CityKind(key: "highrise", en: "High-rise flats", zh: "超高层住宅", use: .residential, w: 20, d: 20, storeys: 32, homesPerFloor: 14, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 9, money: 1400, goods: ["stone": 26, "iron": 6, "parts": 5], inputs: [:], outputs: [:]),
+        CityKind(key: "skyscraper", en: "Skyscraper", zh: "摩天大楼", use: .commercial, w: 25, d: 25, storeys: 50, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 14, money: 2500, goods: ["stone": 30, "iron": 8, "parts": 6], inputs: [:], outputs: [:]),
+        CityKind(key: "mall", en: "Shopping mall", zh: "购物中心", use: .commercial, w: 80, d: 50, storeys: 3, homesPerFloor: 0, jobsPerFloor: 60, service: nil, capacity: 0, radius: 0, upkeep: 8, money: 1200, goods: ["stone": 30, "planks": 10, "iron": 4], inputs: ["wares": 0.6], outputs: [:]),
         // food on a large scale: big fields of grain and vegetables, and ranches with cattle and sheep
-        CityKind(key: "bigfarm", en: "Large farm", zh: "大型农场", use: .agricultural, w: 22, d: 16, storeys: 1, homesPerFloor: 0, jobsPerFloor: 40, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 600, goods: ["planks": 24, "stone": 8, "iron": 2], inputs: [:], outputs: ["food": 6.5]),
-        CityKind(key: "ranch", en: "Ranch", zh: "牧场", use: .agricultural, w: 20, d: 14, storeys: 1, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 700, goods: ["planks": 30, "stone": 6], inputs: [:], outputs: ["food": 8.0]),
+        CityKind(key: "bigfarm", en: "Large farm", zh: "大型农场", use: .agricultural, w: 80, d: 60, storeys: 1, homesPerFloor: 0, jobsPerFloor: 40, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 600, goods: ["planks": 24, "stone": 8, "iron": 2], inputs: [:], outputs: ["food": 6.5]),
+        CityKind(key: "ranch", en: "Ranch", zh: "牧场", use: .agricultural, w: 70, d: 50, storeys: 1, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 3, money: 700, goods: ["planks": 30, "stone": 6], inputs: [:], outputs: ["food": 8.0]),
         // the well-off: villas with gardens, pools and a luxury car each; a dealer's showroom of luxury cars
-        CityKind(key: "villa", en: "Villa", zh: "别墅", use: .residential, w: 14, d: 12, storeys: 2, homesPerFloor: 2, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 4, money: 1600, goods: ["stone": 22, "planks": 18, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
-        CityKind(key: "showroom", en: "Luxury car showroom", zh: "豪车展厅", use: .commercial, w: 18, d: 12, storeys: 1, homesPerFloor: 0, jobsPerFloor: 16, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 2600, goods: ["stone": 30, "iron": 10, "parts": 8], inputs: [:], outputs: [:]),
+        CityKind(key: "villa", en: "Villa", zh: "别墅", use: .residential, w: 20, d: 16, storeys: 2, homesPerFloor: 1, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 4, money: 1600, goods: ["stone": 22, "planks": 18, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "showroom", en: "Luxury car showroom", zh: "豪车展厅", use: .commercial, w: 30, d: 20, storeys: 1, homesPerFloor: 0, jobsPerFloor: 16, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 2600, goods: ["stone": 30, "iron": 10, "parts": 8], inputs: [:], outputs: [:]),
         // a public swimming pool: a lane pool, a paddling pool, loungers, changing rooms
-        CityKind(key: "pool", en: "Swimming pool", zh: "游泳池", use: .commercial, w: 18, d: 13, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 1400, goods: ["stone": 30, "planks": 12, "parts": 4], inputs: [:], outputs: [:]),
+        CityKind(key: "pool", en: "Swimming pool", zh: "游泳池", use: .commercial, w: 35, d: 20, storeys: 1, homesPerFloor: 0, jobsPerFloor: 8, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 1400, goods: ["stone": 30, "planks": 12, "parts": 4], inputs: [:], outputs: [:]),
         // New York-style towers (see NewYork.swift): setbacks, crowns and spires; and brownstone rows
-        CityKind(key: "brownstone", en: "Brownstone row", zh: "褐石联排", use: .residential, w: 12, d: 7, storeys: 4, homesPerFloor: 8, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 500, goods: ["stone": 16, "planks": 8], inputs: [:], outputs: [:]),
-        CityKind(key: "pencil", en: "Slim residential tower", zh: "纤细住宅塔", use: .residential, w: 9, d: 9, storeys: 60, homesPerFloor: 6, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 16, money: 3200, goods: ["stone": 8, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
-        CityKind(key: "crown", en: "Crowned skyscraper", zh: "尖顶摩天楼", use: .commercial, w: 13, d: 13, storeys: 56, homesPerFloor: 0, jobsPerFloor: 24, service: nil, capacity: 0, radius: 0, upkeep: 20, money: 4000, goods: ["stone": 12, "iron": 4, "parts": 2], inputs: [:], outputs: [:]),
-        CityKind(key: "deco", en: "Art Deco skyscraper", zh: "装饰艺术摩天楼", use: .commercial, w: 15, d: 15, storeys: 64, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 26, money: 5200, goods: ["stone": 14, "iron": 4, "parts": 2], inputs: [:], outputs: [:]),
-        CityKind(key: "supertall", en: "Supertall glass tower", zh: "超高层玻璃塔", use: .commercial, w: 13, d: 13, storeys: 94, homesPerFloor: 0, jobsPerFloor: 26, service: nil, capacity: 0, radius: 0, upkeep: 32, money: 7000, goods: ["stone": 8, "iron": 5, "parts": 3], inputs: [:], outputs: [:]),
-        CityKind(key: "school", en: "School", zh: "学校", use: .utility, w: 7, d: 6, storeys: 2, homesPerFloor: 0, jobsPerFloor: 10, service: "education", capacity: 1500, radius: 0, upkeep: 10, money: 900, goods: ["stone": 18, "planks": 8], inputs: [:], outputs: [:]),
+        CityKind(key: "brownstone", en: "Brownstone row", zh: "褐石联排", use: .residential, w: 15, d: 9, storeys: 4, homesPerFloor: 5, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 500, goods: ["stone": 16, "planks": 8], inputs: [:], outputs: [:]),
+        CityKind(key: "pencil", en: "Slim residential tower", zh: "纤细住宅塔", use: .residential, w: 12, d: 12, storeys: 80, homesPerFloor: 2, jobsPerFloor: 0, service: nil, capacity: 0, radius: 0, upkeep: 16, money: 3200, goods: ["stone": 8, "iron": 3, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "crown", en: "Crowned skyscraper", zh: "尖顶摩天楼", use: .commercial, w: 22, d: 22, storeys: 56, homesPerFloor: 0, jobsPerFloor: 26, service: nil, capacity: 0, radius: 0, upkeep: 20, money: 4000, goods: ["stone": 12, "iron": 4, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "deco", en: "Art Deco skyscraper", zh: "装饰艺术摩天楼", use: .commercial, w: 25, d: 25, storeys: 64, homesPerFloor: 0, jobsPerFloor: 30, service: nil, capacity: 0, radius: 0, upkeep: 26, money: 5200, goods: ["stone": 14, "iron": 4, "parts": 2], inputs: [:], outputs: [:]),
+        CityKind(key: "supertall", en: "Supertall glass tower", zh: "超高层玻璃塔", use: .commercial, w: 27, d: 27, storeys: 94, homesPerFloor: 0, jobsPerFloor: 28, service: nil, capacity: 0, radius: 0, upkeep: 32, money: 7000, goods: ["stone": 8, "iron": 5, "parts": 3], inputs: [:], outputs: [:]),
+        // everyday shopping, eating out, fun, and heavy industry (sizes as in life: a tile is 2 m, a storey 4 m)
+        CityKind(key: "supermarket", en: "Supermarket", zh: "大型超市", use: .commercial, w: 45, d: 30, storeys: 1, homesPerFloor: 0, jobsPerFloor: 60, service: nil, capacity: 0, radius: 0, upkeep: 6, money: 1500, goods: ["stone": 60, "iron": 10, "parts": 4], inputs: ["wares": 0.5], outputs: [:]),
+        CityKind(key: "grocery", en: "Food store", zh: "食品店", use: .commercial, w: 8, d: 6, storeys: 1, homesPerFloor: 0, jobsPerFloor: 6, service: nil, capacity: 0, radius: 0, upkeep: 1, money: 250, goods: ["stone": 10, "planks": 6], inputs: ["wares": 0.2], outputs: [:]),
+        CityKind(key: "clothing", en: "Clothing store", zh: "服装店", use: .commercial, w: 10, d: 8, storeys: 2, homesPerFloor: 0, jobsPerFloor: 8, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 400, goods: ["stone": 12, "planks": 8, "parts": 1], inputs: ["wares": 0.4], outputs: [:]),
+        CityKind(key: "restaurant", en: "Restaurant", zh: "餐厅", use: .commercial, w: 10, d: 7, storeys: 1, homesPerFloor: 0, jobsPerFloor: 12, service: nil, capacity: 0, radius: 0, upkeep: 2, money: 350, goods: ["stone": 12, "planks": 10], inputs: ["wares": 0.2], outputs: [:]),
+        CityKind(key: "cinema", en: "Cinema", zh: "电影院", use: .commercial, w: 25, d: 18, storeys: 2, homesPerFloor: 0, jobsPerFloor: 14, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 1400, goods: ["stone": 30, "iron": 6, "parts": 4], inputs: [:], outputs: [:]),
+        CityKind(key: "arcade", en: "Entertainment centre", zh: "娱乐城", use: .commercial, w: 20, d: 15, storeys: 3, homesPerFloor: 0, jobsPerFloor: 12, service: nil, capacity: 0, radius: 0, upkeep: 5, money: 1300, goods: ["stone": 26, "iron": 5, "parts": 5], inputs: [:], outputs: [:]),
+        CityKind(key: "stadium", en: "Stadium", zh: "体育场", use: .commercial, w: 70, d: 56, storeys: 1, homesPerFloor: 0, jobsPerFloor: 40, service: nil, capacity: 0, radius: 0, upkeep: 12, money: 5000, goods: ["stone": 200, "iron": 40, "parts": 10], inputs: [:], outputs: [:]),
+        CityKind(key: "funpark", en: "Amusement park", zh: "游乐园", use: .commercial, w: 60, d: 45, storeys: 1, homesPerFloor: 0, jobsPerFloor: 50, service: nil, capacity: 0, radius: 0, upkeep: 14, money: 4500, goods: ["stone": 80, "iron": 40, "parts": 30], inputs: [:], outputs: [:]),
+        CityKind(key: "electronics", en: "Electronics plant", zh: "电子厂", use: .industrial, w: 40, d: 25, storeys: 4, homesPerFloor: 0, jobsPerFloor: 50, service: nil, capacity: 0, radius: 0, upkeep: 8, money: 2400, goods: ["stone": 30, "iron": 10, "parts": 8], inputs: ["iron_ore": 0.2, "planks": 0.1], outputs: ["wares": 1.4]),
+        CityKind(key: "steelmill", en: "Steel mill", zh: "钢铁厂", use: .industrial, w: 60, d: 40, storeys: 2, homesPerFloor: 0, jobsPerFloor: 80, service: nil, capacity: 0, radius: 0, upkeep: 10, money: 3000, goods: ["stone": 80, "iron": 30, "parts": 10], inputs: ["iron_ore": 0.8], outputs: ["wares": 0.6, "iron": 0.3]),
+        CityKind(key: "carplant", en: "Car factory", zh: "汽车厂", use: .industrial, w: 80, d: 50, storeys: 2, homesPerFloor: 0, jobsPerFloor: 120, service: nil, capacity: 0, radius: 0, upkeep: 12, money: 4200, goods: ["stone": 90, "iron": 40, "parts": 20], inputs: ["iron_ore": 0.4, "planks": 0.1], outputs: ["wares": 1.2, "parts": 0.05]),
+        CityKind(key: "school", en: "School", zh: "学校", use: .utility, w: 30, d: 20, storeys: 3, homesPerFloor: 0, jobsPerFloor: 12, service: "education", capacity: 1500, radius: 0, upkeep: 10, money: 900, goods: ["stone": 18, "planks": 8], inputs: [:], outputs: [:]),
     ]
     public static let byKey: [String: CityKind] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
     public static let services = ["power", "water", "sewage", "garbage", "fire", "health", "education"]
@@ -319,11 +331,13 @@ extension Society {
         if b.kind == "villa" { raiseVilla(b, d); return }
         if b.kind == "showroom" { raiseShowroom(b, d); return }
         if b.kind == "pool" { raisePool(b, d); return }
+        if b.kind == "stadium" { raiseStadium(b); keepClear(b.front); keepClear(b.entrance); return }
+        if b.kind == "funpark" { raiseFunpark(b); keepClear(b.front); keepClear(b.entrance); return }
         if Skyline.isTower(b.kind) && b.w >= 9 && b.w == b.d { raiseTower(b, d); return }
         let face = Society.facade(b.kind)
         let wall = content.tid(face.wall), window = content.tid(face.window), floor = content.tid(face.floor), door = content.tid("door_wood")
         let glassAll = b.kind == "skyscraper"
-        let thing: UInt8
+        var thing: UInt8
         switch b.def.use {
         case .residential, .mixed: thing = content.tid("bed")
         case .commercial: thing = content.tid("desk")
@@ -331,6 +345,9 @@ extension Society {
         case .agricultural: thing = content.tid("scarecrow")
         case .logistics: thing = content.tid("crate")
         }
+        // what fills a hall of each kind: shelves (stalls) in a supermarket and a food store, racks in a clothing
+        // store, tables in a restaurant, rows of seats in a cinema, machines in an arcade, benches of electronics
+        if let k = Society.fittings[b.kind] { thing = content.tid(k) }
         for level in 0..<max(1, b.floors.count) {
             let lw = level == 0 ? world : storeyWorld(level)
             for y in 0..<b.d { for x in 0..<b.w {
@@ -398,7 +415,14 @@ extension Society {
             if b.w > 4 && b.d > 3 { lw.setTile(2, b.x + b.w - 2, b.y + 1, thing) }
             // a big floor is split into rooms: a wall down the middle of the north half (the rooms open onto the
             // hall in the south half, where the door and the stairs are), and fittings in rows in every room
-            if b.w >= 10 && b.d >= 8 {
+            if Society.fittings[b.kind] != nil || (b.w * b.d >= 600 && b.def.use != .residential) {
+                // a hall: rows of fittings across it, an aisle between each two rows, the south end kept clear
+                // for the door and the stairs (a restaurant has a kitchen along its north wall)
+                for y in stride(from: b.y + 2, to: b.y + b.d - 4, by: 3) { for x in (b.x + 2)..<(b.x + b.w - 2) where (x - b.x) % 6 != 0 && lw.tile(2, x, y) == 0 {
+                    lw.setTile(2, x, y, thing)
+                } }
+                if b.kind == "restaurant" { for x in (b.x + 1)..<(b.x + b.w - 1) { lw.setTile(2, x, b.y + 1, content.tid("kitchen")) } }
+            } else if b.w >= 10 && b.d >= 8 {
                 let mid = b.x + b.w / 2, half = b.y + b.d / 2
                 for y in (b.y + 1)..<(half - 1) { lw.setTile(2, mid, y, wall) }
                 for y in stride(from: b.y + 1, to: half - 1, by: 2) { for x in stride(from: b.x + 2, to: b.x + b.w - 2, by: 2) where x != mid && lw.tile(2, x, y) == 0 {
@@ -807,13 +831,20 @@ extension Society {
         // the well-off: a villa quarter once the town has 300 people (one villa for every 120 more, 24 at most),
         // and a luxury car showroom when it has eight villas
         if key == nil, let lux = luxuryToBuild(d) { key = lux }
+        // what every town of its size has: a food store, somewhere to eat, clothes, a supermarket, a cinema, an
+        // entertainment centre, and in a big city an amusement park and a stadium (one of each first)
+        if key == nil {
+            for (k, need) in Society.amenities where pop >= need && !d.buildings.contains(where: { $0.kind == k }) { key = k; break }
+        }
         if key == nil {
             let occupancy = d.homes > 0 ? pop / Double(d.homes) : 1
             let jobs = Double(d.jobs)
             if occupancy > 0.85 { key = nextKind(d, ["flats", "terrace", "brownstone", "tower", "highrise", "pencil"], pop) }
             else if jobs < pop * 0.6 {
-                key = d.buildings.filter({ ["shops", "mall"].contains($0.kind) }).count <= d.buildings.filter({ $0.kind == "factory" }).count
-                    ? nextKind(d, ["shops", "offices", "mall", "skyscraper", "crown", "deco", "supertall"], pop) : "factory"
+                let trade = d.buildings.filter { $0.def.use == .commercial }.count, industry = d.buildings.filter { $0.def.use == .industrial && $0.kind != "oilwell" && $0.kind != "refinery" }.count
+                key = trade <= industry * 2
+                    ? nextKind(d, ["shops", "grocery", "restaurant", "clothing", "offices", "supermarket", "mall", "skyscraper", "crown", "deco", "supertall"], pop)
+                    : nextKind(d, ["factory", "electronics", "steelmill", "carplant"], pop)
             }
         }
         guard let k = key, let def = CityKind.byKey[k] else { return }
@@ -821,7 +852,8 @@ extension Society {
         let quarter = (k == "villa" || k == "showroom") ? d.buildings.first(where: { $0.kind == "villa" }).map { TilePos($0.x + $0.w / 2, $0.y + $0.d / 2) } : nil
         guard let site = findSite(d, w: def.w, h: def.d, outskirts: def.use == .agricultural || (k == "villa" && quarter == nil), near: quarter) else {
             // no room left: the district spreads out (farther fields, new blocks), up to 200 tiles
-            if d.radius < 200 { d.radius = min(200, d.radius + 16); d.note("spreads out to \(d.radius) tiles") } else { d.note("no room for a \(def.en)") }
+            // (buildings are life-sized: a city of thousands spreads over a kilometre or two)
+            if d.radius < 600 { d.radius = min(600, d.radius + 24); d.note("spreads out to \(d.radius) tiles") } else { d.note("no room for a \(def.en)") }
             return
         }
         var b = CityBuilding()
@@ -834,12 +866,90 @@ extension Society {
         d.note("planned: \(def.en) at \(b.x),\(b.y)")
     }
 
+    /// What a hall of a kind is filled with.
+    static let fittings: [String: String] = ["supermarket": "market_stall", "grocery": "market_stall", "clothing": "bookshelf", "restaurant": "table",
+                                             "cinema": "chair", "arcade": "machine", "electronics": "server", "steelmill": "furnace", "carplant": "workbench",
+                                             "mall": "market_stall", "showroom_hall": "desk"]
+
+    /// A stadium: a grass pitch with its lines, a running track round it, stands of seats rising on every side,
+    /// a concrete outer wall with the main gate, and floodlights at the corners.
+    func raiseStadium(_ b: CityBuilding) {
+        let T = { (k: String) in self.content.tid(k) }
+        let cx = Double(b.w) / 2, cy = Double(b.d) / 2
+        for y in 0..<b.d { for x in 0..<b.w {
+            let t = TilePos(b.x + x, b.y + y)
+            world.setTile(1, t.x, t.y, 0); world.setTile(3, t.x, t.y, 0); world.setTile(2, t.x, t.y, 0)
+            let edge = x == 0 || y == 0 || x == b.w - 1 || y == b.d - 1
+            if edge { world.setTile(0, t.x, t.y, T("stone_floor")); world.setTile(2, t.x, t.y, t == b.entrance ? T("door_wood") : T("wall_concrete")); continue }
+            // distance from the middle on the oval (1 at the inner edge of the stands)
+            let ex = (Double(x) + 0.5 - cx) / (cx - 2), ey = (Double(y) + 0.5 - cy) / (cy - 2)
+            let r = (ex * ex + ey * ey).squareRoot()
+            if r < 0.62 {
+                world.setTile(0, t.x, t.y, T("grass"))
+                // the pitch's white lines: halfway, the touchlines, the centre circle
+                let halfway = abs(Double(x) + 0.5 - cx) < 0.6, ring = abs(r - 0.18) < 0.025
+                if halfway || ring || abs(r - 0.6) < 0.02 { world.setTile(1, t.x, t.y, T("path")) }
+            } else if r < 0.78 {
+                world.setTile(0, t.x, t.y, T("dirt"))                                         // the running track
+            } else {
+                world.setTile(0, t.x, t.y, T("stone_floor"))
+                // the stands: rows of seats, a gangway every eighth tile and round the inside
+                if r > 0.82 && (x + y) % 8 != 0 { world.setTile(2, t.x, t.y, T("chair")) }
+            }
+        } }
+        // the way in from the main gate to the track
+        for y in (b.d * 3 / 4)..<(b.d - 1) { let t = TilePos(b.entrance.x, b.y + y); world.setTile(2, t.x, t.y, 0); world.setTile(0, t.x, t.y, T("stone_floor")) }
+        for (x, y) in [(2, 2), (b.w - 3, 2), (2, b.d - 3), (b.w - 3, b.d - 3)] { world.setTile(2, b.x + x, b.y + y, T("lamp_on")) }
+    }
+
+    /// An amusement park: paths in a loop, a big wheel (a ring of lights round a hub), a carousel of banners, a
+    /// roller coaster's track along the back, stalls and food, a lake, trees and lamps, fenced, a gate in front.
+    func raiseFunpark(_ b: CityBuilding) {
+        let T = { (k: String) in self.content.tid(k) }
+        var r = RNG(seed: b.id &* 7919 &+ b.x)
+        for y in 0..<b.d { for x in 0..<b.w {
+            let t = TilePos(b.x + x, b.y + y)
+            world.setTile(1, t.x, t.y, 0); world.setTile(3, t.x, t.y, 0); world.setTile(2, t.x, t.y, 0)
+            world.setTile(0, t.x, t.y, T("grass"))
+            let edge = x == 0 || y == 0 || x == b.w - 1 || y == b.d - 1
+            if edge { world.setTile(2, t.x, t.y, t == b.entrance ? T("fence_gate") : T("fence")); continue }
+            // a loop of path two tiles in from the fence, and a path up the middle from the gate
+            let loop = (x == 3 || x == 4 || x == b.w - 4 || x == b.w - 5) && y >= 3 && y <= b.d - 4 || (y == 3 || y == 4 || y == b.d - 4 || y == b.d - 5) && x >= 3 && x <= b.w - 4
+            let spine = abs(x - b.w / 2) <= 1 && y >= b.d / 2
+            if loop || spine { world.setTile(0, t.x, t.y, T("stone_floor")); continue }
+            // the roller coaster's track along the back
+            if y >= 6 && y <= 8 && x >= 6 && x < b.w - 6 {
+                world.setTile(0, t.x, t.y, T("stone_floor"))
+                if y != 7 { world.setTile(2, t.x, t.y, T("fence")) } else if x % 6 == 0 { world.setTile(2, t.x, t.y, T("wall_concrete")) }      // rails and pylons
+                continue
+            }
+            if r.unit() < 0.02 { world.setTile(2, t.x, t.y, T("tree_oak")) }
+        } }
+        // the big wheel: a ring of lamps round a hub, on the left
+        let wx = b.x + b.w / 4, wy = b.y + b.d / 2 + 2
+        for k in 0..<16 { let a = Double(k) / 16 * 2 * .pi; world.setTile(2, wx + Int((cos(a) * 6).rounded()), wy + Int((sin(a) * 6).rounded()), T("lamp_on")) }
+        world.setTile(2, wx, wy, T("statue"))
+        // the carousel: a ring of banners, on the right
+        let cx = b.x + b.w * 3 / 4, cy = b.y + b.d / 2 + 2
+        for k in 0..<12 { let a = Double(k) / 12 * 2 * .pi; world.setTile(2, cx + Int((cos(a) * 4).rounded()), cy + Int((sin(a) * 4).rounded()), T("banner_1")) }
+        world.setTile(2, cx, cy, T("lamp_on"))
+        // a lake with lily pads, stalls along the spine, lamps
+        for y in (b.d - 12)..<(b.d - 7) { for x in 7..<16 { world.setTile(0, b.x + x, b.y + y, T("shallow_water")); world.setTile(2, b.x + x, b.y + y, 0) } }
+        for y in stride(from: b.d / 2 + 1, to: b.d - 2, by: 4) { world.setTile(2, b.x + b.w / 2 - 3, b.y + y, T("market_stall")); world.setTile(2, b.x + b.w / 2 + 3, b.y + y, T("market_stall")) }
+        for (x, y) in [(5, 5), (b.w - 6, 5), (5, b.d - 6), (b.w - 6, b.d - 6)] { world.setTile(2, b.x + x, b.y + y, T("lamp_on")) }
+    }
+
+    /// The amenities of a town, each once, when it has this many people.
+    static let amenities: [(String, Double)] = [("grocery", 30), ("restaurant", 80), ("clothing", 150), ("supermarket", 300), ("cinema", 500), ("arcade", 700),
+                                               ("funpark", 2000), ("stadium", 3000)]
+
     /// The next kind of a group: the ones the district is big enough for (a small one builds low, a city of
     /// thousands builds towers), taking the one it has fewest of, so streets do not repeat one building.
     func nextKind(_ d: District, _ group: [String], _ pop: Double) -> String {
         // what each kind needs: people already living in the district
         let needs: [String: Double] = ["flats": 0, "terrace": 0, "shops": 0, "offices": 300, "tower": 200, "mall": 800, "highrise": 500, "skyscraper": 1500,
-                                     "brownstone": 100, "pencil": 900, "crown": 1100, "deco": 1600, "supertall": 2400]
+                                     "brownstone": 100, "pencil": 900, "crown": 1100, "deco": 1600, "supertall": 2400,
+                                     "grocery": 0, "restaurant": 50, "clothing": 80, "supermarket": 300, "factory": 0, "electronics": 600, "steelmill": 1000, "carplant": 1500]
         let open = group.filter { pop >= needs[$0] ?? 0 }
         let pool = open.isEmpty ? [group[0]] : open
         return pool.min { a, b in
@@ -936,8 +1046,10 @@ extension Society {
     func findSite(_ d: District, w: Int, h: Int, outskirts: Bool = false, near: TilePos? = nil) -> TilePos? {
         let r = d.radius
         var cands: [(Int, TilePos)] = []
-        for y in stride(from: d.center.y - r, through: d.center.y + r - h, by: 2) {
-            for x in stride(from: d.center.x - r, through: d.center.x + r - w, by: 2) {
+        // a big building is looked for on a coarser grid (a stadium need not be tried every second tile)
+        let step = max(2, min(w, h) / 4)
+        for y in stride(from: d.center.y - r, through: d.center.y + r - h, by: step) {
+            for x in stride(from: d.center.x - r, through: d.center.x + r - w, by: step) {
                 let o = TilePos(x, y)
                 let dist = (x + w / 2 - d.center.x) * (x + w / 2 - d.center.x) + (y + h / 2 - d.center.y) * (y + h / 2 - d.center.y)
                 cands.append((dist, o))

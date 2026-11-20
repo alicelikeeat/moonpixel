@@ -461,6 +461,11 @@ final class GameScene: SKScene {
     /// Memory warning: keep only the chunk textures on screen.
     func trimChunkTextures() { chunkTex.trim(to: 0, keep: Set(chunkKeys.values)) }
 
+    /// People on the 2D map are drawn a little smaller than a tile's width allows them: life-sized beside the
+    /// buildings (a tile is 2 m), still big enough to see and tap.
+    static let personScale: CGFloat = 0.78
+    static func personSize(_ t: SKTexture) -> CGSize { let z = t.size(); return CGSize(width: z.width * personScale, height: z.height * personScale) }
+
     private func charTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> SKTexture {
         let dir = abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down")
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
@@ -517,7 +522,7 @@ final class GameScene: SKScene {
                 tex = charTexture(look, a.facing, moving: a.moving, acting: working, held: held, child: st == "child", female: a.female, phase: phase + a.id)
             }
             node.texture = tex
-            node.size = tex.size()
+            node.size = GameScene.personSize(tex)
             let side = abs(a.facing.x) > abs(a.facing.y)
             node.xScale = side && a.facing.x < 0 ? -1 : 1
             node.zRotation = a.sleeping ? -.pi / 2 : 0
@@ -559,7 +564,7 @@ final class GameScene: SKScene {
                 }()
                 let tex = charTexture(f.look, f.facing, moving: f.moving, acting: false, held: "", child: f.child, female: f.female, phase: phase + f.id)
                 node.texture = tex
-                node.size = tex.size()
+                node.size = GameScene.personSize(tex)
                 node.xScale = abs(f.facing.x) > abs(f.facing.y) && f.facing.x < 0 ? -1 : 1
                 node.position = CGPoint(x: f.pos.x, y: -(f.pos.y + 4))
                 node.zPosition = 10 + CGFloat(f.pos.y) * 0.001
@@ -576,7 +581,7 @@ final class GameScene: SKScene {
             ptex = charTexture(model.playerLook, facing, moving: moving, acting: attackT > 0.12, held: held, child: false, female: false, phase: phase)
         }
         playerNode.texture = ptex
-        playerNode.size = ptex.size()
+        playerNode.size = GameScene.personSize(ptex)
         let side = abs(facing.x) > abs(facing.y)
         playerNode.xScale = side && facing.x < 0 ? -1 : 1
         playerNode.position = CGPoint(x: player.x, y: -(player.y + 4))

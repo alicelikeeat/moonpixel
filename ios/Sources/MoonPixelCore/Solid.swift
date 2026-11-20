@@ -692,7 +692,10 @@ enum TileShapes {
 /// People, animals, roofs and standards as meshes. A figure stands on y = 0 at the origin and looks
 /// south (+z); the renderer turns it. Sizes are in sixteenths of a tile, like the tile shapes.
 public enum Figure3D {
-    public static let adultHeight: Float = 24.0 / 16
+    /// People are drawn life-sized: a tile is 2 m, so a grown-up of 1.75 m is a little under a tile tall (the
+    /// figure was first drawn 1.5 tiles tall; it is scaled by this).
+    public static let personScale: Float = 0.6
+    public static let adultHeight: Float = 24.0 / 16 * personScale
     /// How finely people, animals, vehicles and machines are modelled (Mesh3D.detail): 1 standard, 2 high (four
     /// times the faces on every curve), 3 very high. A setting of the game; tests build at 1.
     nonisolated(unsafe) public static var detail = 1
@@ -702,7 +705,7 @@ public enum Figure3D {
         let cm = CharacterModels.of(look.model)
         if let r = cm, r.round { return roundling(r, frame: frame, child: child) }
         var m = Mesh3D(detail: Figure3D.detail)
-        let k: Float = child ? 0.68 : 1
+        let k: Float = (child ? 0.68 : 1) * personScale
         let o = SIMD3<Float>(0, 0, 0)
         func b(_ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA) { m.px(o, x, y, z, w, h, d, c, scale: k, faces: .all) }
         // modelled with curves: every measure is in sixteenths of a tile (as the figure was drawn), scaled by k
@@ -1026,10 +1029,29 @@ public enum Figure3D {
 
     /// A vehicle, centred on the origin, its length along +x (forward), its width along z, its wheels on y = 0.
     /// Its size is the vehicle's own (`VehicleSpec.length` and `deckW`), so what is drawn is what collides.
+    /// The size the shapes of the big vehicles were drawn at (length, inside width): a plane, a train or a ship
+    /// is drawn at that size and then stretched to its real one (VehicleSpec), so its parts keep their places.
+    static let designSize: [VehicleKind: (Float, Float)] = [
+        .train: (8, 1.2), .hsr: (10, 1.2), .airliner: (5, 1), .cargoPlane: (5, 1), .turboprop: (3.5, 0.8), .regionalJet: (4, 0.9),
+        .widebody: (7, 1.4), .fighter: (2.5, 0.4), .ferry: (3, 1.4), .liner: (5, 1.6), .freighter: (6, 1.6), .carrier: (14, 3.2)]
+
     public static func vehicle(_ k: VehicleKind, livery: RGBA = RGBA(200, 60, 50)) -> Mesh3D {
+        var m = vehicleShape(k, livery: livery)
+        guard let (dl, dw) = designSize[k] else { return m }
+        // to its real size: a plane or a ship grows every way alike; a train grows longer (a carriage is no taller)
+        let sp = k.spec
+        let sx = Float(sp.length) / dl, sz = Float(max(0.5, sp.deckW + 0.2)) / (dw + 0.2)
+        let sy: Float = k.mode == .rail ? 1 : sx
+        let szz: Float = k.mode == .rail ? sz : sx
+        m.positions = m.positions.map { SIMD3($0.x * sx, $0.y * sy, $0.z * szz) }
+        return m
+    }
+
+    static func vehicleShape(_ k: VehicleKind, livery: RGBA) -> Mesh3D {
         var m = Mesh3D(detail: Figure3D.detail)
         let sp = k.spec
-        let L = Float(sp.length), W = Float(max(0.5, sp.deckW + 0.2)), hl = L / 2, hw = W / 2
+        let design = designSize[k]
+        let L = design?.0 ?? Float(sp.length), W = Float(max(0.5, (design.map { Double($0.1) } ?? sp.deckW) + 0.2)), hl = L / 2, hw = W / 2
         let glass = RGBA(150, 200, 230), dark = RGBA(40, 42, 48), white = RGBA(235, 236, 240), steel = RGBA(150, 156, 170)
         func wheels(_ xs: [Float]) { for x in xs { for z in [-hw, hw - 0.12] { m.box(x - 0.15, 0, z, x + 0.15, 0.3, z + 0.12, dark, faces: .all) } } }
         switch k {
