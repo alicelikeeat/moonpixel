@@ -101,7 +101,7 @@ jobs:
           xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
             -resultBundlePath ui.xcresult -retry-tests-on-failure -test-iterations 2 CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
-          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -60 | tee ui-result.txt
+          grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -150 | tee ui-result.txt
           mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
           python3 -c "
           import json,shutil

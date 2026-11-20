@@ -271,8 +271,9 @@ struct HUDView: View {
                     if longPressed { longPressed = false; return }
                     withAnimation(.spring(response: 0.36, dampingFraction: 0.75)) { speedOpen = true }
                     let opened = Date()
+                    // (UI tests keep it open until a speed is chosen: a fold between finding a button and tapping it failed them)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        if speedOpen && Date().timeIntervalSince(opened) >= 4.9 { withAnimation(.snappy) { speedOpen = false } }
+                        if speedOpen && Date().timeIntervalSince(opened) >= 4.9 && !ProcessInfo.processInfo.arguments.contains("--autostart") { withAnimation(.snappy) { speedOpen = false } }
                     }
                 } label: {
                     HStack(spacing: 4) {

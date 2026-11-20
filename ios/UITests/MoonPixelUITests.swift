@@ -19,14 +19,16 @@ final class MoonPixelUITests: XCTestCase {
         open.tap()
         let b = app.buttons[name].firstMatch
         XCTAssertTrue(b.waitForExistence(timeout: 10), "\(name) is in the More panel")
-        let until = Date().addingTimeInterval(12)
-        // the More panel has grown: scroll it until the button is on screen
-        var scrolls = 0
-        while !b.isHittable && Date() < until {
-            usleep(300_000)
-            if !b.isHittable && scrolls < 8 { app.scrollViews.firstMatch.swipeUp(); scrolls += 1 }
+        sleep(1)                                          // let the panel finish sliding in before judging where things are
+        // the More panel has grown: scroll it only when the button is really below (or above) the screen
+        let win = app.windows.firstMatch.frame
+        for _ in 0..<8 where !b.isHittable {
+            let f = b.frame
+            if f.maxY > win.maxY - 20 { app.scrollViews.firstMatch.swipeUp() }
+            else if f.minY < win.minY + 40 { app.scrollViews.firstMatch.swipeDown() }
+            usleep(500_000)
         }
-        usleep(600_000)                                   // let the slide finish
+        print("UITEST more \(name): frame \(b.frame) hittable \(b.isHittable) window \(win)")
         b.tap()
     }
 
@@ -320,7 +322,14 @@ final class MoonPixelUITests: XCTestCase {
         sleep(3)
         more(app, "Metro")
         let money = app.descendants(matching: .any)["metro-money"]
-        XCTAssertTrue(money.waitForExistence(timeout: 15), "the city's HUD is up")
+        let up = money.waitForExistence(timeout: 15)
+        if !up {
+            // (the CI log keeps only UITEST lines of up to 300 characters, sorted: numbered short lines)
+            print("UITEST metro 00 missing: toast '\(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "-")' map \(app.buttons["Map"].exists) more-open \(app.buttons["Metro"].exists)")
+            let lines = app.debugDescription.split(separator: "\n").filter { $0.contains("identifier") || $0.contains("label") }.prefix(30)
+            for (i, l) in lines.enumerated() { print(String(format: "UITEST metro %02d ", i + 1) + String(l.trimmingCharacters(in: .whitespaces).prefix(240))) }
+        }
+        XCTAssertTrue(up, "the city's HUD is up")
         sleep(2)
         shot("metro-00-start")
         let before = money.label
