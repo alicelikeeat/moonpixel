@@ -160,8 +160,9 @@ final class SolidTests: XCTestCase {
             check(m, "human \(held) \(frame)")
             let b = m.bounds
             XCTAssertEqual(b.min.y, 0, accuracy: 0.001, "feet on the ground")
-            XCTAssertLessThan(b.max.y, child ? 1.6 : 2.3)
-            XCTAssertGreaterThan(b.max.y, child ? 0.9 : 1.4)
+            // life-sized (a tile is 2 m): a grown-up about 1.75 m, a child about 1.2 m
+            XCTAssertLessThan(b.max.y, child ? 1.0 : 1.4)
+            XCTAssertGreaterThan(b.max.y, child ? 0.55 : 0.8)
             XCTAssertLessThan(max(abs(b.min.x), abs(b.max.x)), 0.6)
         } } }
         // the same look gives the same mesh; another shirt gives another
@@ -174,7 +175,7 @@ final class SolidTests: XCTestCase {
         let f = Figure3D.human(look, frame: 0, held: "", child: false, female: false, face: face)
         check(f, "face")
         // (the photo's pixels are plates just in front of the face, in place of the modelled eyes)
-        XCTAssertTrue(f.positions.contains { abs($0.z - (3.6 + 0.25) / 16) < 1e-4 }, "the photo's plates on the face")
+        XCTAssertTrue(f.positions.contains { abs($0.z - (3.6 + 0.25) / 16 * Figure3D.personScale) < 1e-4 }, "the photo's plates on the face")
         XCTAssertNotEqual(f.positions, Figure3D.human(look, frame: 0, held: "", child: false, female: false).positions)
         for sp in Species.all { for frame in 0..<2 {
             let m = Figure3D.animal(sp, frame: frame)

@@ -446,11 +446,14 @@ extension Society {
     }
     func identityShare(_ s: Settlement, _ nation: Int) -> Double {
         if s.members.isEmpty { return 0 }
-        return Double(s.members.filter { agents[$0]?.nation == nation }.count) / Double(s.members.count)
+        // prisoners of war held there are not its people: they neither stir it up nor carry it over
+        let own = s.members.filter { agents[$0]?.captiveOf == nil }
+        if own.isEmpty { return 0 }
+        return Double(own.filter { agents[$0]?.nation == nation }.count) / Double(own.count)
     }
     func majorityIdentity(_ s: Settlement) -> Int {
         var c: [Int: Int] = [:]
-        for id in s.members { if let n = agents[id]?.nation { c[n, default: 0] += 1 } }
+        for id in s.members { if let a = agents[id], a.captiveOf == nil, let n = a.nation { c[n, default: 0] += 1 } }
         return c.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key ?? (s.nation ?? 0)
     }
     func power(_ n: Nation) -> Double { Double(n.pop) + 2 * Double(n.soldiers) }

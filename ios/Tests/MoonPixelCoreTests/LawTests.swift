@@ -327,7 +327,8 @@ final class PlayerTests: XCTestCase {
         XCTAssertTrue(s.playerStrike(from: me, dir: Vec2(1, 0), weapon: "sword", clock: clock + 0.1).onCooldown, "weapons have a cooldown")
         var dead = false
         for _ in 0..<5 where !dead { clock += 0.6; dead = s.playerStrike(from: me, dir: Vec2(1, 0), weapon: "sword", clock: clock).hits.first?.dead ?? false }
-        XCTAssertTrue(dead); XCTAssertNil(s.agents[foe.id])
+        // nobody is killed in war: the soldier who goes down is taken prisoner (or disarmed and sent home)
+        XCTAssertTrue(dead); XCTAssertNotNil(s.agents[foe.id]); XCTAssertNil(s.agents[foe.id]?.legion, "out of the army")
         XCTAssertEqual(foeLegion.members.count, strength - 1, "the army is really one soldier weaker")
         XCTAssertLessThan(s.realm.relation(1, 2)!.value, relBefore, "attacking in peacetime sours relations")
         XCTAssertLessThan(s.realm.nation(2)!.rep, 0)
@@ -350,7 +351,9 @@ final class PlayerTests: XCTestCase {
         var died = false
         for _ in 0..<200 where !died { died = s.playerThreat(at: other.pos, dt: 0.5).died }
         XCTAssertTrue(died)
-        XCTAssertEqual(s.realm.player.deaths, 1)
+        XCTAssertEqual(s.realm.player.deaths, 0, "taken prisoner, not killed")
+        s.realm.player.body = Body()
+        XCTAssertNotNil(s.takeTravellerCaptor(), "carried to a town of theirs")
         let home = s.spawnPoint(near: other.pos)
         XCTAssertEqual(s.town(near: home)?.nation, 1, "respawn in the player's own nation")
         XCTAssertEqual(s.playerThreat(at: home, dt: 0.5).attackers, 0)
