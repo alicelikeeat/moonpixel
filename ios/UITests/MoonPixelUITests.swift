@@ -94,7 +94,8 @@ final class MoonPixelUITests: XCTestCase {
         let mapBox = app.scrollViews.containing(.image, identifier: "map-image").firstMatch
         (mapBox.exists ? mapBox : app.images["map-image"]).tap(); sleep(1)
         // a name label or a landmark may sit where the tap lands: then go by a place's name from the list
-        if !app.buttons["teleport"].waitForExistence(timeout: 2) && !text(app, containing: "Teleported").exists && app.buttons["map-go-0"].exists {
+        print("UITEST map pick: teleport \(app.buttons["teleport"].waitForExistence(timeout: 5)) pick '\(app.staticTexts["map-pick-text"].exists ? app.staticTexts["map-pick-text"].label : "-")' go0 \(app.buttons["map-go-0"].exists) toast '\(app.staticTexts["last-toast"].exists ? app.staticTexts["last-toast"].label : "-")' box \(mapBox.exists ? mapBox.frame : .zero)")
+        if !app.buttons["teleport"].exists && !text(app, containing: "Teleported").exists && app.buttons["map-go-0"].exists {
             app.buttons["map-go-0"].tap(); sleep(2)
         }
         shot("05i-map-pick")
@@ -593,18 +594,27 @@ final class MoonPixelUITests: XCTestCase {
 
     /// Choose a game speed: the speed bar folds to the current speed, so open it first when it is folded.
     func speed(_ app: XCUIApplication, _ label: String) {
-        // the bar folds itself five seconds after opening: open it and tap at once, a few times if need be
-        for _ in 0..<4 {
-            let b = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
-            // tap where it was seen (the HUD redraws often: a button re-found at tap time can be a moment gone)
-            if b.exists && b.isHittable {
-                let f = b.frame
-                app.windows.firstMatch.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
-                return
-            }
-            let opener = app.buttons["speed"]
-            if opener.exists && opener.isHittable { opener.tap(); usleep(800_000) } else { sleep(1) }
+        // read the screen once (a snapshot that fails is retried, never a test failure: the HUD redraws often and a
+        // button looked up twice can be a moment gone), then tap where the button was seen
+        let win = app.windows.firstMatch.frame
+        func find(_ s: XCUIElementSnapshot) -> CGRect? {
+            if s.elementType == .button && s.label == label && !s.frame.isEmpty && win.contains(CGPoint(x: s.frame.midX, y: s.frame.midY)) { return s.frame }
+            for c in s.children { if let f = find(c) { return f } }
+            return nil
         }
+        func tap(_ f: CGRect) { app.windows.firstMatch.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap() }
+        for _ in 0..<6 {
+            guard let snap = try? app.snapshot() else { sleep(1); continue }
+            if let f = find(snap) { tap(f); return }
+            // folded: open it (the opener is labelled "Speed ...")
+            func opener(_ s: XCUIElementSnapshot) -> CGRect? {
+                if s.elementType == .button && s.identifier == "speed" { return s.frame }
+                for c in s.children { if let f = opener(c) { return f } }
+                return nil
+            }
+            if let o = opener(snap) { tap(o); usleep(800_000) } else { sleep(1) }
+        }
+        print("UITEST speed: \(label) was not found")
     }
 }
 
