@@ -177,9 +177,15 @@ jobs:
           MP_VERSION: ${{ needs.ui.outputs.version }}
         run: |
           TAG="v${MP_VERSION}"
-          gh release create "$TAG" MoonPixel-${MP_VERSION}-unsigned.ipa ui/ui-result.txt $(ls ui/ui-*.png 2>/dev/null) --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)" \
-            --notes-file notes-cut.md
+          FILES="MoonPixel-${MP_VERSION}-unsigned.ipa ui/ui-result.txt $(ls ui/ui-*.png 2>/dev/null)"
+          TITLE="MoonPixel ${MP_VERSION} (build ${GITHUB_RUN_NUMBER}, unsigned)"
+          # GitHub refuses this job's token a new tag on a commit whose workflow file changed since the last release
+          # (403); then the release is made as a draft (no tag yet) with the same files, published by the owner
+          if ! gh release create "$TAG" $FILES --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TITLE" --notes-file notes-cut.md; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+            gh release create "$TAG" $FILES --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --draft --title "$TITLE" --notes-file notes-cut.md
+            echo "::warning::Published as a draft: open the release on GitHub and press Publish to make the tag $TAG"
+          fi
 
   media:
     runs-on: macos-latest
