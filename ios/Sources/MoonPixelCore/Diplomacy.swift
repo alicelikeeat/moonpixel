@@ -231,6 +231,10 @@ extension Civ {
         let bodies = waterBodies()
         let home = homeCity(a)
         func near(_ c: CivCity) -> Int { home.map { dist($0.regionKey, c.regionKey) } ?? 0 }
+        // short of oil or gold: the city on the oilfield or the gold mine first (Resources.swift)
+        let lacks = shortages(a)
+        if lacks.contains("crude") || lacks.contains("fuel"), let c = theirs.filter({ (regions[$0.regionKey]?.oil ?? 0) > 0.3 }).min(by: { near($0) != near($1) ? near($0) < near($1) : $0.id < $1.id }) { return (c.id, "oilfield") }
+        if lacks.contains("gold"), let c = theirs.filter({ (regions[$0.regionKey]?.gold ?? 0) > 0.2 }).min(by: { near($0) != near($1) ? near($0) < near($1) : $0.id < $1.id }) { return (c.id, "goldfield") }
         // a port first: the capital's port above all (the most worth having), then the nearest
         let cap = polities[b]?.capital
         let ports = theirs.filter { portSite($0.regionKey, bodies: bodies) != nil }

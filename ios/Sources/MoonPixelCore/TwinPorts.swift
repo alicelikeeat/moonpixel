@@ -143,7 +143,9 @@ public final class TwinPorts {
 
     /// The envoy goes and is answered. Returns true when the small nation refused.
     @discardableResult public func envoy() -> Bool {
-        guard let id = c.sendEnvoy(great, to: small), let e = c.envoysOut.first(where: { $0.id == id }) else { return false }
+        guard let id = c.sendEnvoy(great, to: small), let i = c.envoysOut.firstIndex(where: { $0.id == id }) else { return false }
+        c.envoysOut[i].target = east.id; c.envoysOut[i].targetKind = "port"          // the battle is for the east port
+        let e = c.envoysOut[i]
         c.advance(to: e.arrives + MP.daySeconds / 24)
         return c.envoysOut.first { $0.id == id }?.state == .refused
     }

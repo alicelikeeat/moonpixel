@@ -128,7 +128,7 @@ extension Society {
         switch st.stage {
         case 0:
             if let id = c.sendEnvoy(st.great, to: st.small) {
-                if let i = c.envoysOut.firstIndex(where: { $0.id == id }) { c.envoysOut[i].forced = st.refuse }
+                if let i = c.envoysOut.firstIndex(where: { $0.id == id }) { c.envoysOut[i].forced = st.refuse; c.envoysOut[i].target = st.east; c.envoysOut[i].targetKind = "port" }
                 st.envoy = id; st.stage = 1; st.log.append("the envoy set out")
             } else { st.done = true; st.log.append("no envoy could go") }
         case 1:

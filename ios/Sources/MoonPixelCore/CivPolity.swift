@@ -435,6 +435,7 @@ extension Civ {
             want("plant", p.knows("electricity") && c.energyUsed > c.energyMade)
             want("oilwell", p.knows("oil") && (regions[c.regionKey]?.oil ?? 0) > 0.3 && c.has("oilwell") == 0)
             want("refinery", p.knows("oil") && c.has("oilwell") > 0 && c.has("refinery") == 0)
+            want("gold_mine", p.knows("metallurgy") && (regions[c.regionKey]?.gold ?? 0) > 0.2 && c.has("gold_mine") == 0)
             want("greenhouse", p.knows("greenhouse") && c.foodDays < 20)
             want("ration_works", p.knows("preserving") && big && c.has("ration_works") == 0)
             want("barracks", big && c.has("barracks") == 0 && c.pop > 60)

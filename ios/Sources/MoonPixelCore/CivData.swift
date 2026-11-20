@@ -187,7 +187,7 @@ public struct CivItem: Codable, Equatable {
     /// The kinds that come with the game (the "moonpixel" content pack).
     static let builtin: [CivItem] = [
         CivItem(key: "timber", en: "Timber", zh: "木材"), CivItem(key: "stone", en: "Stone", zh: "石料"),
-        CivItem(key: "ore", en: "Iron ore", zh: "铁矿石"), CivItem(key: "coal", en: "Coal", zh: "煤"), CivItem(key: "crude", en: "Crude oil", zh: "原油"),
+        CivItem(key: "ore", en: "Iron ore", zh: "铁矿石"), CivItem(key: "coal", en: "Coal", zh: "煤"), CivItem(key: "crude", en: "Crude oil", zh: "原油"), CivItem(key: "gold", en: "Gold", zh: "黄金"),
         CivItem(key: "steel", en: "Steel", zh: "钢材"), CivItem(key: "fuel", en: "Fuel", zh: "燃料"),
         CivItem(key: "parts", en: "Machine parts", zh: "机械部件"), CivItem(key: "electronics", en: "Electronics", zh: "电子元件"),
         CivItem(key: "armor", en: "Armour plate", zh: "装甲板"), CivItem(key: "engine", en: "Engines", zh: "发动机"),
@@ -227,6 +227,7 @@ public struct CivFacility: Codable, Equatable {
         CivFacility(key: "laboratory", en: "Laboratory", zh: "实验室", tech: "electricity", cost: ["steel": 30, "parts": 10], workers: 8, energy: -4, needs: nil),
         CivFacility(key: "mine", en: "Mine", zh: "矿井", tech: "metallurgy", cost: ["timber": 20], workers: 6, energy: 0, needs: nil),
         CivFacility(key: "oilwell", en: "Oil well", zh: "油井", tech: "oil", cost: ["steel": 12], workers: 4, energy: -1, needs: nil),
+        CivFacility(key: "gold_mine", en: "Gold mine", zh: "金矿", tech: "metallurgy", cost: ["timber": 20, "stone": 20], workers: 6, energy: 0, needs: nil),
         CivFacility(key: "steelworks", en: "Steelworks", zh: "钢铁厂", tech: "steel", cost: ["stone": 40, "timber": 20], workers: 10, energy: -2, needs: nil),
         CivFacility(key: "refinery", en: "Refinery", zh: "炼油厂", tech: "oil", cost: ["steel": 30], workers: 6, energy: -2, needs: nil),
         CivFacility(key: "factory", en: "Factory", zh: "工厂", tech: "machining", cost: ["stone": 30, "timber": 20], workers: 10, energy: -2, needs: nil),

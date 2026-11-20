@@ -71,6 +71,9 @@ public struct CivRegion: Codable, Equatable {
     public var rx = 0, ry = 0
     public var land = 0.0, water = 0.0, deep = 0.0, mountain = 0.0
     public var fertility = 0.0, forest = 0.0, ore = 0.0, coal = 0.0, oil = 0.0
+    /// Gold in the ground (Resources.swift); nil in regions found before gold was looked for.
+    public var goldBox: Double?
+    public var gold: Double { get { goldBox ?? 0 } set { goldBox = newValue } }
     public var river = false
     public var city: Int?                                   // the city in it (one at most)
     public var foundAt = 0.0
@@ -238,6 +241,11 @@ public final class Civ: Codable {
     public var heldPasses: [Int64: Int] = [:] { didSet { if heldPasses != oldValue { geoCache.clear() } } }
     /// What happened, in order, with the ids involved: the record a war can be replayed and checked from.
     public var chronicle: [CivEvent] = []
+    /// Trade routes between nations, goods at sea, and spies abroad (Resources.swift).
+    public var tradeRoutes: [CivTradeRoute] = []
+    public var shipments: [CivShipment] = []
+    public var spies: [CivSpy] = []
+    public var nextRoute = 1, nextSpy = 1
     /// Geography worked out from the regions, kept between asks (Geography.swift; never saved).
     public let geoCache = CivGeoCache()
     public init(seed: Int) { self.seed = seed; rng = RNG(seed: seed &* 7919 &+ 17) }
@@ -247,7 +255,7 @@ public final class Civ: Codable {
     enum CodingKeys: String, CodingKey {
         case schema, seed, time, day, hourAcc, regions, cities, trips, polities, relations, forces, units, projects, strikes, wrecks, news, fights, happened, intel
         case nextCity, nextTrip, nextForce, nextUnit, nextProject, nextNation, totals, rng, born, commandResults, commandOrder, pendingCommands, towerIndex, campaign
-        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle, underNations
+        case coastRule, seaChecked, envoys, envoysOut, vassals, targetWars, nextEnvoy, nextTargetWar, drops, giants, nextDrop, nextGiant, heldPasses, chronicle, underNations, tradeRoutes, shipments, spies, nextRoute, nextSpy
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -274,6 +282,8 @@ public final class Civ: Codable {
         try c.encode(drops, forKey: .drops); try c.encode(giants, forKey: .giants); try c.encode(nextDrop, forKey: .nextDrop); try c.encode(nextGiant, forKey: .nextGiant)
         try c.encode(heldPasses.keys.sorted().map { [$0, Int64(heldPasses[$0]!)] }, forKey: .heldPasses); try c.encode(chronicle, forKey: .chronicle)
         try c.encode(underNations, forKey: .underNations)
+        try c.encode(tradeRoutes, forKey: .tradeRoutes); try c.encode(shipments, forKey: .shipments); try c.encode(spies, forKey: .spies)
+        try c.encode(nextRoute, forKey: .nextRoute); try c.encode(nextSpy, forKey: .nextSpy)
     }
     public required init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -325,6 +335,11 @@ public final class Civ: Codable {
         for pair in try c.decodeIfPresent([[Int64]].self, forKey: .heldPasses) ?? [] where pair.count == 2 { heldPasses[pair[0]] = Int(pair[1]) }
         chronicle = try c.decodeIfPresent([CivEvent].self, forKey: .chronicle) ?? []
         underNations = try c.decodeIfPresent(Bool.self, forKey: .underNations) ?? false
+        tradeRoutes = try c.decodeIfPresent([CivTradeRoute].self, forKey: .tradeRoutes) ?? []
+        shipments = try c.decodeIfPresent([CivShipment].self, forKey: .shipments) ?? []
+        spies = try c.decodeIfPresent([CivSpy].self, forKey: .spies) ?? []
+        nextRoute = try c.decodeIfPresent(Int.self, forKey: .nextRoute) ?? (tradeRoutes.map { $0.id }.max() ?? 0) + 1
+        nextSpy = try c.decodeIfPresent(Int.self, forKey: .nextSpy) ?? (spies.map { $0.id }.max() ?? 0) + 1
     }
 
     var dayLength: Double { MP.daySeconds }
@@ -367,6 +382,7 @@ public final class Civ: Codable {
         }
         var h = RNG(seed: gen.seed &* 31 &+ rx &* 73856093 &+ ry &* 19349663)
         r.ore = h.unit() * (0.3 + r.mountain); r.coal = h.unit() * 0.8; r.oil = h.unit() < 0.3 ? h.unit() : 0
+        r.gold = h.unit() < 0.18 ? h.unit() * (0.5 + r.mountain) : 0
         return r
     }
 
@@ -466,7 +482,7 @@ public final class Civ: Codable {
     func daily(world: OpenWorld?) {
         refreshTerritory()
         politicsDaily()
-        if envoys { vassalsDaily(); envoyChoices() }
+        if envoys { vassalsDaily(); resourcesDaily(); envoyChoices() }
         if underNations { undergroundDaily() }
         tripsDaily()
         industryDaily()
@@ -530,7 +546,7 @@ public final class Civ: Codable {
         hands = max(0, hands - Double(c.sick) * 0.5)
         var staffed: [String: Double] = [:]
         var jobsTotal = 0.0
-        let order = ["farm", "pasture", "fishery", "well", "bakery", "granary", "clinic", "autofarm", "greenhouse", "synth_plant", "ration_works", "plant", "fusion_plant", "mine", "oilwell",
+        let order = ["farm", "pasture", "fishery", "well", "bakery", "granary", "clinic", "autofarm", "greenhouse", "synth_plant", "ration_works", "plant", "fusion_plant", "mine", "oilwell", "gold_mine",
                      "steelworks", "refinery", "factory", "fab", "school", "institute", "laboratory", "barracks", "motor_works", "shipyard", "deep_yard", "airfield", "aircraft_works", "frame_works", "sky_yard"]
         // facilities from content packs take their turn after the built-in ones, in key order
         for f in order + c.facilities.keys.filter({ !order.contains($0) }).sorted() {
@@ -576,6 +592,7 @@ public final class Civ: Codable {
         make("ore", Double(c.has("mine")) * (staffed["mine"] ?? 0) * 6 * reg.ore)
         make("coal", Double(c.has("mine")) * (staffed["mine"] ?? 0) * 4 * reg.coal)
         make("crude", Double(c.has("oilwell")) * (staffed["oilwell"] ?? 0) * 8 * reg.oil * power)
+        make("gold", Double(c.has("gold_mine")) * (staffed["gold_mine"] ?? 0) * 2 * reg.gold)
         // the hungry go out and find what the land gives, whatever the stores hold: no one starves while standing still
         let hungryAdults = (1..<6).reduce(0) { $0 + c.people.n[6 + $1] }
         make("vegetable", Double(hungryAdults) * cfg.forage * (0.3 + reg.fertility) * (s == 3 ? 0.4 : 1) * fields)
