@@ -19,7 +19,7 @@ final class CivBridgeTests: XCTestCase {
         XCTAssertEqual(s.knownPopulation, s.agents.count + c.people, "townsfolk once, regional people once")
         XCTAssertEqual(c.audit(), [])
         // no city-state is made up on top of a real town
-        for t in detailed { XCTAssertNil(c.cities.values.first { $0.detail == nil && $0.regionKey == t.regionKey }) }
+        for t in detailed { XCTAssertNil(c.cities.values.first { $0.detail == nil && $0.under != true && $0.sea != true && $0.regionKey == t.regionKey }) }     // (cities underground or on the sea floor are beneath, not on top)
         // the camera does not find land: only walking does
         let known = c.regions.count
         s.viewer = Vec2(90000, 90000); hours(s, 1)

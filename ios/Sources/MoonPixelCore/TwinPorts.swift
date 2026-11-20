@@ -63,13 +63,37 @@ public final class TwinPorts {
     public let great: Int, small: Int
     public let east: CivCity, west: CivCity, capital: CivCity
     public let platform: Int64
+    /// The open sea off the east port, where the carrier goes.
+    public let offSea: Int64
     public var carrierForce = 0, transportForce = 0, skyForce = 0, shifter = 0, giant = 0
     public var frames: [Int] = []
+
+    /// The battle on a world that already has the place and both nations (the forces are set up apart).
+    public init(civ: Civ, great: Int, small: Int, capital: CivCity, west: CivCity, east: CivCity, platform: Int64, offSea: Int64) {
+        self.c = civ; self.great = great; self.small = small; self.capital = capital; self.west = west; self.east = east
+        self.platform = platform; self.offSea = offSea
+    }
+
+    /// The forces of both sides: the great power's carrier with fighters (at sea), transports with tanks and
+    /// infantry and a sky carrier with frames (at home); the small nation's garrisons, its shifter at the west
+    /// port and the giantess at the east port.
+    public func setupForces(carrierAt sea: Int64, home: Int64) {
+        carrierForce = force(great, at: sea, layer: .sea, ["carrier", "fighter", "fighter", "fighter", "fighter"])
+        for u in c.forces[carrierForce]!.units where c.units[u]?.kind == "fighter" { c.units[u]!.air = .parked }
+        transportForce = force(great, at: home, layer: .ground, Array(repeating: "armour", count: 30) + Array(repeating: "infantry", count: 30))
+        skyForce = force(great, at: home, layer: .highAir, ["sky_carrier"])
+        for _ in 0..<2 { let f = force(great, at: home, layer: .ground, ["frame"]); let id = c.forces[f]!.units[0]; frames.append(id); _ = c.board(id, carrier: skyForce) }
+        _ = force(small, at: east.regionKey, layer: .ground, Array(repeating: "infantry", count: 6))
+        _ = force(small, at: west.regionKey, layer: .ground, Array(repeating: "infantry", count: 3))
+        let sf = force(small, at: west.regionKey, layer: .ground, ["shifter"])
+        shifter = c.forces[sf]!.units[0]
+        giant = c.raiseGiant(nation: small, at: east.regionKey, en: "Aurelia", zh: "奥蕾莉亚")
+    }
 
     /// The place: a strait two regions wide between the great power's coast (west of x = 0) and the small
     /// nation's land (x = 6...12), with seas north and south; the small nation's west port at x = 6, its east
     /// port at x = 12 on the far sea, and a high platform (a pass) at x = 9 on the road between them.
-    public init(seed: Int) {
+    public convenience init(seed: Int) {
         let c = Civ(seed: seed)
         c.envoys = true
         func put(_ x: Int, _ y: Int, _ tweak: (inout CivRegion) -> Void = { _ in }) {
@@ -97,20 +121,8 @@ public final class TwinPorts {
         c.polities[great]!.fatigue = -10; c.polities[small]!.fatigue = -10
         c.cfg.claimRadius = 3                                                  // the platform is the small nation's, between its ports
         c.refreshTerritory()
-        self.c = c; self.great = great; self.small = small; self.capital = capital; self.west = west; self.east = east
-        self.platform = MP.chunkKey(9, 0)
-        // the great power's forces: a carrier with fighters, transports with tanks and infantry, a sky carrier with frames
-        carrierForce = force(great, at: MP.chunkKey(1, 0), layer: .sea, ["carrier", "fighter", "fighter", "fighter", "fighter"])
-        for u in c.forces[carrierForce]!.units where c.units[u]?.kind == "fighter" { c.units[u]!.air = .parked }
-        transportForce = force(great, at: MP.chunkKey(0, 0), layer: .ground, Array(repeating: "armour", count: 30) + Array(repeating: "infantry", count: 30))
-        skyForce = force(great, at: MP.chunkKey(-2, 0), layer: .highAir, ["sky_carrier"])
-        for _ in 0..<2 { let f = force(great, at: MP.chunkKey(-2, 0), layer: .ground, ["frame"]); let id = c.forces[f]!.units[0]; frames.append(id); _ = c.board(id, carrier: skyForce) }
-        // the small nation: a garrison in each port, a shifter at the west port, the giantess at the east port
-        _ = force(small, at: east.regionKey, layer: .ground, Array(repeating: "infantry", count: 6))
-        _ = force(small, at: west.regionKey, layer: .ground, Array(repeating: "infantry", count: 3))
-        let sf = force(small, at: west.regionKey, layer: .ground, ["shifter"])
-        shifter = c.forces[sf]!.units[0]
-        giant = c.raiseGiant(nation: small, at: east.regionKey, en: "Aurelia", zh: "奥蕾莉亚")
+        self.init(civ: c, great: great, small: small, capital: capital, west: west, east: east, platform: MP.chunkKey(9, 0), offSea: MP.chunkKey(13, 0))
+        setupForces(carrierAt: MP.chunkKey(1, 0), home: MP.chunkKey(-2, 0))
     }
 
     @discardableResult func force(_ n: Int, at k: Int64, layer: CivLayer, _ kinds: [String]) -> Int {
@@ -139,27 +151,36 @@ public final class TwinPorts {
     /// The opening of the war: the carrier off the east port, fighters up, tanks shipped to the east port; the
     /// shifter runs east as a vehicle; the giantess guards the east port or carries its people west.
     public func opening(giant choice: Giant) {
-        // the carrier sails to the far sea off the east port; its fighters are flown to the port
-        _ = c.send(carrierForce, to: MP.chunkKey(13, 0))
-        hours(6)
-        if let jet = c.forces[carrierForce]?.units.first(where: { c.units[$0]?.kind == "fighter" && c.units[$0]?.air == .parked }) {
-            c.takeControl(c.forces[carrierForce]!.units.first { c.units[$0]?.kind == "carrier" }!, nation: great)
+        openingSail(); hours(6)
+        openingStrikeAndLand(); hours(1)
+        openingDefence(giant: choice); hours(12)
+    }
+
+    /// The carrier sails to the open sea off the east port.
+    public func openingSail() { _ = c.send(carrierForce, to: offSea) }
+
+    /// A fighter flies from the carrier to the east port; the tanks are put ashore there (the quay decides how
+    /// many land); the shifter changes into its vehicle form.
+    public func openingStrikeAndLand() {
+        if let jet = c.forces[carrierForce]?.units.first(where: { c.units[$0]?.kind == "fighter" && c.units[$0]?.air == .parked }),
+           let carrier = c.forces[carrierForce]!.units.first(where: { c.units[$0]?.kind == "carrier" }) {
+            c.takeControl(carrier, nation: great)
             if c.switchToAircraft() == jet { c.pilotGo(to: east.regionKey) }
             c.releaseControl()
         }
-        // the tanks cross by sea: the transport force is put ashore at the east port (the quay decides how many land)
         c.forces[transportForce]!.region = east.regionKey; c.forces[transportForce]!.path = []
         c.record("landing", nations: [great, small], region: east.regionKey, ids: [transportForce])
-        // the shifter runs east as a vehicle along the road over the platform
         c.shift(shifter, to: "vehicle")
-        hours(1)
+    }
+
+    /// The shifter runs east over the platform; the giantess guards the east port or carries its people west.
+    public func openingDefence(giant choice: Giant) {
         if let f = c.units[shifter]?.force { _ = c.send(f, to: east.regionKey) }
         switch choice {
         case .guardEast: c.giantGuard(giant)
         case .carryWest: c.giantRescue(giant, people: 60); c.giantGo(giant, to: west.regionKey)
         }
         c.record("giantess_" + choice.rawValue, nations: [small], region: east.regionKey, ids: [giant])
-        hours(12)
     }
 
     /// The sky carrier comes and drops its frames on the east port or on the platform.
@@ -176,8 +197,13 @@ public final class TwinPorts {
             if !c.targetWars.isEmpty && c.targetWars.allSatisfy({ $0.ended != nil }) { break }
             hours(1)
         }
-        if let w = c.targetWars.last, w.stage == .truce, east.nation == small {
-            c.record("kept_the_sea", nations: [small, great], region: east.regionKey, note: "the small nation keeps its way to the sea")
-        }
+        recordOutcome()
+    }
+
+    /// Once the war for the east port is over: the small nation kept its way to the sea, or lost the port.
+    public func recordOutcome() {
+        guard let w = c.targetWars.last(where: { $0.attacker == great && $0.defender == small }), w.stage == .truce else { return }
+        if east.nation == small { c.record("kept_the_sea", nations: [small, great], region: east.regionKey, note: "the small nation keeps its way to the sea") }
+        else { c.record("port_lost", nations: [small, great], region: east.regionKey, note: "the east port fell") }
     }
 }

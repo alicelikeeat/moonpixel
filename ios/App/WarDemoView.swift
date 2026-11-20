@@ -32,7 +32,17 @@ struct WarDemoView: View {
                         Text(L("女巨人留守东港", "Giantess guards the east port")).tag(TwinPorts.Giant.guardEast)
                     }.pickerStyle(.segmented)
                 }
-                Chip(title: L("开始演示", "Play it"), icon: "play.fill", id: "demo-play") { play() }
+                HStack(spacing: 6) {
+                    Chip(title: L("快速推演", "Reckon it"), icon: "play.fill", id: "demo-play") { play() }
+                    Chip(title: L("在世界中演示", "Play it in my world"), icon: "globe.europe.africa.fill", id: "demo-world") { inWorld() }
+                }
+                // a battle under way in the world: where it stands, and its report
+                let live = model.society.worldDemoLines(zh: GameModel.zh)
+                if !live.isEmpty {
+                    ForEach(Array(live.enumerated()), id: \.offset) { i, l in
+                        Text(l).font(.system(size: i == 0 ? 12 : 10, weight: i == 0 ? .bold : .regular, design: .rounded))
+                    }
+                }
                 if let r = report {
                     Text(r.head).font(.system(size: 13, weight: .bold, design: .rounded))
                     ForEach(Array(r.details.enumerated()), id: \.offset) { _, d in Text(d).font(.system(size: 10, design: .rounded)).opacity(0.85) }
@@ -42,6 +52,24 @@ struct WarDemoView: View {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, l in Text(l).font(.system(size: 10, design: .monospaced)).opacity(0.85) }
             }
         }
+    }
+
+    /// Make the battle in the world (at the nearest strait), and go to the east port to watch it.
+    private func inWorld() {
+        let r = model.society.startWorldDemo(refuse: answer != 0, drop: drop, giant: giant)
+        if let e = r.error {
+            let why: [String: String] = [
+                "needs_oceans": L("需要有海洋的新世界（v2.15 起新建的世界）", "It needs a world with oceans (a world made from v2.15 on)"),
+                "running": L("世界里已有一场演示在进行", "A battle is already being played in this world"),
+                "no_strait": L("附近没有海峡地形", "No strait near here"),
+                "no_shore": L("海峡对岸没有可以立国的陆地", "No land over the sea for the great power"),
+            ]
+            model.showToast(why[e] ?? e)
+            return
+        }
+        model.showWarDemo = false
+        if let t = r.watch { model.teleport(to: t, name: L("双港之战 · 东港", "The twin ports · east port")) }
+        model.showToast(L("演示已在世界中开始：使者出发，按游戏时间推进（可用加速观看）", "The battle has begun in your world: the envoy sets out; it plays on the game clock (speed up to watch)"))
     }
 
     private func play() {

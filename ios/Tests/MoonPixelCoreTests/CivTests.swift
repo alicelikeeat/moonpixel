@@ -342,7 +342,7 @@ final class CivTests: XCTestCase {
         c.polities[n]!.ai = false; c.polities[n]!.builds = false
         let t = city(c, 0, nation: n, adults: 6000, farms: 1500, houses: 1600, grain: 2e6)
         t.facilities = ["farm": 1500, "house": 1600, "well": 200, "granary": 2, "mine": 40, "oilwell": 4, "refinery": 4, "steelworks": 20, "factory": 30, "fab": 30,
-                        "plant": 20, "fusion_plant": 3, "frame_works": 1, "deep_yard": 1, "aircraft_works": 1, "sky_yard": 1, "airfield": 1, "clinic": 30]
+                        "plant": 20, "fusion_plant": 3, "frame_works": 1, "shipyard": 1, "deep_yard": 1, "aircraft_works": 1, "sky_yard": 1, "airfield": 1, "clinic": 30]
         XCTAssertNil(t.stock["steel"]); XCTAssertNil(t.stock["parts"])
         for k in ["frame", "carrier", "fighter", "fighter", "sky_carrier"] { XCTAssertNotNil(c.order(k, nation: n, city: t.id), k) }
         var done: Set<String> = []

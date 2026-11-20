@@ -96,6 +96,8 @@ public struct CivEnvoy: Codable, Equatable {
     public var ratio = 0.0
     /// The place the sender wants (a city id), and what kind of place it is ("port", "pass", "city").
     public var target: Int?, targetKind = ""
+    /// The answer chosen in advance (a demonstration): true refused, false submitted.
+    public var forced: Bool?
 }
 
 /// A vassal and its suzerain.
@@ -308,7 +310,7 @@ extension Civ {
             let p = fortified ? cfg.war.refuseFortified : cfg.war.refuse
             let roll = rng.unit()
             e.answeredAt = time
-            if roll < p {
+            if e.forced ?? (roll < p) {
                 e.state = .refused
                 e.answer = fortified ? "refused: holds a key way in and can sit out a siege" : "refused"
                 envoysOut[i] = e

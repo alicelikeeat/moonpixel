@@ -809,6 +809,8 @@ public enum Figure3D {
             default:
                 b(-6, 0, -2, 12, 0.8, 4, body); b(-6, 0.5 + sw, -1, 2, 0.6, 2, body); b(4, 0.5 + sw, -1, 2, 0.6, 2, body); b(-1, 0, 2, 2, 0.5, 1, accent); b(-0.2, 0, -6, 0.4, 0.4, 4, body.darkened(0.2))
             }
+            // rest on the water's level like the land's animals on the ground: the lowest point at y = 0
+            if let low = m.positions.map({ $0.y }).min(), low != 0 { for i in m.positions.indices { m.positions[i].y -= low } }
             return m
         }
         if sp.key == "chicken" {

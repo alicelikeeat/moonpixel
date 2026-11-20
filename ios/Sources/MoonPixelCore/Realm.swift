@@ -293,6 +293,8 @@ public struct Realm: Codable {
     public var favorUntil: [String: Double]?
     /// The capitals' monuments (palace cities, statues, towers...: Monuments.swift).
     public var monuments: [Monument]?
+    /// The battle of the twin ports played in this world, step by step (WorldDemo.swift).
+    public var worldDemo: WorldDemoState?
     /// Wars of annexation under way (Annexation.swift).
     public var annexations: [Annexation]?
     /// The metro-mode city of this world: whose it is and how many live in it (counted once, in that nation).
