@@ -69,6 +69,13 @@ extension GameModel {
         let t = worldMap.tile(fx: fx, fy: fy)
         mapPick = t
         let d = scene.map { Int(Double(t.distance2($0.player.tile)).squareRoot()) } ?? 0
+        if mapLayer != .surface {
+            let z = society.underlandZones().first { $0.sea == (mapLayer == .seaFloor) && $0.contains(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) }
+            let what = z.flatMap { society.civ.polities[$0.nation] }.map { String(format: L("%@的地底世界", "%@'s underland"), $0.name(zh: GameModel.zh)) }
+                ?? (mapLayer == .seaFloor ? L("被海水淹没的岩层（会落在附近能站的地方）", "Flooded rock (you land on the nearest floor)") : L("岩层（会挖出一小块落脚处）", "Rock (a small room is cleared for you)"))
+            mapPickText = String(format: L("(%d, %d) · %@ · 距你 %d 格", "(%d, %d) · %@ · %d tiles away"), t.x, t.y, what, d)
+            return
+        }
         mapPickText = String(format: L("(%d, %d) · %@ · 距你 %d 格", "(%d, %d) · %@ · %d tiles away"), t.x, t.y, WorldMap.describe(society, t, zh: GameModel.zh), d)
     }
 
@@ -109,15 +116,38 @@ extension GameModel {
         mapPickText = L("火山脚下", "The foot of the volcano") + String(format: " (%d, %d)", t.x, t.y)
     }
 
-    func teleportToPick() { if let p = mapPick { teleport(to: p) } }
+    func teleportToPick() { if let p = mapPick { if mapLayer != .surface { teleportBelow(to: p) } else { teleport(to: p) } } }
+
+    /// Go below at once: into an underland (or the rock) at that tile.
+    func teleportBelow(to t: TilePos, name: String? = nil) {
+        guard let sc = scene else { return }
+        if society.playerVehicle != nil { showToast(L("先下车再瞬移", "Get out of the vehicle first")); return }
+        if depth >= OpenWorld.storeyBase { showToast(L("先下楼回到地面", "Go back down to the ground first")); return }
+        let from = CGPoint(x: sc.player.x, y: -sc.player.y)
+        let pos = society.teleportBelow(to: t)
+        mapPick = nil; mapPickText = ""
+        showMap = false
+        switchLayer(to: pos)
+        sc.blinkFX(from: from, to: CGPoint(x: pos.x, y: -pos.y))
+        showToast(String(format: L("已瞬移到地下：%@（“就地挖出地面”可回到地面）", "Teleported below: %@ (\"Climb out here\" takes you back up)"), name ?? String(format: "(%d, %d)", t.x, t.y)))
+    }
+
+    /// Go to a city of any nation: its town, its region, or its plaza below.
+    func goToCity(_ id: Int) {
+        guard let gate = society.cityGate(id), let city = society.civ.cities[id] else { return }
+        civDetail = nil
+        showRealm = false
+        if gate.below { teleportBelow(to: gate.tile, name: city.name(zh: GameModel.zh)) } else { teleport(to: gate.tile, name: city.name(zh: GameModel.zh)) }
+    }
 
     /// Go there at once: the tile itself when there is ground, else the nearest ground (and how far it was).
     func teleport(to t: TilePos, name: String? = nil) {
         guard let sc = scene else { return }
         if society.playerVehicle != nil { showToast(L("先下车再瞬移", "Get out of the vehicle first")); return }
-        if depth != 0 { showToast(L("在地下或楼上不能瞬移：先回到地面", "Not underground or upstairs: go back to the ground first")); return }
+        if depth >= OpenWorld.storeyBase { showToast(L("在楼上不能瞬移：先下楼回到地面", "Not upstairs: go back down to the ground first")); return }
         guard let spot = society.teleportSpot(for: t) else { showToast(L("那里 40 格内都是水或山，无法落脚", "Water or rock for 40 tiles round: nowhere to stand")); return }
         let from = CGPoint(x: sc.player.x, y: -sc.player.y)
+        if depth == 1 { society.realm.player.depth = 0; switchLayer(to: spot.spot.center) }      // from below, straight up to the place
         sc.player = spot.spot.center
         sc.blinkFX(from: from, to: CGPoint(x: spot.spot.center.x, y: -spot.spot.center.y))
         following = false

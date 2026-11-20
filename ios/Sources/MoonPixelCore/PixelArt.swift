@@ -491,6 +491,10 @@ public enum PixelArt {
     /// Chibi character on a 32x40 canvas (feet at y 38). dir: "down" | "up" | "side";
     /// frame 0 stand, 1/2 walk, 3 acting.
     public static func character(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
+        // a character model is painted (in the anime way) and brought down to the pixel figure's size
+        if look.anim == nil, CharacterModels.of(look.model) != nil {
+            return AnimeArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).resampled(to: charW, charH)
+        }
         var img = Bitmap(charW, charH)
         let sk = RGBA(hex: look.skin), hr = RGBA(hex: look.hair), hr2 = hr.lightened(0.22)
         let sh = RGBA(hex: look.shirt), pa = RGBA(hex: look.pants), so = RGBA(hex: look.shoes)

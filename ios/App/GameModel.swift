@@ -196,6 +196,15 @@ final class GameModel: ObservableObject {
     @Published var mapZoom = 1.0
     /// The map shows the nations (国土) rather than the land (地形).
     @Published var mapPolitical = false
+    /// Which world the map shows: the surface, the underground or the sea floor.
+    @Published var mapLayer = WorldMap.Layer.surface
+    func setMapLayer(_ l: WorldMap.Layer) {
+        guard l != mapLayer else { return }
+        mapLayer = l
+        worldMap.layer = l
+        mapPick = nil; mapPickText = ""
+        rebuildMap()
+    }
     func setMapPolitical(_ on: Bool) {
         guard on != mapPolitical else { return }
         mapPolitical = on

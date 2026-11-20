@@ -568,6 +568,14 @@ struct MorePanel: View {
                     Chip(title: model.artStyle == .anime ? L("像素风格", "Pixel style") : L("动漫风格", "Anime style"), icon: "paintbrush.pointed.fill", id: "ArtStyle") {
                         model.showMore = false; model.artStyle = model.artStyle == .anime ? .pixel : .anime
                     }
+                    Chip(title: L("我的角色：", "My figure: ") + (CharacterModels.of(model.playerLook.model).map { GameModel.zh ? $0.zh : $0.en } ?? L("普通", "everyday")), icon: "person.fill.questionmark", id: "PlayerModel") {
+                        // everyday -> wayfarer -> sage -> knight -> tinker -> puffling -> everyday (the sea floor's own five are for its people)
+                        let keys: [String?] = [nil] + CharacterModels.land.map { $0.key }
+                        let i = keys.firstIndex(of: model.playerLook.model) ?? 0
+                        model.playerLook.model = keys[(i + 1) % keys.count]
+                        if model.playerLook.model != nil { model.playerLook.anim = nil }
+                        model.scene?.clearTextureCache()
+                    }
                     Chip(title: model.figureStyle == .moe ? L("人物：萌系", "People: moe") : (model.figureStyle == .hero ? L("人物：英雄比例", "People: hero") : L("人物：天使", "People: angel")), icon: "person.crop.artframe", id: "FigureStyle") {
                         // moe -> hero -> angel (wings, halo and crown, an ivory robe with gold) -> moe
                         model.showMore = false; model.figureStyle = model.figureStyle == .moe ? .hero : (model.figureStyle == .hero ? .angel : .moe)

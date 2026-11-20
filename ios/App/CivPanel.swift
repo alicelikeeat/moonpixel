@@ -10,6 +10,8 @@ enum CivSort: String, CaseIterable { case people, power, food, tech, name }
 
 struct CivWorldSection: View {
     @EnvironmentObject var model: GameModel
+    /// Which nations: those of the surface (and all), or only those underground, or only those of the sea floor.
+    var realm: WorldMap.Layer = .surface
     @State private var query = ""
     @State private var sort = CivSort.people
     @State private var showGone = false
@@ -20,7 +22,7 @@ struct CivWorldSection: View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let c = model.society.civ
             VStack(alignment: .leading, spacing: 8) {
-                summary(c)
+                if realm == .surface { summary(c) } else { belowSummary(c) }
                 controls
                 if c.activePolities().isEmpty {
                     Text(L("现在没有在位的国家：都已流亡或成为历史。你仍可以无国籍旅行，或在城镇里建国。", "No nation stands now: every one is in exile or history. You can travel without a nation, or found one in a town."))
@@ -28,6 +30,33 @@ struct CivWorldSection: View {
                 }
                 // every nation known, however many: a lazy list draws only the rows on screen
                 LazyVStack(alignment: .leading, spacing: 8) { ForEach(rows(c), id: \.id) { p in row(p, c) } }
+            }
+        }
+    }
+
+    /// The nations below: what they are, how many, and the map of their world.
+    private func belowSummary(_ c: Civ) -> some View {
+        let sea = realm == .seaFloor
+        let list = c.polities.values.filter { (sea ? $0.undersea == true : $0.underground == true) && $0.status == .active }
+        let people = list.reduce(0) { $0 + $1.pop }
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(sea ? L("海底国度", "Nations of the sea floor") : L("地下国度", "Nations of the underground")).font(.system(size: 15, weight: .bold, design: .rounded))
+            Text(sea ? L("海底的人能在水中呼吸，拒绝一切战争。他们在海底城下方挖出自己的海底世界：沙地、珊瑚房屋、海带田、珍珠灯和玻璃墙，天空是海蓝色的人造光。",
+                         "The people of the sea floor breathe the water and refuse every war. Under their cities they dig a world of their own: sand, coral houses, kelp fields, pearl lamps and glass walls, under a sea-blue sky of lamps.")
+                     : L("地下国家从不和地面开战，只是不断向外挖掘：挖开的地方和地面一样有草地、道路、房屋和农田，天空是人造灯光。",
+                         "The underground nations never fight the surface; they only dig on, and what they dig is land like the surface's, with grass, roads, houses and fields, under a sky of lamps."))
+                .font(.system(size: 11, design: .rounded)).opacity(0.85).fixedSize(horizontal: false, vertical: true)
+            Text(L("在位国家 \(list.count) 个 · 人口 \(people)", "\(list.count) nations standing · \(people) people"))
+                .font(.system(size: 11, weight: .semibold, design: .rounded)).accessibilityIdentifier("civ-below-summary")
+            if list.isEmpty {
+                Text(sea ? L("还没有发现海底国家：带海洋的新世界里，往深海探索就会遇到（地图“找地方”→ 海底城）。", "No sea-floor nation found yet: in new worlds with oceans, explore the deep sea (map → Find → Sea-floor city).")
+                         : L("还没有发现地下国家：在地面上走得越远，认识的地下城越多（地图“找地方”→ 地下城）。", "No underground nation found yet: the further you walk, the more underground cities you know (map → Find → Underground city)."))
+                    .font(.system(size: 11, design: .rounded)).opacity(0.75).fixedSize(horizontal: false, vertical: true)
+            }
+            Chip(title: sea ? L("打开海底世界地图", "Open the sea-floor map") : L("打开地下世界地图", "Open the underground map"), icon: "map.fill", id: sea ? "civ-sea-map" : "civ-under-map") {
+                model.showRealm = false
+                model.setMapLayer(sea ? .seaFloor : .underground)
+                model.showMap = true
             }
         }
     }
@@ -78,6 +107,11 @@ struct CivWorldSection: View {
     private func rows(_ c: Civ) -> [CivPolity] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         var list = c.polities.values.filter { showGone || $0.status != .history }
+        switch realm {
+        case .underground: list = list.filter { $0.underground == true }
+        case .seaFloor: list = list.filter { $0.undersea == true }
+        case .surface: break
+        }
         if nearOnly, let t = model.society.explorer {
             // nations with a city within three regions of where you are (and the towns about you)
             let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
@@ -109,6 +143,8 @@ struct CivWorldSection: View {
                     Text(p.name(zh: GameModel.zh)).font(.system(size: 13, weight: .bold, design: .rounded))
                     Text(statusText(p)).font(.system(size: 9, weight: .semibold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.white.opacity(0.18), in: Capsule())
                     if model.civCommand == p.id { Text(L("执政中", "in your hands")).font(.system(size: 9, weight: .bold, design: .rounded)).foregroundStyle(.yellow) }
+                    if p.underground == true { Text(L("地下", "below")).font(.system(size: 9, weight: .bold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.purple.opacity(0.45), in: Capsule()) }
+                    if p.undersea == true { Text(L("海底", "sea floor")).font(.system(size: 9, weight: .bold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.teal.opacity(0.5), in: Capsule()) }
                 }
                 HStack(spacing: 6) {
                     Text(L("综合国力", "Strength")).font(.system(size: 10, design: .rounded)).opacity(0.7)
@@ -124,6 +160,10 @@ struct CivWorldSection: View {
                     .font(.system(size: 10, design: .rounded)).opacity(0.8).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 4)
+            VStack(spacing: 2) {
+                Spacer(minLength: 0)
+                CivGoMenu(c: c, nation: p.id, compact: true)
+            }
             Button { toggleFavourite(p.id) } label: { Image(systemName: fav ? "star.fill" : "star").foregroundStyle(fav ? .yellow : .white).frame(width: 32, height: 32) }
                 .buttonStyle(PressStyle()).accessibilityIdentifier("civ-fav-\(p.id)")
             Button { model.civDetail = p.id } label: { Image(systemName: "chevron.right").frame(width: 32, height: 32) }
@@ -149,6 +189,39 @@ func statusText(_ p: CivPolity) -> String {
 }
 
 func days(_ d: Double) -> String { d >= 99 ? "99+" + L("天", "d") : String(format: "%.0f", d) + L("天", "d") }
+
+/// Go to one of a nation's cities: a menu of them (the capital first), each straight there (below for the
+/// nations underground and on the sea floor).
+struct CivGoMenu: View {
+    @EnvironmentObject var model: GameModel
+    let c: Civ
+    let nation: Int
+    var compact = false
+    var body: some View {
+        let p = c.polities[nation]
+        let cities = c.cities.values.filter { $0.nation == nation }.sorted { a, b in
+            if (a.id == p?.capital) != (b.id == p?.capital) { return a.id == p?.capital }
+            return a.pop != b.pop ? a.pop > b.pop : a.id < b.id
+        }
+        Menu {
+            if cities.isEmpty { Text(L("这个国家没有城市", "This nation has no city")) }
+            ForEach(cities.prefix(30), id: \.id) { city in
+                Button { model.goToCity(city.id) } label: {
+                    Label((city.id == p?.capital ? "★ " : "") + city.name(zh: GameModel.zh) + " · " + L("\(city.pop) 人", "\(city.pop) people"),
+                          systemImage: city.under == true ? "arrow.down.to.line" : (city.sea == true ? "water.waves" : "building.2"))
+                }
+            }
+        } label: {
+            if compact {
+                Image(systemName: "location.circle.fill").font(.system(size: 18)).frame(width: 32, height: 32)
+            } else {
+                Label(L("前往城市", "Go to a city"), systemImage: "location.circle.fill").font(.system(size: 13, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12).frame(height: 34).background(Color(red: 0.45, green: 0.4, blue: 0.95), in: Capsule())
+            }
+        }
+        .accessibilityIdentifier("civ-go-\(nation)")
+    }
+}
 
 /// A nation's mark: its colour, a shape of its own and its short name, so that nations with close colours are still told apart.
 struct CivEmblem: View {
@@ -184,6 +257,7 @@ struct CivNationSheet: View {
                         TowerList(c: c, nation: id)
                         neighbours(p, c)
                         news(p, c)
+                        HStack { Spacer(); CivGoMenu(c: c, nation: id) }
                     }
                 }
             }

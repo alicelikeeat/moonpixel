@@ -192,6 +192,10 @@ public enum AnimeArt {
     /// An anime chibi figure on a 64 x 80 canvas (feet at y 76): the same look, directions and frames as the
     /// pixel figure (dir "down" | "up" | "side"; frame 0 stand, 1 and 2 walk, 3 acting), painted.
     public static func character(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
+        if look.anim == nil, let m = CharacterModels.of(look.model) {
+            var plain = look; plain.model = nil
+            return modelFigure(m, base: { character(plain, dir: dir, frame: frame, held: held, child: child, female: female) }, look: look, dir: dir, frame: frame, held: held, child: child, female: female)
+        }
         // by the setting: the soft moe figure or the hero figure (the first chibi figure stays as `chibi`)
         switch figure {
         case .hero: return hero(look, dir: dir, frame: frame, held: held, child: child, female: female)

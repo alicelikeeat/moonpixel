@@ -63,18 +63,31 @@ struct Meter: View {
 /// player can do about them), then every nation of the known world (CivWorldSection: as many as there are).
 struct RealmPanel: View {
     @EnvironmentObject var model: GameModel
-    @State private var world = false
+    /// 附近｜已知世界｜地下国度｜海底国度
+    @State private var tab = 0
+    private var world: Bool { tab == 1 }
 
     var body: some View {
         GlassSheet(title: L("国度", "Nations"), subtitle: model.eraLine, close: { model.showRealm = false }) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Chip(title: L("附近", "Nearby"), icon: "house.and.flag.fill", tint: world ? Color.white.opacity(0.12) : Color.white.opacity(0.32), id: "realm-tab-near") { world = false }
-                    Chip(title: L("已知世界", "Known world"), icon: "globe.asia.australia.fill", tint: world ? Color.white.opacity(0.32) : Color.white.opacity(0.12), id: "realm-tab-world") { world = true }
+                ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 6) {
+                    tabChip(0, L("附近", "Nearby"), "house.and.flag.fill", "realm-tab-near")
+                    tabChip(1, L("已知世界", "Known world"), "globe.asia.australia.fill", "realm-tab-world")
+                    tabChip(2, L("地下国度", "Underground"), "arrow.down.to.line", "realm-tab-under")
+                    tabChip(3, L("海底国度", "Sea floor"), "water.waves", "realm-tab-sea")
+                } }
+                switch tab {
+                case 1: CivWorldSection()
+                case 2: CivWorldSection(realm: .underground)
+                case 3: CivWorldSection(realm: .seaFloor)
+                default: nearby
                 }
-                if world { CivWorldSection() } else { nearby }
             }
         }
+    }
+
+    private func tabChip(_ i: Int, _ title: String, _ icon: String, _ id: String) -> some View {
+        Chip(title: title, icon: icon, tint: tab == i ? Color.white.opacity(0.32) : Color.white.opacity(0.12), id: id) { tab = i }
     }
 
     /// The nations around the player's own towns, and what the player can do among them.

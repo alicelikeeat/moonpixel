@@ -73,7 +73,7 @@ extension GameScene {
     private func soldierTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, female: Bool, phase: Int) -> SKTexture {
         let dir = abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down")
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        let key = "s\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(dir)\(frame)\(held)\(female)"
+        let key = "s\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(dir)\(frame)\(held)\(female)"
         if let t = texCache[key] { return t }
         if texCache.count > 4000 { texCache.removeAll() }          // bounded: rebuilt on demand
         let t = PixelArt.character(look, dir: dir, frame: frame, held: held, child: false, female: female).texture

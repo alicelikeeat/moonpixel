@@ -221,3 +221,34 @@ extension Society {
         return best
     }
 }
+
+extension Society {
+    /// Where to arrive at a city of the civilisation layer: its town on the surface, the middle of its region,
+    /// or, for a city underground or on the sea floor, its plaza below (`below` true).
+    public func cityGate(_ id: Int) -> (tile: TilePos, below: Bool)? {
+        let c = civ
+        guard let city = c.cities[id] else { return nil }
+        if (city.under == true || city.sea == true), let (cx, cy) = city.underAt {
+            // an underground city of the old kind has its own streets; the stairway is in the middle
+            let old = city.under == true && world.gen.isUnderCity(cx, cy)
+            return (TilePos(cx * 32 + 16, cy * 32 + (old ? 18 : 19)), true)
+        }
+        if let d = city.detail, let t = settlements[d], !t.abandoned { return (t.center, false) }
+        let rc = c.cfg.regionTiles
+        return (TilePos(city.rx * rc + rc / 2, city.ry * rc + rc / 2), false)
+    }
+
+    /// Go below at once, to a tile of the underground (the traveller stands on the nearest free floor there).
+    public func teleportBelow(to t: TilePos) -> Vec2 {
+        let u = underworld()
+        realm.player.depth = 1
+        _ = digUnderground(around: t)
+        let f = u.findFree(near: t, maxR: 24)
+        if u.blocked(f.x, f.y) {
+            // nowhere to stand: a small room is cleared
+            for dy in -1...1 { for dx in -1...1 { u.setTile(2, t.x + dx, t.y + dy, 0); if content.water[Int(u.tile(0, t.x + dx, t.y + dy))] { u.setTile(0, t.x + dx, t.y + dy, content.tid("cave_floor")) } } }
+            return t.center
+        }
+        return f.center
+    }
+}

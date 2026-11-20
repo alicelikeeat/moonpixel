@@ -464,7 +464,7 @@ final class GameScene: SKScene {
     private func charTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> SKTexture {
         let dir = abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down")
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        let key = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(dir)\(frame)\(held)\(child)\(female)"
+        let key = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(dir)\(frame)\(held)\(child)\(female)"
         if let t = texCache[key] { return t }
         // the anime look is drawn by hand in code (twice the pixels), not converted from the pixel sprite
         let t = Bitmap.animeStyle
@@ -544,6 +544,25 @@ final class GameScene: SKScene {
             if let carry = node.childNode(withName: "carry") as? SKSpriteNode {
                 carry.isHidden = a.carryN <= 0
                 carry.color = a.carryKind == "wood" ? UIColor(red: 0.66, green: 0.44, blue: 0.23, alpha: 1) : (a.carryKind == "stone" ? .gray : UIColor(red: 0.8, green: 0.2, blue: 0.3, alpha: 1))
+            }
+        }
+        // underground: the people of the nations' underlands, walking their roads
+        if model.depth == 1 {
+            for f in society.underFolk(center: viewPos, halfW: halfW, halfH: halfH) {
+                seen.insert(f.id)
+                let node = agentNodes[f.id] ?? {
+                    let n = SKSpriteNode()
+                    n.anchorPoint = CGPoint(x: 0.5, y: 0.05)
+                    addChild(n)
+                    agentNodes[f.id] = n
+                    return n
+                }()
+                let tex = charTexture(f.look, f.facing, moving: f.moving, acting: false, held: "", child: f.child, female: f.female, phase: phase + f.id)
+                node.texture = tex
+                node.size = tex.size()
+                node.xScale = abs(f.facing.x) > abs(f.facing.y) && f.facing.x < 0 ? -1 : 1
+                node.position = CGPoint(x: f.pos.x, y: -(f.pos.y + 4))
+                node.zPosition = 10 + CGFloat(f.pos.y) * 0.001
             }
         }
         for (id, n) in agentNodes where !seen.contains(id) { n.removeFromParent(); agentNodes[id] = nil }

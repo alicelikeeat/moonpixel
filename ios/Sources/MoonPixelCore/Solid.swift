@@ -691,6 +691,8 @@ public enum Figure3D {
 
     /// frame: 0 standing, 1 and 2 the two steps of a walk, 3 working or striking.
     public static func human(_ look: Look, frame: Int, held: String, child: Bool, female: Bool, face: Bitmap? = nil) -> Mesh3D {
+        let cm = CharacterModels.of(look.model)
+        if let r = cm, r.round { return roundling(r, frame: frame, child: child) }
         var m = Mesh3D()
         let k: Float = child ? 0.68 : 1
         let o = SIMD3<Float>(0, 0, 0)
@@ -704,7 +706,7 @@ public enum Figure3D {
         let sw: Float = frame == 1 ? 2 : (frame == 2 ? -2 : 0)
         let acting = frame == 3
         // legs: a thigh and a shin each (tapered), knees bent a little in a step, shoes as rounded toes
-        for (x, swing) in [(-2.0 as Float, sw), (2.0, -sw)] {
+        for (x, swing) in [(-2.0 as Float, sw), (2.0, -sw)] where cm?.key != "merfolk" {
             let hip = P(x, 7.5, 0), knee = P(x, 4, swing * 0.6 + 0.3), ankle = P(x, 1.2, swing)
             m.frustum(hip, knee, 1.6 * u, 1.35 * u, pants, seg: 8)
             m.frustum(knee, ankle, 1.35 * u, 1.05 * u, pants, seg: 8)
@@ -776,6 +778,7 @@ public enum Figure3D {
         case "cane": b(5, 0, hz + 2, 1, 9, 1, wood)
         default: break
         }
+        if let r = cm { dressModel(r, &m, look: look, frame: frame, held: held, child: child, female: female, k: k) }
         return m
     }
 

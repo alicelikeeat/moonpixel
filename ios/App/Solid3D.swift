@@ -750,7 +750,7 @@ final class SolidRenderer {
 
     private func human(_ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> ModelComponent? {
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        let key = "h\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(frame)\(held)\(child)\(female)"
+        let key = "h\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
         return model3D(key: key) { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }
     }
 
@@ -765,7 +765,7 @@ final class SolidRenderer {
         }
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
         let view = AnimeArt.cardView(facing: f, toward: Vec2(Double(-sin(yaw)), Double(-cos(yaw))), right: Vec2(Double(cos(yaw)), Double(-sin(yaw))))
-        let drawing = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(view.dir)\(frame)\(held)\(child)\(female)"
+        let drawing = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(view.dir)\(frame)\(held)\(child)\(female)"
         let key = drawing + (view.mirrored ? "m" : "") + "\(Int(light * 20))"
         if cardModels[key] == nil {
             if cardTextures[drawing] == nil {
@@ -835,6 +835,17 @@ final class SolidRenderer {
             mount(e, rides: rides, phase: phase + a.id, moving: a.moving)
             keepHorseHeading(e, facing: a.facing)
             settle(e, at: place(upstairs.at[a.id] ?? a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
+        }
+        // underground: the people of the nations' underlands, walking their roads
+        if model.depth == 1 {
+            for f in society.underFolk(center: scene.viewPos, halfW: reach, halfH: reach, limit: 30) {
+                seen.insert(f.id)
+                let fresh = agents[f.id] == nil
+                let e = agents[f.id] ?? take()
+                agents[f.id] = e
+                dress(e, f.look, moving: f.moving, acting: false, held: "", child: f.child, female: f.female, phase: phase + f.id, facing: f.facing)
+                settle(e, at: place(f.pos, world), dt: dt, fresh: fresh)
+            }
         }
         for (id, e) in agents where !seen.contains(id) { give(e); agents[id] = nil }
         host?.badges = split.badges

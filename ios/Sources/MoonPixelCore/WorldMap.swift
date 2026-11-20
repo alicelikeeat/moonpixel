@@ -26,6 +26,10 @@ public final class WorldMap {
     private var tiles: [String: Bitmap] = [:]             // painted chunks, by chunk, scale and what they were made from
     /// The Nations view (地形｜国土): land in its holder's colour, borders, occupied land hatched.
     public var political = false
+    /// Which world the map shows: the surface, the underground (the underground nations' underlands) or the
+    /// sea floor (the sea-floor nations' underlands, under the oceans).
+    public enum Layer: String, CaseIterable { case surface, underground, seaFloor }
+    public var layer = Layer.surface
     public init() {}
 
     /// Tiles per pixel of the picture.
@@ -127,6 +131,7 @@ public final class WorldMap {
     /// `ppc` pixels a chunk (chosen to keep the picture near 1600 pixels when not given). Returns the picture
     /// and the markers on it.
     public func render(_ s: Society, centre: TilePos, reach: Int, ppc want: Int? = nil, zh: Bool) -> (Bitmap, [MapMarker]) {
+        if layer != .surface { return renderBelow(s, centre: centre, reach: reach, ppc: want, zh: zh) }
         let world = s.world
         let ext = min(200, max(6, reach))
         side = ext * 2 + 1
@@ -303,6 +308,90 @@ public final class WorldMap {
             guard let r = civ.regions[k], r.city != nil, let h = civ.controller(k), let t = mid(k) else { continue }
             add(.occupied, zh ? "占领" : "Occupied", civ.polities[h]?.color ?? "#ffffff", TilePos(t.x + rc / 6, t.y - rc / 6))
         }
+    }
+
+    // MARK: the worlds below
+
+    /// The underground or the sea floor: rock (or the sea bed under the oceans) and, where a nation has dug its
+    /// underland, open land with its roads, in the nation's colour in the Nations view; each city by name and
+    /// each nation's name over its cities.
+    func renderBelow(_ s: Society, centre: TilePos, reach: Int, ppc want: Int?, zh: Bool) -> (Bitmap, [MapMarker]) {
+        let gen = s.world.gen
+        let civ = s.civ
+        let sea = layer == .seaFloor
+        let ext = min(120, max(6, reach))
+        side = ext * 2 + 1
+        ppc = want ?? max(2, min(16, 1600 / side))
+        let pc = TilePos(OpenWorld.floorDiv(centre.x, 32), OpenWorld.floorDiv(centre.y, 32))
+        origin = TilePos(pc.x - ext, pc.y - ext)
+        var img = Bitmap(side * ppc, side * ppc, fill: WorldMap.fog)
+        // which chunk belongs to which underland (one pass over each zone's square)
+        let zones = s.underlandZones().filter { $0.sea == sea }
+        var owner: [Int64: UnderlandZone] = [:]
+        for z in zones {
+            let r = Int(z.r.rounded(.up))
+            for y in (z.cy - r)...(z.cy + r) { for x in (z.cx - r)...(z.cx + r) where z.contains(x, y) && x >= origin.x && y >= origin.y && x < origin.x + side && y < origin.y + side {
+                if owner[MP.chunkKey(x, y)] == nil { owner[MP.chunkKey(x, y)] = z }
+            } }
+        }
+        let rock = RGBA(52, 46, 56), rockSea = RGBA(36, 48, 70), seabed = RGBA(26, 58, 100), seabedDeep = RGBA(16, 38, 76), landAbove = RGBA(30, 30, 36)
+        let grass = RGBA(110, 160, 86), sand = RGBA(220, 200, 146), road = RGBA(236, 228, 210), glass = RGBA(160, 220, 240)
+        for cy in 0..<side { for cx in 0..<side {
+            let x = origin.x + cx, y = origin.y + cy
+            let e = gen.elevation(x * 32 + 16, y * 32 + 16)
+            var base: RGBA
+            if sea { base = e < Biome.sea ? (e < Biome.sea - 0.08 ? seabedDeep : seabed) : landAbove }
+            else { base = e < Biome.sea ? rockSea : rock }
+            if let z = owner[MP.chunkKey(x, y)] {
+                var land = z.sea ? sand : grass
+                if political { land = land.lerp(RGBA(hex: civ.polities[z.nation]?.color ?? "#cccccc"), 0.5) }
+                img.rect(cx * ppc, cy * ppc, ppc, ppc, land)
+                // its roads, and a glass rim where it meets the rock
+                if ppc >= 4 {
+                    let m = ppc / 2
+                    img.rect(cx * ppc + m, cy * ppc, max(1, ppc / 8), ppc, road)
+                    img.rect(cx * ppc, cy * ppc + m, ppc, max(1, ppc / 8), road)
+                }
+                let edge = max(1, ppc / 8)
+                let rim = z.sea || gen.seaAbove(x * 32 + 16, y * 32 + 16) ? glass : land.darkened(0.35)
+                if owner[MP.chunkKey(x - 1, y)] == nil { img.rect(cx * ppc, cy * ppc, edge, ppc, rim) }
+                if owner[MP.chunkKey(x + 1, y)] == nil { img.rect(cx * ppc + ppc - edge, cy * ppc, edge, ppc, rim) }
+                if owner[MP.chunkKey(x, y - 1)] == nil { img.rect(cx * ppc, cy * ppc, ppc, edge, rim) }
+                if owner[MP.chunkKey(x, y + 1)] == nil { img.rect(cx * ppc, cy * ppc + ppc - edge, ppc, edge, rim) }
+            } else {
+                img.rect(cx * ppc, cy * ppc, ppc, ppc, base)
+                if !sea, ppc >= 4, MP.h2(gen.seed &+ 77, x, y) % 5 == 0 { img.rect(cx * ppc + ppc / 3, cy * ppc + ppc / 3, max(1, ppc / 4), max(1, ppc / 4), base.lightened(0.12)) }
+            }
+        } }
+        var marks: [MapMarker] = []
+        func add(_ k: MapMarker.Kind, _ n: String, _ c: String, _ t: TilePos) {
+            let (fx, fy) = fraction(t)
+            guard fx >= 0, fy >= 0, fx <= 1, fy <= 1 else { return }
+            marks.append(MapMarker(kind: k, name: n, color: c, tile: t, fx: fx, fy: fy))
+        }
+        // the cities below, and each nation's name over the middle of its cities
+        var byNation: [Int: [TilePos]] = [:]
+        for c in civ.cities.values.sorted(by: { $0.id < $1.id }) where (sea ? c.sea == true : c.under == true) {
+            guard let (ux, uy) = c.underAt, let p = civ.polities[c.nation], p.status == .active else { continue }
+            let t = s.cityGate(c.id)?.tile ?? TilePos(ux * 32 + 16, uy * 32 + 18)
+            add(p.capital == c.id ? .capital : .city, c.name(zh: zh), p.color, t)
+            byNation[c.nation, default: []].append(t)
+        }
+        for (n, ts) in byNation.sorted(by: { $0.key < $1.key }) {
+            guard let p = civ.polities[n] else { continue }
+            let mx = ts.map { $0.x }.reduce(0, +) / ts.count, my = ts.map { $0.y }.reduce(0, +) / ts.count
+            add(.nation, p.name(zh: zh), p.color, TilePos(mx, my - 96))
+        }
+        // where to go down from the surface
+        for y in 0..<side { for x in 0..<side where s.world.known(origin.x + x, origin.y + y) != 0 {
+            let cx = origin.x + x, cy = origin.y + y
+            if !sea && gen.isUnderCity(cx, cy) && gen.volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 40) == nil && !gen.isUfoPort(cx, cy) {
+                add(.underCity, zh ? "入口" : "Way down", "#c08aff", TilePos(cx * 32 + 16, cy * 32 + 22))
+            }
+            if sea && gen.isSeaCity(cx, cy) { add(.underCity, zh ? "珍珠穹顶入口" : "Pearl dome (way down)", "#7fe6ff", TilePos(cx * 32 + 16, cy * 32 + 17)) }
+        } }
+        add(.player, zh ? "你" : "You", "#7fe6ff", centre)
+        return (img, marks)
     }
 
     /// What is at a tile, in a few words, for the map's pick card.

@@ -674,6 +674,19 @@ struct HUDView: View {
                 gridPill("4×", "plus.magnifyingglass") { model.setMapZoom(4) }.accessibilityIdentifier("map-zoom-4")
                 gridPill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }.accessibilityIdentifier("map-zoom-8")
             }
+            // 地面｜地下｜海底: which world the map shows
+            Picker("", selection: Binding(get: { model.mapLayer }, set: { model.setMapLayer($0) })) {
+                Text(L("地面", "Surface")).tag(WorldMap.Layer.surface)
+                Text(L("地下世界", "Underground")).tag(WorldMap.Layer.underground)
+                Text(L("海底世界", "Sea floor")).tag(WorldMap.Layer.seaFloor)
+            }
+            .pickerStyle(.segmented).accessibilityIdentifier("map-layer")
+            if model.mapLayer != .surface {
+                Text(model.mapLayer == .underground
+                     ? L("绿色＝地下国家挖出的地底世界（人造天光），浅蓝边＝挡海水的玻璃墙；紫点是地面上的入口。点城市名可直接前往。", "Green: the underlands the underground nations have dug (a sky of lamps); pale blue rim: glass against the sea; purple: the ways down. Tap a city to go there.")
+                     : L("沙色＝海底国家的海底世界，四周是玻璃墙；蓝点是海底城的珍珠穹顶入口。点城市名可直接前往。", "Sand: the sea-floor nations' underlands, walled in glass; blue: the pearl domes, the ways down. Tap a city to go there."))
+                    .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
+            }
             // 地形｜国土: the land as it is, or as the nations hold it
             Picker("", selection: Binding(get: { model.mapPolitical }, set: { model.setMapPolitical($0) })) {
                 Text(L("地形", "Terrain")).tag(false)

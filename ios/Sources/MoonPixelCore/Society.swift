@@ -115,6 +115,8 @@ public struct Look: Codable, Equatable {
     public var skin = "#f2c8a4", hair = "#5a3a22", shirt = "#5a8ae8", pants = "#4a4a5a", shoes = "#5a3a2a", face = "", style = 0
     /// Asset id of the pixel portrait generated from a photo (optional: older saves have none).
     public var portrait: String?
+    /// A character model (Characters.swift): a wayfarer, a knight, a merfolk... nil for the everyday figure.
+    public var model: String?
     public init() {}
 }
 
@@ -506,6 +508,7 @@ public final class Society {
         a.look.shirt = Society.shirts[rng.index(Society.shirts.count)]
         a.look.pants = Society.pantsList[rng.index(Society.pantsList.count)]
         a.look.style = rng.index(4)
+        a.look.model = CharacterModels.landPick(MP.h2(world.seed &+ 6060, a.id, 0))     // by the id: the dice stay as they were
         a.hunger = rng.range(0, 0.4); a.energy = rng.range(0.6, 1.0); a.social = rng.range(0, 0.6)
         a.thinkT = rng.unit() * 1.5
         let t = world.findFree(near: s.center + TilePos(rng.int(-5, 5), rng.int(2, 6)), maxR: 6)
