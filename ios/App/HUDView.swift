@@ -705,6 +705,16 @@ struct HUDView: View {
             // (plain buttons, not a system segmented picker: that one did not take taps inside the map panel)
             segments([(L("地面", "Surface"), "surface"), (L("地下", "Underground"), "underground"), (L("海底", "Sea floor"), "seaFloor"), (L("天空", "Sky"), "sky")],
                      selected: model.mapLayer.rawValue, id: "map-layer") { model.setMapLayer(WorldMap.Layer(rawValue: $0) ?? .surface) }
+            // below: which level (only as deep as any city has built)
+            if model.mapLayer == .underground || model.mapLayer == .seaFloor {
+                let sea = model.mapLayer == .seaFloor
+                let deepest = model.society.civ.cities.values.filter { sea ? $0.sea == true : $0.under == true }.map { Civ.levelsDown($0) }.max() ?? 1
+                if deepest > 1 {
+                    segments((1...deepest).map { (L("B\($0)", "B\($0)"), "\($0)") }, selected: "\(min(model.mapLevel, deepest))", id: "map-level") {
+                        model.setMapLevel(Int($0) ?? 1)
+                    }
+                }
+            }
             if model.mapLayer == .sky {
                 Text(L("浅蓝是远处的地面；绿色岛屿是天空城，岛东侧有跑道和 UFO 停机坪，四周有围栏。点地图任意处可直接瞬移到天上。", "Pale blue: the ground far below; green islands: the sky cities, with a runway and a UFO pad on their east side and a fence round them. Tap anywhere to teleport up there."))
                     .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)

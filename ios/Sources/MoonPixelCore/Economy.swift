@@ -210,7 +210,8 @@ extension Society {
     public func playerRequisition(_ good: String, amount: Double) -> (Double, String?) {
         guard let t = travellerTile, let s = settlements.values.first(where: { !$0.abandoned && $0.inArea(t) && $0.center.distance2(t) <= 60 * 60 }) else { return (0, "no_town") }
         guard realm.player.nation != 0, s.nation == realm.player.nation else { return (0, "not_ours") }
-        let n = min(amount, s.good(good))
+        // (half of what the town holds at most: it keeps the rest for its own furnaces and smiths)
+        let n = min(amount, (s.good(good) / 2).rounded(.down))
         guard n >= 1 else { return (0, "none") }
         s.addGood(good, -n)
         carry(good, n)

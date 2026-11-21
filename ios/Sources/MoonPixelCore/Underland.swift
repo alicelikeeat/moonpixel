@@ -57,6 +57,24 @@ extension Civ {
         }.sorted { ($0.cx, $0.cy, $0.nation) < ($1.cx, $1.cy, $1.nation) }
     }
 
+    /// How far each level of a city below reaches (chunks), from its underland (level 1) down.
+    public static func levelRadii(_ c: CivCity) -> [Double] {
+        (1...max(1, levelsDown(c))).map { k in k == 1 ? c.dug / 32 : max(1, (c.dug - Double(k - 1) * DeepTune.narrower) / 32) }
+    }
+
+    /// The people living on one level of a city below: the city's people shared out by each level's area
+    /// (the levels add up to the whole city exactly).
+    public static func levelPopulation(_ c: CivCity, level: Int) -> Int {
+        let r = levelRadii(c)
+        guard level >= 1, level <= r.count else { return 0 }
+        let areas = r.map { $0 * $0 }, total = areas.reduce(0, +)
+        guard total > 0 else { return level == 1 ? c.livePop : 0 }
+        // whole people: the deepest level takes what rounding leaves over
+        var shares = areas.map { Int((Double(c.livePop) * $0 / total).rounded(.down)) }
+        shares[shares.count - 1] += c.livePop - shares.reduce(0, +)
+        return shares[level - 1]
+    }
+
     /// How many levels down a city of the nations below has built (1: only its underland).
     public static func levelsDown(_ c: CivCity) -> Int {
         guard c.under == true || c.sea == true else { return 0 }
@@ -334,7 +352,8 @@ extension Society {
             let old = city.under == true && world.gen.isUnderCity(cx, cy)
             return (TilePos(cx * 32 + 16, cy * 32 + (old ? 18 : 19)), true)
         }
-        if let d = city.detail, let t = settlements[d], !t.abandoned { return (t.center, false) }
+        if let d = city.detail ?? city.shownAs, let t = settlements[d], !t.abandoned { return (t.center, false) }
+        if let t = citySites[id], !t.isNone { return (t, false) }
         let rc = c.cfg.regionTiles
         return (TilePos(city.rx * rc + rc / 2, city.ry * rc + rc / 2), false)
     }

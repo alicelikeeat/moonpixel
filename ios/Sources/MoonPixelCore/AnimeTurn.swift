@@ -16,12 +16,12 @@ import Foundation
 //   high over the brow with a fringe of pointed locks, at the ears on the sides and low at the nape), with
 //   strand lines and a broken ring of gloss that turn with the head; eyes, brows, blush, nose and mouth are laid
 //   on the sphere and foreshorten towards the edge.
-// Pictures are made in 16 turns (22.5° apart): `turnStep` says which one a camera sees.
+// Pictures are made in 24 turns (15° apart): `turnStep` says which one a camera sees.
 
 extension AnimeArt {
-    public static let turnSteps = 16
+    public static let turnSteps = 24
 
-    /// The drawing name of a turn step ("t0" ... "t15"; 0 faces the viewer, 4 looks to the screen's right).
+    /// The drawing name of a turn step ("t0" ... "t23"; 0 faces the viewer, 6 looks to the screen's right).
     public static func turnDir(_ step: Int) -> String { "t\(((step % turnSteps) + turnSteps) % turnSteps)" }
 
     /// The turn step a camera sees: `facing` is where the person looks on the ground (x east, y south),
@@ -39,7 +39,7 @@ extension AnimeArt {
     public static func turnStep(facing f: Vec2) -> Int { turnStep(facing: f, toward: Vec2(0, -1), right: Vec2(1, 0)) }
 
     /// A turn step from a drawing name ("t5"), or the nearest for the old names ("down", "up", "side").
-    static func turnIndex(_ dir: String) -> Int? {
+    public static func turnIndex(_ dir: String) -> Int? {
         if dir.hasPrefix("t"), let n = Int(dir.dropFirst()) { return ((n % turnSteps) + turnSteps) % turnSteps }
         return nil
     }
@@ -83,7 +83,7 @@ struct TurnBody {
 }
 
 extension AnimeArt {
-    /// A figure turned to `step` of 16 (moe, angel or hero clothes by `kind`), on the 64 x 80 plan.
+    /// A figure turned to `step` of 24 (moe, angel or hero clothes by `kind`), on the 64 x 80 plan.
     static func turned(_ look: Look, step: Int, frame: Int, held: String, child: Bool, female: Bool, kind: Figure) -> Bitmap {
         let angel = kind == .angel && !child
         let b = kind == .hero ? TurnBody.hero(female: female) : TurnBody.moe(female: female)

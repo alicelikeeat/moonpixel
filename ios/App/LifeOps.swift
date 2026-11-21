@@ -76,7 +76,7 @@ extension GameModel {
             return
         }
         if mapLayer != .surface {
-            let z = society.underlandZones().first { $0.sea == (mapLayer == .seaFloor) && $0.contains(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) }
+            let z = society.underlandZones(level: mapLevel).first { $0.sea == (mapLayer == .seaFloor) && $0.contains(OpenWorld.floorDiv(t.x, 32), OpenWorld.floorDiv(t.y, 32)) }
             let what = z.flatMap { society.civ.polities[$0.nation] }.map { String(format: L("%@的地底世界", "%@'s underland"), $0.name(zh: GameModel.zh)) }
                 ?? (mapLayer == .seaFloor ? L("被海水淹没的岩层（会落在附近能站的地方）", "Flooded rock (you land on the nearest floor)") : L("岩层（会挖出一小块落脚处）", "Rock (a small room is cleared for you)"))
             mapPickText = String(format: L("(%d, %d) · %@ · 距你 %d 格", "(%d, %d) · %@ · %d tiles away"), t.x, t.y, what, d)
@@ -127,7 +127,9 @@ extension GameModel {
         switch mapLayer {
         case .surface: teleport(to: p)
         case .sky: teleportAny(TeleportTarget(group: .sky, name: String(format: "(%d, %d)", p.x, p.y), tile: p, depth: SkyTune.depth, detail: ""))
-        default: teleportBelow(to: p)
+        default:
+            if mapLevel > 1 { teleportAny(TeleportTarget(group: .under, name: String(format: "(%d, %d)", p.x, p.y), tile: p, depth: mapLevel, detail: "")) }
+            else { teleportBelow(to: p) }
         }
     }
 

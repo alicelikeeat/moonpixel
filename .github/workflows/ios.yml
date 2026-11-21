@@ -13,6 +13,12 @@ name: iOS unsigned IPA
 # Every job keeps its full log as an artifact, pass or fail.
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: "full: every UI test, then the release; smoke: the quick UI tests only (about half the time), no release"
+        default: full
+        type: choice
+        options: [full, smoke]
   push:
     branches: ["claude/moonpixel-v1-full-spec-fze5jp", "claude/keen-maxwell-yxqpz9", "main"]
     paths: ["ios/**", "content/**", "tools/gen_swift_content.py", ".github/workflows/ios.yml"]
@@ -97,10 +103,15 @@ jobs:
         working-directory: ios
         run: |
           set +e
+          # smoke: the quick tests (the panels fit, the 3D view, metro and command mode); full: every test
+          ONLY=""
+          if [ "${{ inputs.scope }}" = "smoke" ]; then
+            for t in testThePanelsFitTheScreen testThreeDViewShowsTheSameGameAndSwitchesBack testMetroModeBuildsAndKeepsTheCity testCommandModeBuildsAndReturnsToTheWorld; do ONLY="$ONLY -only-testing:MoonPixelUITests/MoonPixelUITests/$t"; done
+          fi
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']]; print(c[0]['udid']); sys.stderr.write(c[0]['name']+'\n')")
           xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
           xcodebuild test -project MoonPixel.xcodeproj -scheme MoonPixel -destination "id=$UDID" -derivedDataPath build/ddtest \
-            -resultBundlePath ui.xcresult -retry-tests-on-failure -test-iterations 2 CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
+            -resultBundlePath ui.xcresult -retry-tests-on-failure -test-iterations 2 $ONLY CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO > uitest.log 2>&1; rc=$?
           grep -E "UITEST|error:|XCTAssert|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" uitest.log | cut -c1-300 | sort -u | head -150 | tee ui-result.txt
           mkdir -p uishots && xcrun xcresulttool export attachments --path ui.xcresult --output-path uishots > /dev/null 2>&1
           python3 -c "
@@ -132,6 +143,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: [core, ui]
+    if: ${{ inputs.scope != 'smoke' }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }

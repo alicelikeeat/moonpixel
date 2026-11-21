@@ -25,6 +25,9 @@ final class GameScene: SKScene {
     private var clockSpeed = -1
     var agentNodes: [Int: SKSpriteNode] = [:]
     var texCache: [String: SKTexture] = [:]
+    /// The figures' pictures (bounded: see charTexture), and how many were drawn this frame.
+    var charCache: [String: SKTexture] = [:]
+    var figureDraws = 0
     let cam = SKCameraNode()
     let playerNode = SKSpriteNode()
     private let playerRing = SKShapeNode(circleOfRadius: 8)
@@ -209,8 +212,8 @@ final class GameScene: SKScene {
     }
 
     @discardableResult func clearTextureCache() -> Int {
-        let n = texCache.count
-        texCache.removeAll()
+        let n = texCache.count + charCache.count
+        texCache.removeAll(); charCache.removeAll()
         trimChunkTextures()
         return n
     }
@@ -222,6 +225,7 @@ final class GameScene: SKScene {
         guard let model = model, model.world != nil, let society = model.society else { return }
         let world = model.activeWorld
         let under = MP.isBelow(model.depth)
+        figureDraws = 0
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
         frameAvg = frameAvg * 0.95 + dt * 0.05
@@ -516,18 +520,71 @@ final class GameScene: SKScene {
         return abs(facing.x) > abs(facing.y) && facing.x < 0 ? -1 : 1
     }
 
+    // MARK: clouds drifting over the sky cities
+
+    private var skyClouds: [SKSpriteNode] = []
+
+    /// On the sky storey: a dozen soft clouds drift slowly east across the view at the islands' height (over
+    /// the open air and the islands alike), each at its own pace.
+    private func updateSkyClouds(_ model: GameModel) {
+        guard model.depth == SkyTune.depth else { for n in skyClouds { n.isHidden = true }; return }
+        if skyClouds.isEmpty {
+            for i in 0..<12 {
+                var b = Bitmap(96, 48)
+                var r = RNG(seed: 4242 + i)
+                for _ in 0..<7 {
+                    let cx = r.range(18, 78), cy = r.range(18, 32), rad = r.range(10, 18)
+                    for y in 0..<48 { for x in 0..<96 {
+                        let d = ((Double(x) - cx) * (Double(x) - cx) + (Double(y) - cy) * (Double(y) - cy)).squareRoot()
+                        guard d <= rad else { continue }
+                        let a = UInt8(min(255, Double(b.get(x, y).a) + 200 * min(1, (rad - d) / 4)))
+                        let shade: UInt8 = y > 30 ? 226 : 255
+                        b.set(x, y, RGBA(shade, shade, 255, a))
+                    } }
+                }
+                let n = SKSpriteNode(texture: b.texture)
+                n.texture?.filteringMode = .linear
+                n.size = CGSize(width: 192 + Double(i % 4) * 48, height: 96 + Double(i % 4) * 24)
+                n.alpha = 0.62; n.zPosition = 40
+                addChild(n); skyClouds.append(n)
+            }
+        }
+        let t = CACurrentMediaTime()
+        let span = Double(max(size.width, size.height) / zoom) * 1.8 + 400
+        for (i, n) in skyClouds.enumerated() {
+            n.isHidden = false
+            let speed = 10 + Double(i % 5) * 4                              // world units a second
+            let sx = Double((i * 7919) % 1000) / 1000 * span, sy = Double((i * 4271) % 1000) / 1000 * span
+            let x = viewPos.x - span / 2 + (sx + t * speed).truncatingRemainder(dividingBy: span)
+            let y = viewPos.y - span / 2 + sy
+            n.position = CGPoint(x: x, y: -y)
+        }
+    }
+
     private func charTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> SKTexture {
-        // the anime figures turn to any of 16 angles; the pixel figures keep their four views
+        // the anime figures turn to any of 24 angles; the pixel figures keep their four views
         let dir = Bitmap.animeStyle ? AnimeArt.turnDir(AnimeArt.turnStep(facing: facing))
                                     : (abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down"))
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        let key = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(dir)\(frame)\(held)\(child)\(female)"
-        if let t = texCache[key] { return t }
+        let base = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")"
+        let tail = "\(frame)\(held)\(child)\(female)"
+        let key = base + dir + tail
+        if let t = charCache[key] { return t }
+        // memory: figures are drawn in many turns now; the cache is bounded (about 50 MB) and refilled on demand
+        if charCache.count > 600 { charCache.removeAll(keepingCapacity: true) }
+        // a frame that has already drawn many new figures shows a nearby turn already drawn instead (no hitch;
+        // the right turn is drawn on a later frame)
+        if figureDraws >= 6, Bitmap.animeStyle, let i = AnimeArt.turnIndex(dir) {
+            for d in 1...(AnimeArt.turnSteps / 2) {
+                for j in [i + d, i - d] { if let t = charCache[base + AnimeArt.turnDir(j) + tail] { return t } }
+            }
+        }
+        figureDraws += 1
         // the anime look is drawn by hand in code (twice the pixels), not converted from the pixel sprite
         let t = Bitmap.animeStyle
             ? (AnimeArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).cgImage.map { Bitmap.figureTexture($0) } ?? SKTexture())
             : PixelArt.character(look, dir: dir, frame: frame, held: held, child: child, female: female).texture
-        texCache[key] = t
+        charCache[key] = t
         return t
     }
 
@@ -543,6 +600,7 @@ final class GameScene: SKScene {
         let split: (shown: [Agent], badges: [TilePos: Int]) = world.storey > 0 ? (upstairs.shown, [:])
             : (model.depth > 0 ? ([], [:]) : society.crowdSplit(center: viewPos, halfW: halfW, halfH: halfH, limit: GameScene.maxCharacters, soldiersApart: !model.plainRender))
         updateMachines(society, model)
+        updateSkyClouds(model)
         updateBadges(split.badges)
         for a in split.shown {
             seen.insert(a.id)
@@ -603,7 +661,7 @@ final class GameScene: SKScene {
             }
         }
         // underground: the people of the nations' underlands, walking their roads
-        if MP.isBelow(model.depth) || model.depth == SkyTune.depth {
+        if MP.isBelow(model.depth) || model.depth == SkyTune.depth || model.depth == 0 {
             for f in society.folk(depth: model.depth, center: viewPos, halfW: halfW, halfH: halfH) {
                 seen.insert(f.id)
                 let node = agentNodes[f.id] ?? {

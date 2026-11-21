@@ -171,4 +171,24 @@ final class SkyTests: XCTestCase {
         var d = Data("\(sheet.w) \(sheet.h)\n".utf8); d.append(contentsOf: sheet.px)
         try d.write(to: URL(fileURLWithPath: dir).appendingPathComponent("island.rgba"))
     }
+
+    func testSkyHousesHaveRoofsAndTheIslandsAreSeenFromBelow() {
+        let s = makeSociety(24)
+        let c = firstSky(s)
+        let w = s.skyWorld(), gen = s.world.gen
+        // a chunk with a house: its mesh rises above the walls (the roof and its little gold dome)
+        var roofed = false
+        for cy in (c.cy - 1)...(c.cy + 1) { for cx in (c.cx - 1)...(c.cx + 1) where w.chunk(cx, cy).layers[2].contains(s.content.tid("marble_wall")) {
+            let mesh = Mesher3D.build(ChunkInput3D(world: w, cx: cx, cy: cy), gen: gen)
+            let floor = mesh.heights.filter { $0 > -999 }.max() ?? 0
+            if (mesh.solid.positions.map { $0.y }.max() ?? 0) > floor + 2.2 { roofed = true }
+        } }
+        XCTAssertTrue(roofed, "roofs over the marble houses")
+        // from far below: the whole island in one mesh, its floor at y 0 and its underside hanging under it
+        let far = SkyIsland3D.far(gen: gen, centre: (c.cx, c.cy))
+        XCTAssertFalse(far.isEmpty)
+        XCTAssertLessThan(far.positions.map { $0.y }.min() ?? 0, -10)
+        let xs = far.positions.map { $0.x }
+        XCTAssertGreaterThan((xs.max() ?? 0) - (xs.min() ?? 0), 90, "as wide as the island")
+    }
 }

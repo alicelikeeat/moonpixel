@@ -42,6 +42,9 @@ public final class WorldMap {
     /// sea floor (the sea-floor nations' underlands, under the oceans).
     public enum Layer: String, CaseIterable { case surface, underground, seaFloor, sky }
     public var layer = Layer.surface
+    /// Which level down the underground and sea-floor maps show (1: the underland; 2 ... 8 the levels the
+    /// cities have built below it).
+    public var level = 1
     public init() {}
 
     /// Tiles per pixel of the picture.
@@ -211,8 +214,14 @@ public final class WorldMap {
             let whole = t.fromCiv.flatMap { civ.cities[$0] }.map { $0.livePop } ?? t.members.count
             addPop(capitals.contains(t.id) ? .capital : .town, t.name(zh: zh), col, t.center, whole)
         }
+        // a city not shown yet is marked where its town will stand (worked out a few at a time: the rest are
+        // marked at the middle of their region until their turn comes)
+        var planned = 0
         for c in civ.cities.values.sorted(by: { $0.id < $1.id }) where c.detail == nil && c.shownAs == nil && c.under != true && c.sea != true {
-            addPop(.city, c.name(zh: zh), civ.polities[c.nation]?.color ?? "#cccccc", TilePos(c.rx * rc + rc / 2, c.ry * rc + rc / 2), c.livePop, city: c.id)
+            var at = TilePos(c.rx * rc + rc / 2, c.ry * rc + rc / 2)
+            if let t = s.citySites[c.id] { if !t.isNone { at = t } }
+            else if planned < 6, let t = s.plannedSite(c) { at = t; planned += 1 }
+            addPop(.city, c.name(zh: zh), civ.polities[c.nation]?.color ?? "#cccccc", at, c.livePop, city: c.id)
         }
         for d in s.net.districts { addPop(.district, d.name, "#dfe6f2", d.center, d.population) }
         for st in s.net.stops where st.kind == .airport && st.name.contains(zh ? "机场" : "Airport") && !st.name.contains(zh ? "货运" : "Cargo") { add(.airport, st.name, "#9fd3ff", st.tile) }
@@ -346,7 +355,7 @@ public final class WorldMap {
         origin = TilePos(pc.x - ext, pc.y - ext)
         var img = Bitmap(side * ppc, side * ppc, fill: WorldMap.fog)
         // which chunk belongs to which underland (one pass over each zone's square)
-        let zones = s.underlandZones().filter { $0.sea == sea }
+        let zones = s.underlandZones(level: level).filter { $0.sea == sea }
         var owner: [Int64: UnderlandZone] = [:]
         for z in zones {
             let r = Int(z.r.rounded(.up))
@@ -357,12 +366,14 @@ public final class WorldMap {
         // how many levels a city has built down under each chunk (it digs each level a little narrower: seen from
         // above, terraces stepping down to its middle, like a great pit)
         var depthUnder: [Int64: Int] = [:]
-        for level in 2...MP.deepest {
-            let deep = s.underlandZones(level: level).filter { $0.sea == sea }
-            if deep.isEmpty { break }
-            for z in deep {
-                let r = Int(z.r.rounded(.up))
-                for y in (z.cy - r)...(z.cy + r) { for x in (z.cx - r)...(z.cx + r) where z.contains(x, y) { depthUnder[MP.chunkKey(x, y)] = level } }
+        if level < MP.deepest {
+            for lv in (level + 1)...MP.deepest {
+                let deep = s.underlandZones(level: lv).filter { $0.sea == sea }
+                if deep.isEmpty { break }
+                for z in deep {
+                    let r = Int(z.r.rounded(.up))
+                    for y in (z.cy - r)...(z.cy + r) { for x in (z.cx - r)...(z.cx + r) where z.contains(x, y) { depthUnder[MP.chunkKey(x, y)] = lv - level + 1 } }
+                }
             }
         }
         let rock = RGBA(52, 46, 56), rockSea = RGBA(36, 48, 70), seabed = RGBA(26, 58, 100), seabedDeep = RGBA(16, 38, 76), landAbove = RGBA(30, 30, 36)
@@ -414,11 +425,13 @@ public final class WorldMap {
         // the cities below, and each nation's name over the middle of its cities
         var byNation: [Int: [TilePos]] = [:]
         for c in civ.cities.values.sorted(by: { $0.id < $1.id }) where (sea ? c.sea == true : c.under == true) {
-            guard let (ux, uy) = c.underAt, let p = civ.polities[c.nation], p.status == .active else { continue }
+            guard let (ux, uy) = c.underAt, let p = civ.polities[c.nation], p.status == .active, Civ.levelsDown(c) >= level else { continue }
             let t = s.cityGate(c.id)?.tile ?? TilePos(ux * 32 + 16, uy * 32 + 18)
             // the name says how far down it has built
             let down = Civ.levelsDown(c)
-            let label = (down > 1 ? c.name(zh: zh) + (zh ? " ↓\(down)层" : " ↓B\(down)") : c.name(zh: zh)) + " · " + WorldMap.popText(c.livePop, zh: zh)
+            // on a level below the first: this level's people
+            let people = level == 1 ? c.livePop : Civ.levelPopulation(c, level: level)
+            let label = (down > 1 ? c.name(zh: zh) + (zh ? " ↓\(down)层" : " ↓B\(down)") : c.name(zh: zh)) + " · " + WorldMap.popText(people, zh: zh)
             add(p.capital == c.id ? .capital : .city, label, p.color, t)
             byNation[c.nation, default: []].append(t)
         }
@@ -427,8 +440,8 @@ public final class WorldMap {
             let mx = ts.map { $0.x }.reduce(0, +) / ts.count, my = ts.map { $0.y }.reduce(0, +) / ts.count
             add(.nation, p.name(zh: zh), p.color, TilePos(mx, my - 96))
         }
-        // where to go down from the surface
-        for y in 0..<side { for x in 0..<side where s.world.known(origin.x + x, origin.y + y) != 0 {
+        // where to go down from the surface (on the first level's map)
+        for y in 0..<side { for x in 0..<side where level == 1 && s.world.known(origin.x + x, origin.y + y) != 0 {
             let cx = origin.x + x, cy = origin.y + y
             if !sea && gen.isUnderCity(cx, cy) && gen.volcano(near: cx * 32 + 16, cy * 32 + 16, radius: 40) == nil && !gen.isUfoPort(cx, cy) {
                 add(.underCity, zh ? "入口" : "Way down", "#c08aff", TilePos(cx * 32 + 16, cy * 32 + 22))

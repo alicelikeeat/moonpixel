@@ -466,6 +466,32 @@ public enum Mesher3D {
                 }
             } }
         }
+        // the sky houses' roofs: over every closed rectangle of marble walls, a stepped roof of white marble with
+        // gold bands, rising to a small gold dome
+        if storey == SkyTune.storey {
+            let marble = Content.shared.tid("marble_wall")
+            let door = Content.shared.tid("door_wood")
+            func wall(_ x: Int, _ y: Int) -> Bool { x >= 0 && x < 32 && y >= 0 && y < 32 && (ob[y * 32 + x] == marble || ob[y * 32 + x] == door) }
+            for ty in 0..<32 { for tx in 0..<32 where ob[ty * 32 + tx] == marble && !wall(tx - 1, ty) && !wall(tx, ty - 1) {
+                var x1 = tx, y1 = ty
+                while x1 + 1 < 32 && wall(x1 + 1, ty) { x1 += 1 }
+                while y1 + 1 < 32 && wall(tx, y1 + 1) { y1 += 1 }
+                guard x1 - tx >= 3, y1 - ty >= 3, wall(x1, y1) else { continue }
+                let top = H(tx, ty) + 24 / 16
+                let x0 = Float(tx), z0 = Float(ty), xe = Float(x1 + 1), ze = Float(y1 + 1)
+                let white = RGBA(246, 243, 236), gold = RGBA(226, 184, 80)
+                // the eaves, then steps in toward the ridge
+                out.solid.box(x0 - 0.3, top, z0 - 0.3, xe + 0.3, top + 0.2, ze + 0.3, gold, faces: .all)
+                var inset: Float = 0, h = top + 0.2, k = 0
+                while xe - x0 - 2 * inset > 1.2 && ze - z0 - 2 * inset > 1.2 {
+                    out.solid.box(x0 + inset, h, z0 + inset, xe - inset, h + 0.35, ze - inset, k % 3 == 2 ? gold : white, faces: .all)
+                    inset += 0.55; h += 0.35; k += 1
+                }
+                let cx = (x0 + xe) / 2, cz = (z0 + ze) / 2
+                out.solid.box(cx - 0.45, h, cz - 0.45, cx + 0.45, h + 0.6, cz + 0.45, gold, faces: .all)
+                out.solid.box(cx - 0.12, h + 0.6, cz - 0.12, cx + 0.12, h + 1.1, cz + 0.12, gold.lightened(0.2), faces: .all)
+            } }
+        }
         // the sides of every step down to a lower neighbour
         for ty in 0..<32 { for tx in 0..<32 where storey == 0 {
             let y = H(tx, ty)

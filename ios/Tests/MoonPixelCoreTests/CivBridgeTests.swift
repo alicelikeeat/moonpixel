@@ -151,6 +151,28 @@ final class CivBridgeTests: XCTestCase {
         XCTAssertTrue(marks.filter { $0.kind == .city }.allSatisfy { $0.city != nil && $0.pop != nil })
     }
 
+    /// The numbers agree wherever they are shown: the nations add up to their cities, and the people the map
+    /// labels (towns, the cities of the regions, districts) add up to the world's population, less only those
+    /// out on the roads and under arms.
+    func testWhatTheMapShowsAddsUpToTheWorld() {
+        let s = makeSociety(6)
+        hours(s, 30)
+        let c = s.civ
+        // bring a city or two into view, as a traveller would
+        for city in c.cities.values.filter({ $0.detail == nil && $0.under != true && $0.sea != true }).sorted(by: { $0.id < $1.id }).prefix(2) { _ = s.arriveAtCity(city.id) }
+        for n in c.polities.keys { XCTAssertEqual(c.nationPop(n), c.cities(of: n).reduce(0) { $0 + $1.livePop }) }
+        let m = WorldMap()
+        let (_, marks) = m.render(s, centre: TilePos(0, 0), reach: 120, zh: true)
+        let shown = marks.compactMap { $0.pop }.reduce(0, +)
+        let away = c.trips.values.reduce(0) { $0 + $1.people.total } + c.forces.values.reduce(0) { $0 + $1.crew.total } + c.drops.reduce(0) { $0 + $1.crew.total }
+        let below = c.cities.values.filter { $0.under == true || $0.sea == true }.reduce(0) { $0 + $1.livePop }
+        let world = s.knownPopulation
+        // (people not in a town: soldiers on the march, refugees on their way; a few at most)
+        let loose = s.agents.values.filter { a in !(s.settlements[a.sid]?.members.contains(a.id) ?? false) }.count
+        XCTAssertEqual(Double(shown + away + below + loose), Double(world), accuracy: Double(world) * 0.02 + 5,
+                       "map \(shown) + on the road \(away) + below \(below) + loose \(loose) vs world \(world)")
+    }
+
     /// With the traveller there, the regional layer is real: a tower stands as storeys, a force lends real
     /// soldiers (who go back to it afterwards), machines have pictures, and a battle fought by hand counts once.
     func testNearTheTravellerTowersSoldiersMachinesAndCampaignsAreReal() {
@@ -239,5 +261,33 @@ final class CivBridgeTests: XCTestCase {
         s.linkMetro(population: 650, name: "Moonhaven")
         XCTAssertEqual(s.knownPopulation, before + 650, "updated, not added again")
         for k in CivUnitDef.all { XCTAssertFalse(Figure3D.machine(k.key, color: RGBA(200, 60, 60)).isEmpty, "a model of \(k.key)") }
+    }
+
+    func testTheMapMarksACityWhereItsTownWillStandAndThePeopleWalkTheDistricts() {
+        let s = makeSociety(5)
+        hours(s, 3)
+        let c = s.civ
+        guard let city = c.cities.values.filter({ $0.detail == nil && $0.shownAs == nil && $0.under != true && $0.sea != true && $0.pop >= 12 }).sorted(by: { $0.id < $1.id }).last else { return XCTFail("no city") }
+        guard let planned = s.plannedSite(city) else { return XCTFail("no room for it") }
+        let m = WorldMap()
+        let (_, marks) = m.render(s, centre: planned, reach: 30, zh: true)
+        XCTAssertTrue(marks.contains { $0.city == city.id && $0.tile == planned }, "marked where its town will stand")
+        XCTAssertEqual(s.arriveAtCity(city.id), planned, "and the town stands there")
+    }
+
+    func testTheDistrictsPeopleWalkTheirStreets() {
+        let s = makeSociety(5)
+        let d = s.foundDistrict(name: "Test", at: TilePos(4000, 4000), nation: 1)
+        var b = CityBuilding()
+        b.id = 1; b.kind = "tower"; b.x = 4000; b.y = 4000; b.w = 16; b.d = 16; b.state = .open
+        b.entrance = TilePos(4008, 4015)
+        b.floors = (0..<18).map { _ in var f = CityFloor(); f.residents = 20; return f }
+        d.buildings.append(b)
+        s.world.time = MP.daySeconds * 0.5
+        let walkers = s.folk(depth: 0, center: Vec2(4008 * 16, 4018 * 16), halfW: 1200, halfH: 1200)
+        XCTAssertEqual(walkers.count, 3, "a tower of 360 people: three of them out in front")
+        XCTAssertTrue(walkers.allSatisfy { abs($0.pos.y - Double(4016 * 16 + 8)) < 16 }, "on the pavement in front of the door")
+        s.world.time = MP.daySeconds * 2 / 24
+        XCTAssertEqual(s.folk(depth: 0, center: Vec2(4008 * 16, 4018 * 16), halfW: 1200, halfH: 1200).count, 2, "fewer at night")
     }
 }

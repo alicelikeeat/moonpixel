@@ -327,6 +327,34 @@ final class MoonPixelUITests: XCTestCase {
         shot("cmd-04-back")
     }
 
+    /// Nothing sticks out of the screen sideways: every button of the More panel and of the map panel lies
+    /// within the window's width (a row that grew too wide pushed buttons off the left edge once).
+    func testThePanelsFitTheScreen() {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        app.launchArguments = ["--autostart", "7", "--2d"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 20), "the game started")
+        sleep(3)
+        let win = app.windows.firstMatch.frame
+        func check(_ panel: String) {
+            guard let snap = try? app.snapshot() else { return XCTFail("no snapshot") }
+            var out: [String] = []
+            func walk(_ e: XCUIElementSnapshot) {
+                if e.elementType == .button && e.frame.width > 0 && (e.frame.minX < win.minX - 1 || e.frame.maxX > win.maxX + 1) { out.append("\(e.identifier.isEmpty ? e.label : e.identifier) \(e.frame)") }
+                for c in e.children { walk(c) }
+            }
+            walk(snap)
+            print("UITEST fit \(panel): \(out.count) off screen \(out.prefix(6))")
+            XCTAssertTrue(out.isEmpty, "\(panel): off the screen: \(out)")
+        }
+        app.buttons["more"].tap(); sleep(2)
+        check("More")
+        app.buttons["close-panel"].firstMatch.tap(); sleep(1)
+        app.buttons["Map"].tap(); sleep(3)
+        check("Map")
+    }
+
     /// Metro mode: found a city, lay a street, zone along it, open the budget, leave; the city is kept.
     func testMetroModeBuildsAndKeepsTheCity() {
         continueAfterFailure = true

@@ -127,3 +127,40 @@ extension PixelArt {
         return bakeStorey(layers: layers, onto: img)
     }
 }
+
+/// A sky island as seen from far below (or from far away): the whole island in coarse blocks of 4 x 4 tiles,
+/// green on top with its white houses and their gold roofs, the long rocky underside hanging beneath. One
+/// mesh, placed by the caller at the island's middle; y 0 is the island's floor.
+public enum SkyIsland3D {
+    public static func far(gen: Generator, centre c: (Int, Int)) -> Mesh3D {
+        var m = Mesh3D()
+        let step = 4
+        let midX = c.0 * 32 + 16, midY = c.1 * 32 + 16
+        let marble = Content.shared.tid("marble_wall")
+        // the houses: which cells hold marble walls (from the island's own plan)
+        var housed = Set<Int64>()
+        for cy in (c.1 - 3)...(c.1 + 3) { for cx in (c.0 - 3)...(c.0 + 3) where gen.skyIsland(cx, cy).map({ $0 == c }) ?? false {
+            let p = gen.skyPlan(cx, cy, centre: c)
+            for i in 0..<MP.chunkArea where p[2][i] == marble {
+                housed.insert(MP.chunkKey(OpenWorld.floorDiv(cx * 32 + i % 32 - midX, step), OpenWorld.floorDiv(cy * 32 + i / 32 - midY, step)))
+            }
+        } }
+        let grass = RGBA(118, 186, 92), earth = RGBA(138, 100, 68), rock = RGBA(104, 96, 122), deep = RGBA(78, 72, 96)
+        for gy in -18...17 { for gx in -18...17 {
+            let x = midX + gx * step + step / 2, y = midY + gy * step + step / 2
+            let inside = gen.skyInside(x, y, centre: c)
+            guard inside > 0 else { continue }
+            let x0 = Float(gx * step), z0 = Float(gy * step), x1 = x0 + Float(step), z1 = z0 + Float(step)
+            m.box(x0, -0.5, z0, x1, 0, z1, grass, faces: [.top])
+            // the underside: as deep as the island's own (Mesher3D), in bands of earth and rock
+            let d = Float(1.2 + pow(max(0, min(60, inside)), 0.85) * 0.55)
+            m.box(x0, -1.6, z0, x1, -0.01, z1, earth, faces: [.sides])
+            m.box(x0, -d, z0, x1, -1.6, z1, d > 8 ? deep : rock, faces: [.sides, .bottom])
+            if housed.contains(MP.chunkKey(gx, gy)) {
+                m.box(x0 + 0.5, 0, z0 + 0.5, x1 - 0.5, 1.5, z1 - 0.5, RGBA(246, 243, 236), faces: .noBottom)
+                m.box(x0 + 1.2, 1.5, z0 + 1.2, x1 - 1.2, 2.2, z1 - 1.2, RGBA(226, 184, 80), faces: .noBottom)
+            }
+        } }
+        return m
+    }
+}

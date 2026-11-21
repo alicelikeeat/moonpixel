@@ -225,6 +225,15 @@ final class GameModel: ObservableObject {
         mapPick = nil; mapPickText = ""
         rebuildMap()
     }
+    /// The level the maps below show (B1 ... B8).
+    @Published var mapLevel = 1
+    func setMapLevel(_ l: Int) {
+        guard l != mapLevel else { return }
+        mapLevel = l
+        worldMap.level = l
+        mapPick = nil; mapPickText = ""
+        rebuildMap()
+    }
     func setMapPolitical(_ on: Bool) {
         guard on != mapPolitical else { return }
         mapPolitical = on

@@ -644,15 +644,15 @@ extension Society {
         let w = w ?? world
         let key = content.tile(w.tile(2, t.x, t.y))?.key ?? ""
         let yield: [String: (String, Double)] = ["cave_wall": ("stone", 1), "rock": ("stone", 3), "ore_iron": ("iron_ore", 2), "ore_copper": ("iron_ore", 1),
-                                                 "ore_moon": ("moon_ore", 3), "ore_gold": ("gold_ore", 2)]
+                                                 "ore_moon": ("moon_ore", 2), "ore_gold": ("gold_ore", 2)]
         guard var y = yield[key] else { return nil }
         w.setTile(2, t.x, t.y, 0)
-        // a vein runs on: the same ore touching this tile comes out with it (up to a dozen tiles), and the
+        // a vein runs on: the same ore touching this tile comes out with it (up to eight tiles), and the
         // deeper levels give more of the rare ores
         if key.hasPrefix("ore_") {
             let id = content.tid(key)
             var todo = [t], seen: Set<TilePos> = [t], dug = 0
-            while let p = todo.popLast(), dug < 12 {
+            while let p = todo.popLast(), dug < 7 {
                 for d in [TilePos(1, 0), TilePos(-1, 0), TilePos(0, 1), TilePos(0, -1)] {
                     let q = p + d
                     guard !seen.contains(q), w.tile(2, q.x, q.y) == id else { continue }

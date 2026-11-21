@@ -31,17 +31,17 @@ final class BedAndMoonsteelTests: XCTestCase {
     func testTheTravellerGetsMoonsteelEnoughForACarrier() {
         let s = makeSociety(42)
         let u = s.underworld(), ct = s.content
-        // a moon-ore vein: one swing of the pick takes the whole vein, three ore a tile
+        // a moon-ore vein: one swing of the pick takes the whole vein, two ore a tile
         let at = TilePos(900, 900)
         for dx in 0..<4 { u.setTile(2, at.x + dx, at.y, ct.tid("ore_moon")) }
         let got = s.playerDig(at: at, in: u)
         XCTAssertEqual(got?.good, "moon_ore")
-        XCTAssertEqual(got?.amount ?? 0, 12, accuracy: 0.001)
+        XCTAssertEqual(got?.amount ?? 0, 8, accuracy: 0.001)
         for dx in 0..<4 { XCTAssertEqual(u.tile(2, at.x + dx, at.y), 0) }
         // deeper levels give more
         let b4 = s.deepWorld(4)
         b4.setTile(2, at.x, at.y, ct.tid("ore_moon"))
-        XCTAssertGreaterThan(s.playerDig(at: at, in: b4)?.amount ?? 0, 3)
+        XCTAssertGreaterThan(s.playerDig(at: at, in: b4)?.amount ?? 0, 2)
         // a batch of moonsteel at a furnace: ten at once, the inputs ten times over
         s.carry("moon_ore", 60); s.carry("iron", 30); s.carry("wood", 60)
         let f = TilePos(2000, 2000)
@@ -54,14 +54,14 @@ final class BedAndMoonsteelTests: XCTestCase {
         XCTAssertEqual(s.carried("moonsteel") - before, 10, accuracy: 0.001)
         // a batch never takes more than the pack holds
         XCTAssertEqual(s.playerCanCraft("moonsteel"), Int((s.carried("moon_ore") / 2).rounded(.down)) < Int(s.carried("iron")) ? Int((s.carried("moon_ore") / 2).rounded(.down)) : min(Int(s.carried("iron")), Int(s.carried("wood") / 2)))
-        // a town of one's own nation lends its stores
+        // a town of one's own nation lends half its stores
         guard let town = s.settlements.values.filter({ !$0.abandoned && $0.nation != nil }).min(by: { $0.id < $1.id }) else { return XCTFail("no town") }
         s.realm.player.nation = town.nation!
-        town.addGood("moonsteel", 25)
+        town.addGood("moonsteel", 50 - town.good("moonsteel"))
         _ = s.place(at: town.center + TilePos(0, 2), depth: 0)
         let (n, why) = s.playerRequisition("moonsteel", amount: 40)
         XCTAssertNil(why)
-        XCTAssertGreaterThanOrEqual(n, 25)
+        XCTAssertEqual(n, 25, "half of the town's fifty")
         XCTAssertGreaterThanOrEqual(s.carried("moonsteel"), 30, "enough for a carrier")
         // not from a foreign town
         s.realm.player.nation = 9999

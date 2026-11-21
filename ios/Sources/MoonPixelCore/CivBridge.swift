@@ -159,7 +159,7 @@ extension Society {
             for city in civ.cities.values where city.under == true || city.sea == true {
                 guard let (ux, uy) = city.underAt, let z = zones.first(where: { $0.cx == ux && $0.cy == uy }) else { continue }
                 let d = (Double((cx - ux) * (cx - ux) + (cy - uy) * (cy - uy))).squareRoot()
-                if d <= z.r + rc { n += city.livePop / max(1, Civ.levelsDown(city)) }      // (a city's people share its levels)
+                if d <= z.r + rc { n += Civ.levelPopulation(city, level: depth) }           // (the people of this level of it)
             }
             return n
         }
@@ -198,6 +198,19 @@ extension Society {
         }
     }
 
+    /// Where a regional city's town will stand when it is shown (nil: no room in its region). Worked out once.
+    public func plannedSite(_ city: CivCity) -> TilePos? {
+        if let t = citySites[city.id] { return t.isNone ? nil : t }
+        let c = civ, size = c.cfg.regionTiles
+        let mid = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
+        let others = settlements.values.filter { !$0.abandoned }.map { $0.center }
+        var site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 20), salt: 7000 + city.id, avoid: others, avoidDist: 60)
+        // (life-sized towns need room: a second look closer to other towns before giving up)
+        if site.isNone { site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 8), salt: 7100 + city.id, avoid: others, avoidDist: 30) }
+        citySites[city.id] = site
+        return site.isNone ? nil : site
+    }
+
     /// Where a regional city stands in the detailed world: the town it is (or is shown as), made now if it
     /// is not shown yet (towns far from it go back to being counted first, to make room). Nil for a city
     /// below, or one that has no room anywhere in its region.
@@ -215,13 +228,14 @@ extension Society {
         guard agents.count + 40 < world.budget.maxAgents, settlements.values.filter({ !$0.abandoned }).count < world.budget.maxSettlements else { return nil }
         guard city.detail == nil, city.shownAs == nil, let p = c.polities[city.nation], p.status == .active else { return nil }
         do {
-            let size = c.cfg.regionTiles
-            let mid = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
+            guard var site = plannedSite(city) else { return nil }
+            // the planned place may have been built on since: then the nearest room to it
             let others = settlements.values.filter { !$0.abandoned }.map { $0.center }
-            var site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 20), salt: 7000 + city.id, avoid: others, avoidDist: 60)
-            // (life-sized towns need room: a second look closer to other towns before giving up)
-            if site.isNone { site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 8), salt: 7100 + city.id, avoid: others, avoidDist: 30) }
-            if site.isNone { return nil }
+            if others.contains(where: { $0.distance2(site) < 30 * 30 }) || world.blocked(site.x, site.y) {
+                site = world.findSite(from: site, minR: 0, maxR: 120, salt: 7200 + city.id, avoid: others, avoidDist: 30)
+                if site.isNone { citySites[city.id] = nil; return nil }
+                citySites[city.id] = site
+            }
             // the nation joins the detailed world's diplomacy, as itself
             if realm.nation(city.nation) == nil {
                 var n = Nation(); n.id = p.id; n.nameEn = p.nameEn; n.nameZh = p.nameZh; n.color = p.color; n.techCount = legacyTech; n.regional = true

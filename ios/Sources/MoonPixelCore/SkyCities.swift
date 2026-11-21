@@ -240,8 +240,50 @@ extension Society {
         return out
     }
 
+    /// The people of the city districts out on their streets: in front of every open building some of those
+    /// who live or work there walk up and down the pavement (one for every 120 or so, three at most), by the
+    /// clock, more by day than at night. They stand for the district's own people (who are counted in its
+    /// buildings), so a district of thousands is busy, not empty.
+    public func districtWalkers(center: Vec2, halfW: Double, halfH: Double, limit: Int = 40) -> [UnderFolk] {
+        let t = world.time
+        let x0 = center.x - halfW, x1 = center.x + halfW, y0 = center.y - halfH, y1 = center.y + halfH
+        let day = world.hour >= 7 && world.hour < 21
+        var out: [UnderFolk] = []
+        for d in net.districts {
+            for b in d.buildings where b.state == .open {
+                let f = b.front
+                let fx = Double(f.x) * 16 + 8, fy = Double(f.y) * 16 + 8
+                guard fx > x0 - 300, fx < x1 + 300, fy > y0 - 300, fy < y1 + 300 else { continue }
+                let crowd = b.residents + b.jobs
+                guard crowd > 0 else { continue }
+                let n = min(3, 1 + crowd / 120) - (day ? 0 : 1)
+                guard n > 0 else { continue }
+                // along the building's front (east-west for a door on the north or south side, else north-south)
+                let alongX = f.y != b.entrance.y
+                let reach = Double(max(4, alongX ? b.w : b.d)) * 16 / 2 + 24
+                for i in 0..<n {
+                    let h = MP.h2(world.seed &+ 6464 &+ i, b.id, d.id)
+                    let who = CharacterModels.resident(h, sea: false)
+                    let period = 40.0 + Double(h % 30)
+                    let ph = (t / period + Double(h % 1000) / 1000).truncatingRemainder(dividingBy: 2)
+                    let fr = ph < 1 ? ph : 2 - ph
+                    let off = (fr * 2 - 1) * reach, side = Double(i % 2 == 0 ? 6 : 12)
+                    let pos = alongX ? Vec2(fx + off, fy + side) : Vec2(fx + side, fy + off)
+                    guard pos.x > x0, pos.x < x1, pos.y > y0, pos.y < y1 else { continue }
+                    let dir = (ph < 1 ? 1.0 : -1.0)
+                    let resting = fr < 0.03 || fr > 0.97
+                    let id = 950_000_000 + (d.id % 100) * 1_000_000 + (b.id % 100_000) * 4 + i
+                    out.append(UnderFolk(id: id, pos: pos, facing: resting ? Vec2(0, 1) : (alongX ? Vec2(dir, 0) : Vec2(0, dir)), moving: !resting, look: who.look, female: who.female, child: who.child))
+                    if out.count >= limit { return out }
+                }
+            }
+        }
+        return out
+    }
+
     /// The people to draw on a layer (underground or in the sky), near a place.
     public func folk(depth: Int, center: Vec2, halfW: Double, halfH: Double, limit: Int = 40) -> [UnderFolk] {
+        if depth == 0 { return districtWalkers(center: center, halfW: halfW, halfH: halfH, limit: limit) }
         if MP.isBelow(depth) { return underFolk(center: center, halfW: halfW, halfH: halfH, limit: limit, level: depth) }
         if depth == SkyTune.depth { return skyFolk(center: center, halfW: halfW, halfH: halfH, limit: limit) }
         return []

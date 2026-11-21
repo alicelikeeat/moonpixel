@@ -68,7 +68,9 @@ public enum CharacterModels {
 
 extension AnimeArt {
     /// What a character model adds over the figure (or, for the round ones, the whole figure).
-    static func modelFigure(_ m: CharacterModel, base: () -> Bitmap, look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
+    /// `flipOverlay`: the things the model adds are drawn for the side view and mirrored (a figure turned to
+    /// the left, whose body is drawn turned by `base`).
+    static func modelFigure(_ m: CharacterModel, base: () -> Bitmap, look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool, flipOverlay: Bool = false) -> Bitmap {
         var c = Canvas(charW, charH, scale: figureScale)
         let k: Double = child ? 0.84 : 1
         let walk = frame == 1 ? 1.0 : (frame == 2 ? -1.0 : 0)
@@ -196,7 +198,7 @@ extension AnimeArt {
         default: break
         }
         _ = hair; _ = skin
-        let over = c.image()
+        let over = flipOverlay ? mirrored(c.image()) : c.image()
         // laid over the figure with its own transparency (a glass helmet shows the face through it)
         for y in 0..<min(img.h, over.h) { for x in 0..<min(img.w, over.w) {
             let o = over.get(x, y)

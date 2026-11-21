@@ -194,11 +194,18 @@ public enum AnimeArt {
     /// A turn step ("t0" ... "t15", see AnimeTurn.swift) gives the figure turned to that angle.
     public static func character(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
         if let step = turnIndex(dir) {
-            // the model figures are drawn in the four views only: the nearest one (mirrored to the left)
-            if look.anim == nil && CharacterModels.of(look.model) != nil {
+            if look.anim == nil, let m = CharacterModels.of(look.model) {
                 let v = cardinal(step)
-                let pic = character(look, dir: v.dir, frame: frame, held: held, child: child, female: female)
-                return v.mirrored ? mirrored(pic) : pic
+                // the round little creatures are the same all round: the nearest view (mirrored to the left)
+                if m.round {
+                    let pic = character(look, dir: v.dir, frame: frame, held: held, child: child, female: female)
+                    return v.mirrored ? mirrored(pic) : pic
+                }
+                // the others: the figure turned to the very angle, and what the model adds (a cap, a helm, a beard)
+                // over it from the nearest view
+                var plain = look; plain.model = nil
+                return modelFigure(m, base: { turned(plain, step: step, frame: frame, held: held, child: child, female: female, kind: figure) },
+                                   look: look, dir: v.dir, frame: frame, held: held, child: child, female: female, flipOverlay: v.mirrored)
             }
             return turned(look, step: step, frame: frame, held: held, child: child, female: female, kind: figure)
         }
@@ -699,8 +706,9 @@ public enum AnimeArt {
         case "wing":
             // an angel's wing on a sky house: from the wall beside it (west for an east wing) up and out, the
             // long white flight feathers hanging in a fan, gold coverts along the top
+            // (drawn over the whole cell: a wing reaches well past its own tile, out and up)
             let s: Double = t.key.hasSuffix("_w") ? -1 : 1
-            func W(_ x: Double, _ y: Double) -> (Double, Double) { (bx + 16 + s * (x - 16), by + y) }
+            func W(_ x: Double, _ y: Double) -> (Double, Double) { (s > 0 ? bx + x * 1.42 : bx + 32 - x * 1.42, by + y * 1.25 - 6) }
             c.inkColor = shadowed(c2, 0.4)
             soft(&c, [W(0, 14), W(6, 2), W(16, -10), W(28, -16), W(32, -12), W(31, -2), W(28, 10), W(23, 22), W(16, 30), W(9, 28), W(3, 22)], c1, ink: 1.2, light: 0.2, shadow: 0.18, rim: false)
             c.inkColor = nil

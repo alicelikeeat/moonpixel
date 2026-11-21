@@ -452,6 +452,9 @@ public final class Society {
     var underlandCache: (stamp: Int, zones: [UnderlandZone])?
     /// The same for the deep levels (by level, 2 ... 8).
     var deepCache: [Int: (stamp: Int, zones: [UnderlandZone])] = [:]
+    /// Where each regional city's town will stand when it is shown (worked out once, for the map and for
+    /// showing it: the map's mark and the town are in the same place). Not saved: worked out again.
+    var citySites: [Int: TilePos] = [:]
     /// The deep levels under the underground (by depth 2 ... 8), made on first use.
     public internal(set) var deeps: [Int: OpenWorld] = [:]
     /// What `digDeep` last did, by level (a level in which nothing has moved costs nothing).
@@ -1134,6 +1137,11 @@ public final class Society {
     /// Up from a bed: back to the floor beside it (the bed itself is not a place to stand).
     func getUp(_ a: Agent) {
         if let p = a.bedSide { a.pos = p; a.prevPos = p }
+        else if world.tile(2, a.pos.tile.x, a.pos.tile.y) == content.tid("bed") {
+            // (asleep in bed when the world was saved: the place beside it is not kept, so the nearest free floor)
+            let t = world.findFree(near: a.pos.tile, maxR: 3)
+            a.pos = t.center; a.prevPos = a.pos
+        }
         a.bedSide = nil
     }
 
@@ -1289,6 +1297,7 @@ public final class Society {
                 s.wood += b.cells[t.cell].wood; s.stone += b.cells[t.cell].stone
             }
         }
+        if a.sleeping { getUp(a) }
         a.task = nil; a.path = []; a.sleeping = false
     }
 

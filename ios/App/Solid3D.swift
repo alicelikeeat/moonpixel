@@ -78,6 +78,8 @@ final class SolidRenderer {
     /// Characters as cards with their 2D anime drawing: textures and models by drawing (and light).
     private var cardTextures: [String: TextureResource] = [:]
     private var cardModels: [String: ModelComponent] = [:]
+    /// New figure pictures drawn this frame (a few a frame: a crowd coming into view never stalls a frame).
+    private var cardDraws = 0
     private var cardMeshes: [Bool: MeshResource] = [:]
     private var light: Float = -1
     private var lightColor = UIColor.white
@@ -382,11 +384,13 @@ final class SolidRenderer {
         playerRing.isEnabled = !first && ride == nil
         cameraState = String(format: "%@ yaw %.2f pitch %.2f", first ? "first" : "third", yaw, first ? lookPitch : pitch)
 
+        cardDraws = 0
         updateChunks(world, model)
         updateLayers(model)
         hideAroundRide()
         updateSkyline(model)
         updateClouds(model)
+        updateIslandsAbove(model)
         let reach = Double(distance) * 1.5 * 16 + 64
         updateActors(world, society, model, scene, reach: reach, dt: dt)
         if !model.plainRender { updateSoldiers(world, society, model, reach: reach, dt: dt); updateRoofs(world, society, model, scene, reach: reach) }
@@ -410,6 +414,7 @@ final class SolidRenderer {
 
     /// Another world, a new map or another layer: nothing drawn before belongs here.
     private func reset() {
+        islandMeshes = [:]; islandsKey = ""; cloudKey = ""
         for e in chunks.values { e.entity.removeFromParent() }
         chunks = [:]; billboards = []; queue.dropAll()
         resetLayers()
@@ -652,6 +657,9 @@ final class SolidRenderer {
         let onSky = model.depth == SkyTune.depth
         clouds.isEnabled = onSky
         guard onSky, target.x.isFinite, target.z.isFinite else { return }
+        // the clouds drift east with the wind (a slow loop of one chunk; the heaps are made again as you move)
+        let drift = Float((CACurrentMediaTime() * 0.6).truncatingRemainder(dividingBy: 32))
+        clouds.position = SIMD3(drift - 16, 0, 0)
         let ccx = Int((target.x / 32).rounded(.down)), ccy = Int((target.z / 32).rounded(.down))
         let key = "\(ccx):\(ccy):\(Bitmap.animeStyle)"
         if key == cloudKey { return }
@@ -674,6 +682,45 @@ final class SolidRenderer {
             }
         } }
         clouds.model = resource(m).map { ModelComponent(mesh: $0, materials: [solidMaterial]) }
+    }
+
+    // MARK: the sky islands seen from below
+
+    private let islandsAbove = ModelEntity()
+    private var islandsKey = ""
+    private var islandMeshes: [Int64: MeshResource] = [:]
+
+    /// From the ground (and the storeys), the sky cities float overhead where they are: each island within a
+    /// few hundred metres drawn whole, high up at its own height, its rocky underside towards you.
+    private func updateIslandsAbove(_ model: GameModel) {
+        guard let society = model.society else { return }
+        if islandsAbove.parent == nil { islandsAbove.name = "islands-above"; root.addChild(islandsAbove) }
+        let show = model.depth == 0 || (model.depth >= OpenWorld.storeyBase && model.depth != SkyTune.depth)
+        islandsAbove.isEnabled = show
+        guard show, target.x.isFinite, target.z.isFinite, abs(target.x) < 1e9, abs(target.z) < 1e9 else { return }
+        let me = TilePos(Int(target.x.rounded(.down)), Int(target.z.rounded(.down)))
+        let near = society.skyCities(near: me, within: 14, zh: false).prefix(4)
+        let key = near.map { "\($0.cx),\($0.cy)" }.joined(separator: ";") + "\(Bitmap.animeStyle)"
+        if key == islandsKey { return }
+        islandsKey = key
+        for c in islandsAbove.children.map({ $0 }) { c.removeFromParent() }
+        let gen = society.world.gen
+        for c in near {
+            let k = MP.chunkKey(c.cx, c.cy)
+            let mesh = islandMeshes[k] ?? {
+                var m = SkyIsland3D.far(gen: gen, centre: (c.cx, c.cy))
+                m.cel = Bitmap.animeStyle
+                let r = resource(Bitmap.animeStyle ? m.inked(width: 0.12) : m)
+                if let r { islandMeshes[k] = r }
+                return r
+            }()
+            guard let mesh else { continue }
+            let e = ModelEntity(mesh: mesh, materials: [solidMaterial])
+            let cx = c.cx * 32 + 16, cy = c.cy * 32 + 16
+            let floorY = Float(Terrain3D.level(elevation: gen.elevation(cx, cy)) + SkyTune.storey * Terrain3D.storeyLevels) * Terrain3D.step
+            e.position = SIMD3(Float(cx), floorY, Float(cy))
+            islandsAbove.addChild(e)
+        }
     }
 
     // MARK: the skyline: tall district towers drawn whole
@@ -805,14 +852,22 @@ final class SolidRenderer {
             return
         }
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        // the drawing of the angle the camera sees (16 turns round the figure; never mirrored)
+        // the drawing of the angle the camera sees (24 turns round the figure; never mirrored)
         let step = AnimeArt.turnStep(facing: f, toward: Vec2(Double(-sin(yaw)), Double(-cos(yaw))), right: Vec2(Double(cos(yaw)), Double(-sin(yaw))))
         let view = (dir: AnimeArt.turnDir(step), mirrored: false)
-        let drawing = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(view.dir)\(frame)\(held)\(child)\(female)"
+        let lookKey = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")"
+        let tail = "\(frame)\(held)\(child)\(female)"
+        var drawing = lookKey + view.dir + tail
+        // a frame that has drawn several new figures already shows the nearest turn it has (drawn later)
+        if cardTextures[drawing] == nil, cardDraws >= 4 {
+            outer: for d in 1...(AnimeArt.turnSteps / 2) { for j in [step + d, step - d] where cardTextures[lookKey + AnimeArt.turnDir(j) + tail] != nil { drawing = lookKey + AnimeArt.turnDir(j) + tail; break outer } }
+        }
         let key = drawing + (view.mirrored ? "m" : "") + "\(Int(light * 20))"
         if cardModels[key] == nil {
             if cardTextures[drawing] == nil {
-                if cardTextures.count > 600 { cardTextures = [:]; cardModels = [:] }
+                cardDraws += 1
+                // memory: bounded (about 40 MB of pictures with their mipmaps), refilled on demand
+                if cardTextures.count > 380 { cardTextures = [:]; cardModels = [:] }
                 let pic = AnimeArt.character(look, dir: view.dir, frame: frame, held: held, child: child, female: female)
                 cardTextures[drawing] = pic.cgImage.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)) }
             }
@@ -880,7 +935,7 @@ final class SolidRenderer {
             settle(e, at: place(upstairs.at[a.id] ?? a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
         }
         // underground: the people of the nations' underlands, walking their roads
-        if MP.isBelow(model.depth) || model.depth == SkyTune.depth {
+        if MP.isBelow(model.depth) || model.depth == SkyTune.depth || model.depth == 0 {
             for f in society.folk(depth: model.depth, center: scene.viewPos, halfW: reach, halfH: reach, limit: 30) {
                 seen.insert(f.id)
                 let fresh = agents[f.id] == nil

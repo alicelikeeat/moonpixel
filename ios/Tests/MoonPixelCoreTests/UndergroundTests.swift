@@ -211,4 +211,22 @@ final class UndergroundTests: XCTestCase {
         let (_, marks) = m.renderBelow(s, centre: TilePos(320 * 32, 320 * 32), reach: 12, ppc: 8, zh: true)
         XCTAssertTrue(marks.contains { $0.name.contains("↓5层") }, marks.map { $0.name }.joined(separator: ","))
     }
+
+    func testEachLevelHasItsShareOfTheCityAndTheMapShowsAnyLevel() {
+        let s = makeSociety(10)
+        let city = underNation(s, dug: 200)
+        s.underlandCache = nil; s.deepCache = [:]
+        let levels = Civ.levelsDown(city)
+        let shares = (1...levels).map { Civ.levelPopulation(city, level: $0) }
+        XCTAssertEqual(shares.reduce(0, +), city.livePop, "the levels add up to the city")
+        XCTAssertGreaterThan(shares[0], shares[levels - 1], "the wide top level holds more than the narrow bottom one")
+        // nearby, on a level: that level's people
+        XCTAssertEqual(s.nearbyPopulation(around: TilePos(320 * 32, 320 * 32), depth: 3), shares[2])
+        // the map of level 3: the city with that level's people; level 6 (not dug): nothing of it
+        let m = WorldMap(); m.layer = .underground; m.level = 3
+        let (_, marks) = m.renderBelow(s, centre: TilePos(320 * 32, 320 * 32), reach: 12, ppc: 8, zh: true)
+        XCTAssertTrue(marks.contains { $0.name.contains(WorldMap.popText(shares[2], zh: true)) }, marks.map { $0.name }.joined(separator: ","))
+        m.level = 6
+        XCTAssertFalse(m.renderBelow(s, centre: TilePos(320 * 32, 320 * 32), reach: 12, ppc: 8, zh: true).1.contains { $0.kind == .city || $0.kind == .capital })
+    }
 }

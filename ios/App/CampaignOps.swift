@@ -141,9 +141,10 @@ extension GameModel {
         }
         if depth > 1 {
             // a deep level: say which, and whether a city has built down here
-            let city = s.underland(sc.player.tile.x >> 5, sc.player.tile.y >> 5, level: depth) != nil
-            showToast(String(format: L("地下第 %d 层%@：向上的阶梯回到上一层，向下的阶梯通往更深处", "Level B%d underground%@: stairs up go back a level, stairs down go deeper"), depth,
-                             city ? L("（城市一直建到这里）", " (a city has built down to here)") : ""))
+            let z = s.underland(sc.player.tile.x >> 5, sc.player.tile.y >> 5, level: depth)
+            let home = z.flatMap { z in s.civ.cities.values.first { $0.underAt.map { $0 == (z.cx, z.cy) } ?? false } }
+            let here = home.map { String(format: L("（%@建到了这里，这一层住着 %d 人）", " (%@ has built down to here: %d people live on this level)"), $0.name(zh: GameModel.zh), Civ.levelPopulation($0, level: depth)) } ?? ""
+            showToast(String(format: L("地下第 %d 层%@：向上的阶梯回到上一层，向下的阶梯通往更深处", "Level B%d underground%@: stairs up go back a level, stairs down go deeper"), depth, here))
             return
         }
         showToast(depth > 0 ? L("进入地下：用镐挖掘岩壁和矿脉，阶梯可以返回地面；城市广场里的向下阶梯通往更深的地下层", "Underground: dig rock and ore with the pick; take the stairs back up. Stairs down in a city's plaza lead to the levels it has built below")
