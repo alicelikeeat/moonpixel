@@ -161,6 +161,8 @@ public struct Relation: Codable {
     public var state = 0                   // 0 peace, 1 war, 2 truce
     public var since = 0.0
     public var pact = false
+    /// When a truce between them last turned into peace (the rest after it is kept before any new war).
+    public var truceEnded: Double?
 }
 
 public final class Legion: Codable {
@@ -750,6 +752,7 @@ extension Society {
         if rel.state == state { return }
         realm.relations[r].state = state
         realm.relations[r].since = world.time
+        if rel.state == 2 && state == 0 { realm.relations[r].truceEnded = world.time }
         let a = realm.nation(rel.a)?.name(zh: zh) ?? "", b = realm.nation(rel.b)?.name(zh: zh) ?? ""
         if state == 1 {
             realm.counts.wars += 1
@@ -775,7 +778,8 @@ extension Society {
         // duty is not weighed against how strong the attacker is) and send their armies
         for c in allies(of: b) where c != a {
             // (an ally just out of a truce with the attacker keeps its rest: it sends no war until the peace is old enough)
-            guard let rc = realm.ri(c, a), realm.relations[rc].state == 0, world.time - realm.relations[rc].since >= realm.cfg.peaceCooldown * MP.year else { continue }
+            guard let rc = realm.ri(c, a), realm.relations[rc].state == 0 else { continue }
+            if let ended = realm.relations[rc].truceEnded, world.time - ended < realm.cfg.peaceCooldown * MP.year { continue }
             setState(rc, 1)
             emit("ally_aid", [realm.nation(c)?.name(zh: zh) ?? "", realm.nation(b)?.name(zh: zh) ?? "", realm.nation(a)?.name(zh: zh) ?? ""],
                  towns(of: b).first?.center.center ?? .zero, nations: [c, b, a], cause: "alliance", result: "war")
