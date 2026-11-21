@@ -1098,6 +1098,8 @@ public final class Society {
         let stand = standTile(s, a, target, beside: beside)
         if stand.isNone || !s.inArea(stand) { return false }
         var from = a.pos.tile
+        // (out of bed: from beside it, never sent back to the square)
+        if let side = a.bedSide, world.blocked(from.x, from.y) { a.pos = side; a.prevPos = side; from = side.tile; a.bedSide = nil }
         if !s.inArea(from) || world.blocked(from.x, from.y) {
             from = world.findFree(near: s.center + TilePos(0, 3), maxR: 8)
             a.pos = from.center
@@ -1297,7 +1299,6 @@ public final class Society {
                 s.wood += b.cells[t.cell].wood; s.stone += b.cells[t.cell].stone
             }
         }
-        if a.sleeping { getUp(a) }
         a.task = nil; a.path = []; a.sleeping = false
     }
 

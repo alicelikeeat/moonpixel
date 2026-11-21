@@ -231,8 +231,9 @@ extension Society {
             guard var site = plannedSite(city) else { return nil }
             // the planned place may have been built on since: then the nearest room to it
             let others = settlements.values.filter { !$0.abandoned }.map { $0.center }
-            if others.contains(where: { $0.distance2(site) < 30 * 30 }) || world.blocked(site.x, site.y) {
-                site = world.findSite(from: site, minR: 0, maxR: 120, salt: 7200 + city.id, avoid: others, avoidDist: 30)
+            // (towns keep 60 tiles apart, as when the place was first found)
+            if others.contains(where: { $0.distance2(site) < 60 * 60 }) || world.blocked(site.x, site.y) {
+                site = world.findSite(from: site, minR: 0, maxR: 120, salt: 7200 + city.id, avoid: others, avoidDist: 60)
                 if site.isNone { citySites[city.id] = nil; return nil }
                 citySites[city.id] = site
             }
