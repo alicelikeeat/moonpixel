@@ -159,7 +159,19 @@ extension GameModel {
         guard let gate = society.cityGate(id), let city = society.civ.cities[id] else { return }
         civDetail = nil
         showRealm = false
-        if gate.below { teleportBelow(to: gate.tile, name: city.name(zh: GameModel.zh)) } else { teleport(to: gate.tile, name: city.name(zh: GameModel.zh)) }
+        if gate.below { teleportBelow(to: gate.tile, name: city.name(zh: GameModel.zh)); return }
+        // a city far away is made a real town now, and one arrives in its middle
+        if let t = society.arriveAtCity(id) {
+            teleport(to: t + TilePos(0, 3), name: city.name(zh: GameModel.zh))
+        } else {
+            teleport(to: gate.tile, name: city.name(zh: GameModel.zh))
+            showToast(String(format: L("%@ 的城镇暂时无法在这里展开（附近没有空地或城镇太多），已送到它所在地区的中心", "%@ cannot be laid out here right now (no room nearby, or too many towns shown): you are at the middle of its region"), city.name(zh: GameModel.zh)))
+        }
+    }
+
+    /// A place tapped on the map: a city of the regions is made real and one arrives in it; anywhere else, go there.
+    func goToMarker(_ m: MapMarker) {
+        if let id = m.city { showMap = false; goToCity(id) } else { teleport(to: m.tile, name: m.name) }
     }
 
     /// Go straight to the plaza of a level a city below has built down to.

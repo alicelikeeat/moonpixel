@@ -676,7 +676,11 @@ enum TileShapes {
             // high under the cornice, its bone arching up and out, a fan of long white flight feathers hanging
             // from it with lighter tips, gold coverts along the bone
             let s: Float = t.key.hasSuffix("_w") ? -1 : 1
-            func w(_ x: Float, _ y: Float, _ z: Float, _ wd: Float, _ h: Float, _ d: Float, _ col: RGBA) { b(s > 0 ? x : 16 - x - wd, y, z, wd, h, d, col) }
+            // (spread three quarters wide: every shape stays within half a tile of its own)
+            func w(_ x0: Float, _ y: Float, _ z: Float, _ wd0: Float, _ h: Float, _ d: Float, _ col: RGBA) {
+                let x = x0 * 0.75, wd = wd0 * 0.75
+                b(s > 0 ? x : 16 - x - wd, y, z, wd, h, d, col)
+            }
             for (i, (x, y)) in [(-2, 22), (2, 26), (6, 30), (10, 33), (14, 35), (18, 36), (22, 35), (26, 33)].enumerated() {
                 w(Float(x), Float(y), 6.5, 5, 3, 3, i % 2 == 0 ? c3 : c3.darkened(0.12))           // the bone, gold-clad
             }

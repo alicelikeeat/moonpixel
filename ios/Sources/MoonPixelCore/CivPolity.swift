@@ -125,6 +125,9 @@ extension Civ {
 
     public func activePolities() -> [CivPolity] { polities.values.filter { $0.status == .active }.sorted { $0.id < $1.id } }
     public func cities(of n: Int) -> [CivCity] { cities.values.filter { $0.nation == n }.sorted { $0.id < $1.id } }
+    /// A nation's people: every city's (a regional city's with those in the town it is shown as; a detailed
+    /// town's mirrored from the detailed world).
+    public func nationPop(_ n: Int) -> Int { cities(of: n).reduce(0) { $0 + $1.livePop } }
     func identityPeople(_ n: Int) -> Double { cities.keys.sorted().reduce(0.0) { $0 + Double(cities[$1]!.pop) * (cities[$1]!.culture[n] ?? 0) } }
 
     // MARK: - finding the world
@@ -203,7 +206,9 @@ extension Civ {
             guard var p = polities[id], p.status != .history else { continue }
             let mine = cities(of: id)
             p.cityCount = mine.count
-            p.pop = mine.reduce(0) { $0 + ($1.detail == nil ? $1.pop : 0) }
+            // every city's people: a regional city's (with those in the town it is shown as), and a detailed
+            // town's (its people, mirrored from the detailed world)
+            p.pop = nationPop(id)
             p.soldiers = forces.values.filter { $0.nation == id }.reduce(0) { $0 + $1.crew.total }
             let need = mine.reduce(0.0) { $0 + $1.dailyNeed }
             p.foodDays = need > 0 ? mine.reduce(0.0) { $0 + $1.foodNutrition } / need : 99

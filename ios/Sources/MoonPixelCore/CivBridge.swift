@@ -102,6 +102,8 @@ extension Society {
         let now = world.time
         var seen = Set<Int>()
         for s in settlements.values.sorted(by: { $0.id < $1.id }) where !s.abandoned {
+            // a regional city's town: its people are the city's too (counted for its nation)
+            if let cid = s.fromCiv, let city = c.cities[cid], city.shownAs == s.id { city.shownPeople = s.members.count }
             let (rx, ry) = Civ.regionOf(tile: s.center, size: c.cfg.regionTiles)
             let key = MP.chunkKey(rx, ry)
             let city: CivCity
@@ -144,6 +146,29 @@ extension Society {
 
     /// Total people the world knows of: the detailed towns' residents and everyone in the regions found so far.
     /// (Lands not yet found are not counted: their people are not known.)
+    /// The people near a place (within `radius` tiles; 400 tiles is 800 m): the towns whose middle is that
+    /// near, the city districts there, and, below or in the sky, nobody else is counted. This is the "nearby"
+    /// of the status line: it follows the traveller.
+    public func nearbyPopulation(around t: TilePos, radius: Int = 400, depth: Int = 0) -> Int {
+        let r2 = radius * radius
+        var n = 0
+        if MP.isBelow(depth) {
+            // below: the cities whose underland (on this level) one is in or near
+            let zones = underlandZones(level: depth)
+            let cx = t.x >> 5, cy = t.y >> 5, rc = Double(radius) / 32
+            for city in civ.cities.values where city.under == true || city.sea == true {
+                guard let (ux, uy) = city.underAt, let z = zones.first(where: { $0.cx == ux && $0.cy == uy }) else { continue }
+                let d = (Double((cx - ux) * (cx - ux) + (cy - uy) * (cy - uy))).squareRoot()
+                if d <= z.r + rc { n += city.livePop / max(1, Civ.levelsDown(city)) }      // (a city's people share its levels)
+            }
+            return n
+        }
+        if depth == SkyTune.depth { return skyFolk(center: t.center, halfW: Double(radius) * 16, halfH: Double(radius) * 16, limit: 400).count }
+        for s in settlements.values where !s.abandoned && s.center.distance2(t) <= r2 { n += s.members.count }
+        for d in net.districts where d.center.distance2(t) <= r2 { n += d.population }
+        return n
+    }
+
     public var knownPopulation: Int { agents.count + (realm.civBox?.people ?? 0) + (realm.metroLink?.population ?? 0) + (realm.transportBox?.districts.reduce(0) { $0 + $1.population } ?? 0) }
 
     /// The metro city belongs to a nation: its people are counted there (and nowhere else).
@@ -168,11 +193,35 @@ extension Society {
         let (rx, ry) = Civ.regionOf(tile: t, size: c.cfg.regionTiles)
         guard agents.count + 40 < world.budget.maxAgents, settlements.values.filter({ !$0.abandoned }).count < world.budget.maxSettlements else { return }
         for city in c.cities.values.sorted(by: { $0.id < $1.id }) where city.detail == nil && city.shownAs == nil && city.under != true && city.sea != true && abs(city.rx - rx) <= 1 && abs(city.ry - ry) <= 1 {
-            guard let p = c.polities[city.nation], p.status == .active, city.pop >= 12 else { continue }
+            guard city.pop >= 12 else { continue }
+            if showCity(c, city) != nil { return }                         // one a step: never a sudden crowd
+        }
+    }
+
+    /// Where a regional city stands in the detailed world: the town it is (or is shown as), made now if it
+    /// is not shown yet (towns far from it go back to being counted first, to make room). Nil for a city
+    /// below, or one that has no room anywhere in its region.
+    public func arriveAtCity(_ id: Int) -> TilePos? {
+        guard let c = realm.civBox, let city = c.cities[id] else { return nil }
+        if let d = city.detail ?? city.shownAs, let s = settlements[d], !s.abandoned { return s.center }
+        guard city.under != true, city.sea != true, city.pop > 0 else { return nil }
+        let size = c.cfg.regionTiles
+        foldAway(c, from: TilePos(city.rx * size + size / 2, city.ry * size + size / 2))
+        return showCity(c, city)?.center
+    }
+
+    /// Show one regional city as a real town (see `showNearby`). Returns the town, or nil when it cannot be.
+    @discardableResult func showCity(_ c: Civ, _ city: CivCity) -> Settlement? {
+        guard agents.count + 40 < world.budget.maxAgents, settlements.values.filter({ !$0.abandoned }).count < world.budget.maxSettlements else { return nil }
+        guard city.detail == nil, city.shownAs == nil, let p = c.polities[city.nation], p.status == .active else { return nil }
+        do {
             let size = c.cfg.regionTiles
             let mid = TilePos(city.rx * size + size / 2, city.ry * size + size / 2)
-            let site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 20), salt: 7000 + city.id, avoid: settlements.values.filter { !$0.abandoned }.map { $0.center }, avoidDist: 60)
-            if site.isNone { continue }
+            let others = settlements.values.filter { !$0.abandoned }.map { $0.center }
+            var site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 20), salt: 7000 + city.id, avoid: others, avoidDist: 60)
+            // (life-sized towns need room: a second look closer to other towns before giving up)
+            if site.isNone { site = world.findSite(from: mid, minR: 0, maxR: Double(size / 2 - 8), salt: 7100 + city.id, avoid: others, avoidDist: 30) }
+            if site.isNone { return nil }
             // the nation joins the detailed world's diplomacy, as itself
             if realm.nation(city.nation) == nil {
                 var n = Nation(); n.id = p.id; n.nameEn = p.nameEn; n.nameZh = p.nameZh; n.color = p.color; n.techCount = legacyTech; n.regional = true
@@ -214,8 +263,9 @@ extension Society {
             city.shownAs = s.id
             reflag(s)
             raiseTowers(of: city, in: s, c)
+            city.shownPeople = s.members.count
             emit("civ_town_seen", [s.name(zh: zh), p.name(zh: zh)], site.center)
-            return                                                          // one a step: never a sudden crowd
+            return s
         }
     }
 
@@ -252,7 +302,7 @@ extension Society {
             city.stock["timber", default: 0] += s.wood; city.stock["stone", default: 0] += s.stone
             s.food = 0; s.wood = 0; s.stone = 0; s.goodsFromCiv = nil
             s.abandoned = true; detach(s)
-            city.shownAs = nil
+            city.shownAs = nil; city.shownPeople = nil
             for f in c.forces.values where f.lentTown == s.id { f.lent = nil; f.lentTown = nil }
             invalidateGrid()
             repairReferences()

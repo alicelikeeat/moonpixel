@@ -44,8 +44,10 @@ public struct TeleportTarget: Equatable {
     public var tile: TilePos
     public var depth: Int
     public var detail: String
-    public init(group: Group, name: String, tile: TilePos, depth: Int, detail: String) {
-        self.group = group; self.name = name; self.tile = tile; self.depth = depth; self.detail = detail
+    /// A city of the regional layer: going there makes its town real first (and arrives in it).
+    public var city: Int?
+    public init(group: Group, name: String, tile: TilePos, depth: Int, detail: String, city: Int? = nil) {
+        self.group = group; self.name = name; self.tile = tile; self.depth = depth; self.detail = detail; self.city = city
     }
 }
 
@@ -152,7 +154,10 @@ extension Society {
 
     /// Teleport to a target and remember it among the last places.
     @discardableResult public func teleport(to target: TeleportTarget) -> Vec2? {
-        guard let p = place(at: target.tile, depth: target.depth) else { return nil }
+        // a city far away is only a number until someone comes: its town is made now, and one arrives in it
+        var tile = target.tile
+        if let id = target.city, target.depth == 0, let t = arriveAtCity(id) { tile = t + TilePos(0, 3) }
+        guard let p = place(at: tile, depth: target.depth) else { return nil }
         var log = realm.teleportLog ?? []
         log.removeAll { $0.x == target.tile.x && $0.y == target.tile.y && $0.depth == target.depth }
         log.insert(Waypoint(name: target.name, x: target.tile.x, y: target.tile.y, depth: target.depth), at: 0)
@@ -195,7 +200,7 @@ extension Society {
             guard let p = c.polities[city.nation], p.status == .active, let g = cityGate(city.id) else { continue }
             let group: TeleportTarget.Group = city.under == true ? .under : (city.sea == true ? .sea : .city)
             cities.append(TeleportTarget(group: group, name: (p.capital == city.id ? "★" : "") + city.name(zh: zh), tile: g.tile, depth: g.below ? 1 : 0,
-                                         detail: p.name(zh: zh) + " · " + L(zh, "\(city.pop) 人", "\(city.pop) people") + " · " + dist(g.tile)))
+                                         detail: p.name(zh: zh) + " · " + L(zh, "\(city.livePop) 人", "\(city.livePop) people") + " · " + dist(g.tile), city: g.below ? nil : city.id))
         }
         for town in settlements.values where !town.abandoned && !c.cities.values.contains(where: { $0.detail == town.id }) {
             cities.append(TeleportTarget(group: .city, name: town.name(zh: zh), tile: town.center, depth: 0, detail: dist(town.center)))

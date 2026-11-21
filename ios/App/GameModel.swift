@@ -758,7 +758,7 @@ final class GameModel: ObservableObject {
         // the people about you (the villagers of the towns drawn round you) and the whole known world (every
         // nation's cities, the districts, the metro city): two numbers, each named, so they are never confused
         status = String(format: L("第 %d 年 %02d:%02d · 附近 %@ 人 · 世界 %@ 人", "Year %d %02d:%02d · %@ people nearby · %@ in the world"), w.year + 1, Int(h), Int(h.truncatingRemainder(dividingBy: 1) * 60),
-                        GameModel.count(s.agents.count), GameModel.count(s.knownPopulation))
+                        GameModel.count(s.nearbyPopulation(around: scene?.player.tile ?? TilePos(0, 0), depth: depth)), GameModel.count(s.knownPopulation))
         if depth == SkyTune.depth { status += L(" · 天空城", " · sky city") }
         else if depth >= OpenWorld.storeyBase { status += String(format: L(" · 第 %d 层", " · storey %d"), depth - OpenWorld.storeyBase) }
         else if depth == 1 { status += L(" · 地下", " · underground") }

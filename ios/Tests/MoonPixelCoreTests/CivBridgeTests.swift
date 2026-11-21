@@ -119,6 +119,38 @@ final class CivBridgeTests: XCTestCase {
         for f in CivFood.all { XCTAssertEqual(held[f.key] ?? 0, want[f.key] ?? 0, accuracy: 0.01 + 1e-6 * abs(want[f.key] ?? 0), f.key) }
     }
 
+    /// A city on the map is there when one goes to it: its town is made on arrival (and others far away fold
+    /// back to make room); its people are counted for its nation wherever they are; "nearby" follows the
+    /// traveller; the map labels every place with its people.
+    func testGoingToACityOnTheMapArrivesInItsTownAndTheCountsAddUp() {
+        let s = makeSociety(5)
+        hours(s, 3)
+        let c = s.civ
+        let far = c.cities.values.filter { $0.detail == nil && $0.shownAs == nil && $0.under != true && $0.sea != true && $0.pop >= 12 }.sorted { $0.id < $1.id }
+        guard let city = far.last else { return XCTFail("no regional city") }
+        let nationBefore = c.nationPop(city.nation), whole = city.livePop
+        // teleport to it from the teleport centre: the town is made, one stands in it
+        let target = s.teleportTargets(from: TilePos(0, 0), zh: true).first { $0.city == city.id }
+        XCTAssertNotNil(target, "it is listed")
+        guard let pos = s.teleport(to: target!) else { return XCTFail("could not go") }
+        guard let town = s.settlements.values.first(where: { $0.fromCiv == city.id && !$0.abandoned }) else { return XCTFail("no town at the city") }
+        XCTAssertLessThan(Double(pos.tile.distance2(town.center)).squareRoot(), 24, "arrived in the town")
+        XCTAssertEqual(s.arriveAtCity(city.id), town.center, "the same town next time")
+        // nobody lost or made by showing it: the city with its town is what it was, and so is its nation
+        XCTAssertEqual(city.livePop, whole)
+        XCTAssertEqual(c.nationPop(city.nation), nationBefore, "the nation counts the people in its shown town too")
+        // nearby: the people round the traveller, not everyone loaded anywhere
+        let here = s.nearbyPopulation(around: town.center)
+        XCTAssertGreaterThanOrEqual(here, town.members.count)
+        XCTAssertLessThanOrEqual(here, s.agents.count + s.net.districts.reduce(0) { $0 + $1.population })
+        XCTAssertEqual(s.nearbyPopulation(around: TilePos(town.center.x + 20_000, town.center.y)), 0, "nobody out in the wilds")
+        // the map labels every place with its people, and the city's marker goes to the city
+        let m = WorldMap()
+        let (_, marks) = m.render(s, centre: town.center, reach: 40, zh: true)
+        XCTAssertTrue(marks.contains { $0.tile == town.center && $0.pop == whole && $0.name.contains("人") }, marks.filter { $0.pop != nil }.map { $0.name }.joined(separator: ","))
+        XCTAssertTrue(marks.filter { $0.kind == .city }.allSatisfy { $0.city != nil && $0.pop != nil })
+    }
+
     /// With the traveller there, the regional layer is real: a tower stands as storeys, a force lends real
     /// soldiers (who go back to it afterwards), machines have pictures, and a battle fought by hand counts once.
     func testNearTheTravellerTowersSoldiersMachinesAndCampaignsAreReal() {

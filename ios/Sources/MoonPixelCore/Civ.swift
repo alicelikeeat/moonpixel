@@ -161,6 +161,11 @@ public final class CivCity: Codable {
     public init() {}
     public func name(zh: Bool) -> String { zh ? nameZh : nameEn }
     public var pop: Int { people.total + upstairs }
+    /// The people of the town it is shown as right now (handed over to the detailed world while the
+    /// traveller is near; Society keeps this up to date).
+    public var shownPeople: Int?
+    /// Everyone of the city wherever they are counted: in its groups and towers, and in its shown town.
+    public var livePop: Int { pop + (shownAs != nil ? (shownPeople ?? 0) : 0) }
     var upstairsBox: Int?, towerBedsBox: Int?
     /// When the city last decided to build upwards, and why its last idea did not go ahead.
     var lastPlanBox: Int?

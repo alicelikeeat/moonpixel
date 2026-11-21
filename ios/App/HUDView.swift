@@ -637,10 +637,16 @@ struct HUDView: View {
             if model.mapZoom >= 2 { Image(systemName: "airplane").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).shadow(color: .black, radius: 1).position(at).allowsHitTesting(false) }
         default:
             let big = m.kind == .capital || m.kind == .city
-            Circle().fill(col).frame(width: big ? 9 : 7, height: big ? 9 : 7).overlay(Circle().stroke(Color.black.opacity(0.7), lineWidth: 1.5))
+            // the dot grows with the people living there (a soft halo round the bigger places), so where the
+            // world's people are can be seen at a glance
+            let dot: CGFloat = m.pop.map { CGFloat(6 + min(12, log10(Double($0) + 1) * 2.6)) } ?? (big ? 9 : 7)
+            if let p = m.pop, p >= 200 {
+                Circle().fill(col.opacity(0.22)).frame(width: dot * 2.4, height: dot * 2.4).position(at).allowsHitTesting(false)
+            }
+            Circle().fill(col).frame(width: dot, height: dot).overlay(Circle().stroke(Color.black.opacity(0.7), lineWidth: 1.5))
                 .position(at).allowsHitTesting(false)
-            if big || model.mapZoom >= 2 {
-                Button { model.teleport(to: m.tile, name: m.name) } label: {
+            if big || model.mapZoom >= 2 || (m.pop ?? 0) >= 1000 {
+                Button { model.goToMarker(m) } label: {
                     Text((m.kind == .capital ? "★ " : "") + m.name).font(.system(size: big ? 11 : 10, weight: .bold, design: .rounded))
                         .foregroundStyle(.white).padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Color.black.opacity(0.45), in: Capsule())
@@ -729,7 +735,7 @@ struct HUDView: View {
                 Text(L("快速前往", "Go to")).font(.system(size: 10, weight: .bold, design: .rounded)).opacity(0.7)
                 LazyVGrid(columns: grid, alignment: .leading, spacing: 6) {
                     ForEach(Array(near.enumerated()), id: \.offset) { i, m in
-                        gridPill((m.kind == .capital ? "★" : "") + m.name, "mappin") { model.teleport(to: m.tile, name: m.name) }
+                        gridPill((m.kind == .capital ? "★" : "") + m.name, "mappin") { model.goToMarker(m) }
                             .accessibilityIdentifier("map-go-\(i)")
                     }
                 }

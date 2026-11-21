@@ -17,6 +17,18 @@ public struct MapMarker: Equatable {
     public var color: String               // hex
     public var tile: TilePos
     public var fx: Double, fy: Double      // where on the picture (0...1)
+    /// A city of the regional layer (going there makes its town real), and the people living there.
+    public var city: Int? = nil
+    public var pop: Int? = nil
+}
+
+extension WorldMap {
+    /// A population for a label: 860, 1.2万 / 12.3k.
+    public static func popText(_ n: Int, zh: Bool) -> String {
+        if n < 10_000 { return zh ? "\(n)人" : "\(n)" }
+        if zh { return n >= 100_000_000 ? String(format: "%.1f亿人", Double(n) / 1e8) : String(format: "%.1f万人", Double(n) / 1e4) }
+        return n >= 1_000_000 ? String(format: "%.1fM", Double(n) / 1e6) : String(format: "%.1fk", Double(n) / 1e3)
+    }
 }
 
 public final class WorldMap {
@@ -185,17 +197,24 @@ public final class WorldMap {
             guard fx >= 0, fy >= 0, fx <= 1, fy <= 1 else { return }
             marks.append(MapMarker(kind: k, name: n, color: c, tile: t, fx: fx, fy: fy))
         }
-        let capitals = Set(s.realm.nations.compactMap { $0.capital })
-        for t in s.settlements.values.sorted(by: { $0.id < $1.id }) where !t.abandoned {
-            let col = s.realm.nation(t.nation ?? 0)?.color ?? "#e6c85a"
-            add(capitals.contains(t.id) ? .capital : .town, t.name(zh: zh), col, t.center)
+        // every place people live, with how many live there (towns, the cities of the regions, districts)
+        func addPop(_ k: MapMarker.Kind, _ n: String, _ c: String, _ t: TilePos, _ pop: Int, city: Int? = nil) {
+            add(k, n + " · " + WorldMap.popText(pop, zh: zh), c, t)
+            if !marks.isEmpty, marks[marks.count - 1].tile == t { marks[marks.count - 1].pop = pop; marks[marks.count - 1].city = city }
         }
+        let capitals = Set(s.realm.nations.compactMap { $0.capital })
         let civ = s.civ
         let rc = civ.cfg.regionTiles
-        for c in civ.cities.values.sorted(by: { $0.id < $1.id }) where c.detail == nil {
-            add(.city, c.name(zh: zh), civ.polities[c.nation]?.color ?? "#cccccc", TilePos(c.rx * rc + rc / 2, c.ry * rc + rc / 2))
+        for t in s.settlements.values.sorted(by: { $0.id < $1.id }) where !t.abandoned {
+            let col = s.realm.nation(t.nation ?? 0)?.color ?? "#e6c85a"
+            // a regional city's town counts the whole city (the rest of its people are still in its groups)
+            let whole = t.fromCiv.flatMap { civ.cities[$0] }.map { $0.livePop } ?? t.members.count
+            addPop(capitals.contains(t.id) ? .capital : .town, t.name(zh: zh), col, t.center, whole)
         }
-        for d in s.net.districts { add(.district, d.name, "#dfe6f2", d.center) }
+        for c in civ.cities.values.sorted(by: { $0.id < $1.id }) where c.detail == nil && c.shownAs == nil && c.under != true && c.sea != true {
+            addPop(.city, c.name(zh: zh), civ.polities[c.nation]?.color ?? "#cccccc", TilePos(c.rx * rc + rc / 2, c.ry * rc + rc / 2), c.livePop, city: c.id)
+        }
+        for d in s.net.districts { addPop(.district, d.name, "#dfe6f2", d.center, d.population) }
         for st in s.net.stops where st.kind == .airport && st.name.contains(zh ? "机场" : "Airport") && !st.name.contains(zh ? "货运" : "Cargo") { add(.airport, st.name, "#9fd3ff", st.tile) }
         var volcanoes = Set<TilePos>()
         for y in 0..<side { for x in 0..<side where world.known(origin.x + x, origin.y + y) != 0 {
@@ -399,7 +418,7 @@ public final class WorldMap {
             let t = s.cityGate(c.id)?.tile ?? TilePos(ux * 32 + 16, uy * 32 + 18)
             // the name says how far down it has built
             let down = Civ.levelsDown(c)
-            let label = down > 1 ? c.name(zh: zh) + (zh ? " ↓\(down)层" : " ↓B\(down)") : c.name(zh: zh)
+            let label = (down > 1 ? c.name(zh: zh) + (zh ? " ↓\(down)层" : " ↓B\(down)") : c.name(zh: zh)) + " · " + WorldMap.popText(c.livePop, zh: zh)
             add(p.capital == c.id ? .capital : .city, label, p.color, t)
             byNation[c.nation, default: []].append(t)
         }
