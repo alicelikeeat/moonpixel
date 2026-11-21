@@ -644,9 +644,24 @@ extension Society {
         let w = w ?? world
         let key = content.tile(w.tile(2, t.x, t.y))?.key ?? ""
         let yield: [String: (String, Double)] = ["cave_wall": ("stone", 1), "rock": ("stone", 3), "ore_iron": ("iron_ore", 2), "ore_copper": ("iron_ore", 1),
-                                                 "ore_moon": ("moon_ore", 1), "ore_gold": ("gold_ore", 1)]
-        guard let y = yield[key] else { return nil }
+                                                 "ore_moon": ("moon_ore", 3), "ore_gold": ("gold_ore", 2)]
+        guard var y = yield[key] else { return nil }
         w.setTile(2, t.x, t.y, 0)
+        // a vein runs on: the same ore touching this tile comes out with it (up to a dozen tiles), and the
+        // deeper levels give more of the rare ores
+        if key.hasPrefix("ore_") {
+            let id = content.tid(key)
+            var todo = [t], seen: Set<TilePos> = [t], dug = 0
+            while let p = todo.popLast(), dug < 12 {
+                for d in [TilePos(1, 0), TilePos(-1, 0), TilePos(0, 1), TilePos(0, -1)] {
+                    let q = p + d
+                    guard !seen.contains(q), w.tile(2, q.x, q.y) == id else { continue }
+                    seen.insert(q); w.setTile(2, q.x, q.y, 0); todo.append(q); dug += 1
+                    y.1 += yield[key]!.1
+                }
+            }
+            if (key == "ore_moon" || key == "ore_gold") && MP.isBelow(w.depth) && w.depth > 1 { y.1 *= 1 + Double(w.depth - 1) * 0.25 }
+        }
         carry(y.0, y.1)
         return y
     }
@@ -659,7 +674,8 @@ extension Society {
         var r = RNG(seed: world.seed &+ t.x &* 131 &+ t.y)
         var loot: [String: Double] = ["iron": Double(r.int(3, 6)), "parts": Double(r.int(2, 4))]
         loot[["tools", "weapons", "armor"][r.index(3)]] = 2
-        if r.unit() < 0.5 { loot["moonsteel"] = 1 }
+        loot["moonsteel"] = Double(r.int(2, 5))
+        loot["moon_ore"] = Double(r.int(2, 6))
         for (g, n) in loot { carry(g, n) }
         return loot
     }

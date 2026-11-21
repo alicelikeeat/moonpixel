@@ -174,6 +174,30 @@ extension GameModel {
         if let id = m.city { showMap = false; goToCity(id) } else { teleport(to: m.tile, name: m.name) }
     }
 
+    /// Where a material comes from, for a message about what is missing.
+    static func whereToGet(_ good: String) -> String {
+        switch good {
+        case "moonsteel": return L("（月钢：在熔炉旁用月矿×2+铁锭+木材×2冶炼，可在“制造”里一次做 10 个；月矿在地下挖紫色矿脉；本国城镇仓库里的月钢可以在“制造”面板领取）",
+                                   " (moonsteel: smelt moon ore ×2 + iron + wood ×2 at a furnace, ten at a time from Craft; moon ore: dig the purple veins underground; your own nation's stores can be taken from the Craft panel)")
+        case "moon_ore": return L("（月矿：在地下用镐挖紫色月矿脉，越往下层越多；地下遗迹宝箱里也有）", " (moon ore: dig the purple veins underground with the pick, more on the deeper levels; ruin chests hold some too)")
+        case "iron": return L("（铁锭：在熔炉旁用铁矿×2+木材冶炼）", " (iron: smelt iron ore ×2 + wood at a furnace)")
+        case "iron_ore": return L("（铁矿：在地下挖铁矿脉）", " (iron ore: dig the veins underground)")
+        default: return ""
+        }
+    }
+
+    /// Take a good from the stores of a town of your own nation you stand in.
+    func requisition(_ good: String) {
+        let (n, why) = society.playerRequisition(good, amount: good == "moonsteel" ? 40 : 80)
+        switch why {
+        case nil: showToast(String(format: L("从本国仓库领取了 %@ %g", "Took %@ %g from our stores"), Recipe.goodName(good, zh: GameModel.zh), n.rounded()))
+        case "no_town": showToast(L("要站在一座城镇里才能领取仓库物资", "Stand in a town to take from its stores"))
+        case "not_ours": showToast(L("这不是你所属国家的城镇（先加入一个国家，或去本国城镇）", "This is not a town of your nation (join a nation, or go to one of its towns)"))
+        default: showToast(String(format: L("这座城镇的仓库里没有%@", "This town's stores hold no %@"), Recipe.goodName(good, zh: GameModel.zh)))
+        }
+        refreshCraft()
+    }
+
     /// Go straight to the plaza of a level a city below has built down to.
     func goDeep(_ id: Int, level: Int) {
         guard let t = society.deepGate(id, level: level), let city = society.civ.cities[id] else { return }

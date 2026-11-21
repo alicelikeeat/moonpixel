@@ -246,7 +246,12 @@ public struct StandingTower: Codable, Equatable {
     public var levels = 1
 }
 
-public struct CraftJob: Codable, Equatable { public var recipe: String; public var done: Double }
+public struct CraftJob: Codable, Equatable {
+    public var recipe: String; public var done: Double
+    /// How many at once (a batch: the inputs and the products times this; nil is one).
+    public var times: Int?
+    public init(recipe: String, done: Double, times: Int? = nil) { self.recipe = recipe; self.done = done; self.times = times }
+}
 
 public struct Realm: Codable {
     public var cfg = RealmConfig()

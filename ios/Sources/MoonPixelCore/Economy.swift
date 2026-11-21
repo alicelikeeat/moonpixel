@@ -174,13 +174,16 @@ extension Society {
 
     public func craftTick() {
         if let job = realm.player.craft, world.time >= job.done, let r = Recipe.byKey[job.recipe] {
-            for (g, q) in r.outputs { carry(g, q) }
+            let n = Double(max(1, job.times ?? 1))
+            for (g, q) in r.outputs { carry(g, q * n) }
             realm.player.craft = nil
         }
     }
 
     /// Start a recipe at a station within reach. Inputs are taken now, the product arrives when the work is done.
-    public func playerCraft(_ key: String, near pos: Vec2, in w: OpenWorld? = nil) -> String? {
+    /// `times` makes a batch (as many as the pack has inputs for, up to `times`): the inputs times that many,
+    /// the work a little faster each than one at a time (the furnace stays hot).
+    public func playerCraft(_ key: String, near pos: Vec2, in w: OpenWorld? = nil, times: Int = 1) -> String? {
         guard let r = Recipe.byKey[key] else { return "unknown" }
         if realm.player.craft != nil { return "busy" }
         let w = w ?? world
@@ -188,9 +191,30 @@ extension Society {
         var found = false
         for dy in -2...2 { for dx in -2...2 where w.tile(2, pos.tile.x + dx, pos.tile.y + dy) == want { found = true } }
         if !found { return "station:" + r.station }
-        if let lack = Goods.take(r.inputs, from: pack) { return "input:" + lack }
-        realm.player.craft = CraftJob(recipe: key, done: world.time + r.hours * Society.hour * realm.cfg.playerCraftSpeed)
+        let n = max(1, min(times, playerCanCraft(key)))
+        if let lack = Goods.take(r.inputs.map { ($0.0, $0.1 * Double(n)) }, from: pack) { return "input:" + lack }
+        let hours = r.hours * (n == 1 ? 1 : Double(n) * 0.6)
+        realm.player.craft = CraftJob(recipe: key, done: world.time + hours * Society.hour * realm.cfg.playerCraftSpeed, times: n == 1 ? nil : n)
         return nil
+    }
+
+    /// How many of a recipe the pack has the inputs for.
+    public func playerCanCraft(_ key: String) -> Int {
+        guard let r = Recipe.byKey[key] else { return 0 }
+        return r.inputs.map { Int((carried($0.0) / $0.1 + 1e-9).rounded(.down)) }.min() ?? 0
+    }
+
+    /// Take goods from the stores of a town of the traveller's own nation they stand in (as a citizen may):
+    /// up to `amount`. Returns how much was taken, or why not: "no_town" (not in a town), "not_ours" (a
+    /// foreign town, or no nation), "none" (its stores hold none).
+    public func playerRequisition(_ good: String, amount: Double) -> (Double, String?) {
+        guard let t = travellerTile, let s = settlements.values.first(where: { !$0.abandoned && $0.inArea(t) && $0.center.distance2(t) <= 60 * 60 }) else { return (0, "no_town") }
+        guard realm.player.nation != 0, s.nation == realm.player.nation else { return (0, "not_ours") }
+        let n = min(amount, s.good(good))
+        guard n >= 1 else { return (0, "none") }
+        s.addGood(good, -n)
+        carry(good, n)
+        return (n, nil)
     }
 
     /// Weapons and armour in a nation's stores make its soldiers count for more.

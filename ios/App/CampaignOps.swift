@@ -163,17 +163,20 @@ extension GameModel {
     }
 
     // MARK: crafting
-    func craft(_ key: String) {
+    func craft(_ key: String, times: Int = 1) {
         guard let s = society, let sc = scene else { return }
-        switch s.playerCraft(key, near: sc.player, in: activeWorld) {
-        case nil: showToast(String(format: L("开始制作：%@", "Crafting: %@"), Recipe.byKey[key]?.name(zh: GameModel.zh) ?? key))
+        let n = max(1, min(times, s.playerCanCraft(key)))
+        switch s.playerCraft(key, near: sc.player, in: activeWorld, times: times) {
+        case nil: showToast(n > 1 ? String(format: L("开始批量制作：%@ ×%d", "Crafting a batch: %@ ×%d"), Recipe.byKey[key]?.name(zh: GameModel.zh) ?? key, n)
+                                  : String(format: L("开始制作：%@", "Crafting: %@"), Recipe.byKey[key]?.name(zh: GameModel.zh) ?? key))
         case "busy": showToast(L("上一件还没做好", "The last job is not finished yet"))
         case let why?:
             if why.hasPrefix("station:") {
                 let st = String(why.dropFirst(8))
                 showToast(String(format: L("需要站在%@旁边（可在建造面板放置）", "Stand next to a %@ (place one from the Build panel)"), Content.shared.tile(Content.shared.tid(st)).map { GameModel.zh ? $0.nameZh : $0.nameEn } ?? st))
             } else if why.hasPrefix("input:") {
-                showToast(String(format: L("缺少%@", "Missing %@"), Recipe.goodName(String(why.dropFirst(6)), zh: GameModel.zh)))
+                let g = String(why.dropFirst(6))
+                showToast(String(format: L("缺少%@", "Missing %@"), Recipe.goodName(g, zh: GameModel.zh)) + GameModel.whereToGet(g))
             }
         }
         refreshCraft()
@@ -404,6 +407,14 @@ struct CraftPanel: View {
         GlassSheet(title: L("制造", "Craft"), subtitle: L("站在对应设施旁制作；投入的材料开工时扣除", "Stand next to the station; inputs are taken when work starts"), close: { model.showCraft = false }) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(model.packLine).font(.system(size: 11, design: .rounded)).opacity(0.85).accessibilityIdentifier("pack")
+                // in a town of your own nation, its stores are yours to draw on (moonsteel and moon ore above all)
+                HStack(spacing: 6) {
+                    Chip(title: L("领取本国仓库的月钢", "Take moonsteel from our stores"), icon: "building.columns.fill", id: "req-moonsteel") { model.requisition("moonsteel") }
+                    Chip(title: L("领取月矿", "Take moon ore"), icon: "diamond.fill", id: "req-moon-ore") { model.requisition("moon_ore") }
+                }
+                Text(L("月钢：在熔炉旁用 月矿×2 + 铁锭 + 木材×2 冶炼。月矿：在地下用镐挖紫色月矿脉（一挖就是整条矿脉，越往下层越多），地下遗迹宝箱里也有月钢和月矿；也可以在本国城镇里领取仓库存货。",
+                       "Moonsteel: smelt moon ore ×2 + iron + wood ×2 at a furnace. Moon ore: dig the purple veins underground with the pick (a whole vein at a time, more on the deeper levels); ruin chests underground hold moonsteel and moon ore too; or take your own nation's stores in its towns."))
+                    .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
                 if !model.craftLine.isEmpty { Text(model.craftLine).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(Color(red: 1, green: 0.9, blue: 0.6)) }
                 ForEach(Recipe.all, id: \.key) { r in
                     HStack(spacing: 8) {
@@ -413,6 +424,8 @@ struct CraftPanel: View {
                         }
                         Spacer(minLength: 4)
                         Chip(title: L("制作", "Make"), icon: "hammer.fill", id: "craft-" + r.key) { model.craft(r.key) }
+                        // a batch: as many as the pack has the inputs for, ten at most
+                        Chip(title: L("×10", "×10"), icon: "square.stack.3d.up.fill", id: "craft10-" + r.key) { model.craft(r.key, times: 10) }
                     }
                     .padding(8).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }

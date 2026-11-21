@@ -164,6 +164,8 @@ public final class Agent: Codable {
     public var spouseSince: Double?
     /// Living in a landmark (home -3): the bed there (x, y).
     public var bedAt: [Int]?
+    /// Where someone asleep in a bed stood before lying down (not saved: on loading they wake beside it).
+    public var bedSide: Vec2?
     // transient
     public var prevPos = Vec2.zero
     public var facing = Vec2(0, 1)
@@ -1105,9 +1107,40 @@ public final class Society {
         return true
     }
 
+    /// The bed someone sleeps in tonight, if they have one: in their own house the household's beds are
+    /// shared out (a couple in the first, the others in turn, two to a bed at most when there are more people
+    /// than beds); a homeless villager takes a free bed in town; a landmark's resident their own.
+    func bedFor(_ a: Agent, _ s: Settlement) -> TilePos? {
+        let bed = content.tid("bed")
+        if a.home >= 0, let hb = s.building(a.home), hb.done {
+            var beds: [TilePos] = []
+            for y in hb.y..<(hb.y + hb.h) { for x in hb.x..<(hb.x + hb.w) where world.tile(2, x, y) == bed { beds.append(TilePos(x, y)) } }
+            guard !beds.isEmpty else { return s.freeBeds.isEmpty ? nil : s.freeBeds[a.id % s.freeBeds.count] }
+            let family = s.members.compactMap { agents[$0] }.filter { $0.home == a.home }.sorted { $0.id < $1.id }
+            // couples first (one bed each couple), then everyone else one by one
+            var slots: [Int: Int] = [:], next = 0
+            for m in family where slots[m.id] == nil {
+                slots[m.id] = next
+                if m.partner != 0, family.contains(where: { $0.id == m.partner }) { slots[m.partner] = next }
+                next += 1
+            }
+            return beds[(slots[a.id] ?? 0) % beds.count]
+        }
+        if a.home == -3, let b = a.bedAt, b.count == 2 { return TilePos(b[0], b[1]) }
+        if !s.freeBeds.isEmpty { return s.freeBeds[a.id % s.freeBeds.count] }
+        return nil
+    }
+
+    /// Up from a bed: back to the floor beside it (the bed itself is not a place to stand).
+    func getUp(_ a: Agent) {
+        if let p = a.bedSide { a.pos = p; a.prevPos = p }
+        a.bedSide = nil
+    }
+
     func decide(_ a: Agent, _ s: Settlement) {
         let now = world.time
         let st = a.stage(now)
+        if a.sleeping { getUp(a) }
         a.sleeping = false
         if a.carryN > 0, go(a, s, s.center, "deliver", 0.4) { return }
         if a.hunger > 0.55 {
@@ -1117,10 +1150,11 @@ public final class Society {
             } else if st != "child", work(a, s, "forager") { a.think(now, "t_hungry"); return }
         }
         if (world.isNight && a.energy < 0.85) || a.energy < 0.15 {
+            // to bed: a bed of their own home (a couple shares one), a free bed in town, their bed in a landmark;
+            // they walk to its side and lie down on it. Only someone with no bed at all sleeps on the ground.
+            if let bed = bedFor(a, s), go(a, s, bed, "sleep", 9999, beside: true) { return }
             var spot = s.center + TilePos(a.id % 5 - 2, 3 + a.id % 2)
             if a.home >= 0, let hb = s.building(a.home), hb.done { spot = TilePos(hb.x + 2 + a.id % 2, hb.y + 2) }
-            else if a.home == -2, !s.freeBeds.isEmpty { spot = s.freeBeds[a.id % s.freeBeds.count] + TilePos(0, 1) }
-            else if a.home == -3, let b = a.bedAt, b.count == 2 { spot = TilePos(b[0], b[1] + 1) }          // their bed in a landmark
             if go(a, s, spot, "sleep", 9999) { return }
         }
         // a wedding to go to (the couple, their family and friends), or Sunday service at the church
@@ -1274,12 +1308,16 @@ public final class Society {
             task.stage = 1
             let look = task.target.center - a.pos
             if look.length > 1 { a.facing = look.normalized }
-            if task.act == "sleep" { a.sleeping = true }
+            if task.act == "sleep" {
+                a.sleeping = true
+                // onto the bed itself (from beside it); getting up, back to where they stood
+                if world.tile(2, task.target.x, task.target.y) == content.tid("bed") { a.bedSide = a.pos; a.pos = task.target.center }
+            }
         }
         task.t += dt * (0.7 + 0.6 * a.dil)
         a.task = task
         if task.act == "sleep" {
-            if (a.energy >= 0.98 && !world.isNight) || a.hunger > 0.9 { a.sleeping = false; a.task = nil }
+            if (a.energy >= 0.98 && !world.isNight) || a.hunger > 0.9 { a.sleeping = false; a.task = nil; getUp(a) }
             return
         }
         if task.t < task.dur { return }

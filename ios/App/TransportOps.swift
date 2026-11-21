@@ -318,7 +318,14 @@ extension GameModel {
         let need = kind.spec.build.keys.sorted().map { "\(Recipe.goodName($0, zh: GameModel.zh)) \(Int(kind.spec.build[$0]!))" }.joined(separator: GameModel.zh ? "、" : ", ")
         switch why {
         case "no_water": showToast(String(format: L("附近没有够深的水：%@ 吃水 %.1f 格，去海边或大河边再造", "No water deep enough near: a %@ draws %.1f tiles; go to the sea or a big river"), kind.name(zh: GameModel.zh), kind.spec.draft))
-        case "materials": showToast(String(format: L("材料不够：造%@需要 %@", "Not enough materials: a %@ takes %@"), kind.name(zh: GameModel.zh), need))
+        case "materials":
+            // what is short, and where each comes from
+            let short = kind.spec.build.keys.sorted().compactMap { k -> String? in
+                let lack = kind.spec.build[k]! - s.carried(k)
+                return lack > 1e-9 ? Recipe.goodName(k, zh: GameModel.zh) + " " + String(format: "%g", (lack * 10).rounded(.up) / 10) : nil
+            }.joined(separator: GameModel.zh ? "、" : ", ")
+            let hint = kind.spec.build["moonsteel"] != nil && s.carried("moonsteel") < kind.spec.build["moonsteel"]! ? GameModel.whereToGet("moonsteel") : ""
+            showToast(String(format: L("材料不够：造%@需要 %@；还差 %@", "Not enough materials: a %@ takes %@; still short of %@"), kind.name(zh: GameModel.zh), need, short) + hint)
         default: showToast(L("水面上有别的船挡着", "Another ship is in the way"))
         }
     }
