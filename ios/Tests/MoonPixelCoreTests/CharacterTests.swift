@@ -46,7 +46,7 @@ final class CharacterTests: XCTestCase {
         map.layer = .seaFloor; map.political = true
         let (img, marks) = map.render(s, centre: TilePos(12 * 32, 12 * 32), reach: 10, zh: true)
         XCTAssertGreaterThan(img.w, 0)
-        XCTAssertTrue(marks.contains { $0.kind == .capital && $0.name == city.name(zh: true) }, "its city by name")
+        XCTAssertTrue(marks.contains { $0.kind == .capital && $0.name.hasPrefix(city.name(zh: true)) && $0.name.contains("人") }, "its city by name, with its people")
         XCTAssertTrue(marks.contains { $0.kind == .nation }, "its nation by name")
         map.layer = .underground
         XCTAssertFalse(map.render(s, centre: TilePos(12 * 32, 12 * 32), reach: 10, zh: true).1.contains { $0.kind == .capital }, "the underground map has only the underground's")

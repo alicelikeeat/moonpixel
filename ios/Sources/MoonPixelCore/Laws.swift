@@ -394,6 +394,8 @@ public final class LawRun {
         result.towns += 1
         guard let d = dest else { touched.insert(t.id); return }      // the last town keeps its people; only its works are gone
         let now = s.world.time
+        // everyone living there leaves: the garrison marches off as a body first, the rest move one by one
+        result.displaced += t.members.filter { s.agents[$0] != nil }.count
         if let g = s.garrison(t, create: false) { s.disband(g, into: d) }
         for mid in t.members {
             guard let a = s.agents[mid] else { continue }
@@ -401,7 +403,6 @@ public final class LawRun {
             if a.legion == nil { a.refugee = now + s.realm.cfg.refugeeIntegrate * MP.year; a.job = "" }
             a.travelling = true
             a.travelTo = s.world.findFree(near: d.center + TilePos(a.id % 15 - 7, 9 + a.id % 4), maxR: 8).center
-            result.displaced += 1
         }
         t.members = []
         t.abandoned = true
