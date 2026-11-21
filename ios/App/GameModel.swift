@@ -762,6 +762,7 @@ final class GameModel: ObservableObject {
         if depth == SkyTune.depth { status += L(" · 天空城", " · sky city") }
         else if depth >= OpenWorld.storeyBase { status += String(format: L(" · 第 %d 层", " · storey %d"), depth - OpenWorld.storeyBase) }
         else if depth == 1 { status += L(" · 地下", " · underground") }
+        else if MP.isBelow(depth) { status += String(format: L(" · 地下第 %d 层", " · level B%d"), depth) }
         pollEvents()
         expireNotices()
         if showDetails {

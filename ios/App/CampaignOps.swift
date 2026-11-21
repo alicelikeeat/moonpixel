@@ -123,11 +123,11 @@ extension GameModel {
 
     /// Change between the surface and the underground.
     func switchLayer(to pos: Vec2) {
-        guard let sc = scene else { return }
+        guard let sc = scene, let s = society else { return }
         sc.player = pos
         // between the surface and its storeys the old picture stays until the new one is ready; underground it does not
-        let wasUnder = sc.chunkKeys.values.contains { $0.depth == 1 }
-        sc.resetLayer(keepChunks: depth != 1 && !wasUnder)
+        let wasUnder = sc.chunkKeys.values.contains { MP.isBelow($0.depth) }
+        sc.resetLayer(keepChunks: !MP.isBelow(depth) && !wasUnder)
         following = false
         watch = .none
         if depth == SkyTune.depth {
@@ -139,13 +139,20 @@ extension GameModel {
             showToast(String(format: L("第 %d 层：只能站在楼板上；墙下三格内可以铺楼板，放“向上楼梯”可以继续往上盖", "Storey %d: stand only on floors; lay floor within three tiles of a wall below; place Stairs up to build higher"), n))
             return
         }
-        showToast(depth > 0 ? L("进入地下：用镐挖掘岩壁和矿脉，阶梯可以返回地面", "Underground: dig rock and ore with the pick; take the stairs back up")
+        if depth > 1 {
+            // a deep level: say which, and whether a city has built down here
+            let city = s.underland(sc.player.tile.x >> 5, sc.player.tile.y >> 5, level: depth) != nil
+            showToast(String(format: L("地下第 %d 层%@：向上的阶梯回到上一层，向下的阶梯通往更深处", "Level B%d underground%@: stairs up go back a level, stairs down go deeper"), depth,
+                             city ? L("（城市一直建到这里）", " (a city has built down to here)") : ""))
+            return
+        }
+        showToast(depth > 0 ? L("进入地下：用镐挖掘岩壁和矿脉，阶梯可以返回地面；城市广场里的向下阶梯通往更深的地下层", "Underground: dig rock and ore with the pick; take the stairs back up. Stairs down in a city's plaza lead to the levels it has built below")
                             : L("回到地面", "Back on the surface"))
     }
 
     /// Always possible underground: cut a way up where you stand.
     func climbOut() {
-        guard let sc = scene, let s = society, depth == 1 else { return }
+        guard let sc = scene, let s = society, MP.isBelow(depth) else { return }
         switchLayer(to: s.climbOut(from: sc.player))
     }
 
@@ -356,7 +363,7 @@ struct BuildPanel: View {
                     Chip(title: L("拆除", "Demolish"), icon: "hammer.fill", id: "build-demolish") { model.chooseBuild("demolish") }
                     Chip(title: L("补给站", "Supply depot"), icon: "shippingbox.fill", id: "build-depot") { model.chooseBuild("depot") }
                     Chip(title: L("外置电梯", "Outside elevator"), icon: "arrow.up.arrow.down.square.fill", id: "build-lift") { model.showBuild = false; model.buildLiftHere() }
-                    if model.depth == 1 { Chip(title: L("就地挖出地面", "Climb out here"), icon: "arrow.up.circle.fill", id: "climb-out") { model.showBuild = false; model.climbOut() } }
+                    if MP.isBelow(model.depth) { Chip(title: L("就地挖出地面", "Climb out here"), icon: "arrow.up.circle.fill", id: "climb-out") { model.showBuild = false; model.climbOut() } }
                 }
             }
         }

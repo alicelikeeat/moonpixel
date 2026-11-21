@@ -269,6 +269,7 @@ extension Society {
         for s in old.settlements.values where !s.abandoned { old.detach(s) }
         old.world.wipe()
         old.underworld().wipe()                  // the underground of the old world goes with it
+        for d in 2...MP.deepest { old.deepWorld(d).wipe() }                 // and the levels dug under it
         for n in old.builtStoreys() { old.storeyWorld(n).wipe() }      // and every storey built above it
         let w = OpenWorld(seed: plan.newSeed, budget: old.world.budget)
         w.diskLimitBytes = old.world.diskLimitBytes

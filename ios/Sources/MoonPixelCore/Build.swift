@@ -461,7 +461,12 @@ extension Society {
     }
 
     /// The layer with this depth: 0 surface, 1 underground, 100 + n storey n.
-    public func layer(_ depth: Int) -> OpenWorld { depth == 0 ? world : (depth == 1 ? underworld() : storeyWorld(depth - OpenWorld.storeyBase)) }
+    public func layer(_ depth: Int) -> OpenWorld {
+        if depth == 0 { return world }
+        if depth == 1 { return underworld() }
+        if MP.isBelow(depth) { return deepWorld(depth) }
+        return storeyWorld(depth - OpenWorld.storeyBase)
+    }
 
     /// What holds a floor up: a wall, a column or a stair on the level below, within three tiles of it
     /// (a floor may reach out that far from what carries it, no further).
@@ -580,7 +585,24 @@ extension Society {
                 realm.player.depth = 0
                 return (0, world.findFree(near: t + TilePos(0, 1), maxR: 12).center)
             }
-            if depth != 1 && id == up {
+            // down from the underground or a deep level: one level deeper (a landing is cleared under it)
+            if MP.isBelow(depth) && id == down && depth < MP.deepest {
+                let n = depth + 1, d = deepWorld(n)
+                for dy in -1...1 { for dx in -1...1 {
+                    let x = t.x + dx, y = t.y + dy
+                    if content.solid[Int(d.tile(2, x, y))] { d.setTile(2, x, y, 0) }
+                    if content.water[Int(d.tile(0, x, y))] || d.tile(0, x, y) == content.tid("lava") { d.setTile(0, x, y, content.tid("cave_floor")) }
+                } }
+                d.setTile(2, t.x, t.y, content.tid("stairs_up"))
+                realm.player.depth = n
+                return (n, d.findFree(near: t + TilePos(0, 1), maxR: 3).center)
+            }
+            // up from a deep level: one level up
+            if depth > 1 && MP.isBelow(depth) && id == up {
+                realm.player.depth = depth - 1
+                return (depth - 1, layer(depth - 1).findFree(near: t + TilePos(0, 1), maxR: 12).center)
+            }
+            if !MP.isBelow(depth) && id == up {
                 linkUp(at: t, from: w)
                 let n = w.storey + 1
                 realm.player.depth = OpenWorld.storeyBase + n

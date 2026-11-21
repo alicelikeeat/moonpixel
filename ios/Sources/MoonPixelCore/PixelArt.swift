@@ -286,6 +286,13 @@ public enum PixelArt {
         case "door":
             img.rect(bx + 2, by - 4, 12, 20, c2); img.rect(bx + 3, by - 3, 10, 19, c1)
             img.rect(bx + 11, by + 6, 2, 2, RGBA(hex: "#e8c84a"))
+        case "wing":
+            // an angel's wing rising from the wall beside it: white feathers, gold along the top
+            let s = t.key.hasSuffix("_w") ? -1 : 1
+            func X(_ x: Int, _ w: Int) -> Int { s > 0 ? bx + x : bx + 16 - x - w }
+            for (x, y, w, h) in [(0, 6, 4, 8), (3, 2, 4, 12), (6, -2, 4, 15), (9, -5, 4, 16), (12, -7, 4, 14)] { img.rect(X(x, w), by + y, w, h, c1) }
+            for (x, y) in [(2, 13), (5, 13), (8, 12), (11, 10), (14, 7)] { img.rect(X(x, 2), by + y, 2, 2, c2) }
+            for (x, y) in [(1, 5), (4, 1), (7, -3), (10, -6), (13, -8)] { img.rect(X(x, 3), by + y, 3, 2, c3) }
         case "fence", "gate":
             img.rect(bx, by + 6, 16, 2, c1); img.rect(bx, by + 11, 16, 2, c1)
             for x in [1, 7, 13] { img.rect(bx + x, by + 3, 2, 12, c2) }
@@ -430,6 +437,26 @@ public enum PixelArt {
         }
         dim(0.55)
         for l in below.dropFirst() { lay(l); dim(0.8) }
+        lay(layers)
+        return img
+    }
+
+    /// A storey's tiles laid over a picture already made (the sky's backdrop).
+    public static func bakeStorey(layers: [[UInt8]], onto base: Bitmap) -> Bitmap {
+        var img = base
+        let at = atlas
+        func lay(_ l: [[UInt8]]) {
+            let g = l[0], st = l[1], ob = l[2], de = l[3]
+            for i in 0..<MP.chunkArea where g[i] != 0 {
+                let x = (i % 32) * 16 + 8, y = (i / 32) * 16 + 24
+                img.blit(at, sx: (Int(g[i]) % 16) * cell, sy: (Int(g[i]) / 16) * cell, sw: 16, sh: 16, dx: x, dy: y, blend: false)
+                if st[i] != 0 { img.blit(at, sx: (Int(st[i]) % 16) * cell, sy: (Int(st[i]) / 16) * cell, sw: 16, sh: 16, dx: x, dy: y, blend: false) }
+            }
+            for i in 0..<MP.chunkArea where g[i] != 0 {
+                let x = (i % 32) * 16, y = (i / 32) * 16 + 8
+                for id in [de[i], ob[i]] where id != 0 { img.blit(at, sx: (Int(id) % 16) * cell, sy: (Int(id) / 16) * cell, sw: cell, sh: cell, dx: x, dy: y, blend: true) }
+            }
+        }
         lay(layers)
         return img
     }

@@ -274,7 +274,7 @@ public struct WorldGround: MotionGround {
     }
     public func nominal(_ d: Int, _ t: TilePos) -> Double {
         let w = layer(d)
-        let lv = d == 1 ? 0 : Terrain3D.level(elevation: w.gen.elevation(t.x, t.y)) + w.storey * Terrain3D.storeyLevels
+        let lv = MP.isBelow(d) ? 0 : Terrain3D.level(elevation: w.gen.elevation(t.x, t.y)) + w.storey * Terrain3D.storeyLevels
         return Double(Float(lv) * Terrain3D.step)
     }
     public func blocked(_ d: Int, _ t: TilePos) -> Bool {
@@ -284,12 +284,12 @@ public struct WorldGround: MotionGround {
         return w.blocked(t.x, t.y)
     }
     public func below(_ d: Int) -> Int? {
-        if d == 0 || d == 1 { return nil }
+        if d == 0 || MP.isBelow(d) { return nil }          // (one goes down below the ground by stairs only)
         let n = d - OpenWorld.storeyBase
         return n <= 1 ? 0 : d - 1
     }
     public func above(_ d: Int) -> Int? {
-        if d == 1 { return nil }
+        if MP.isBelow(d) { return nil }
         return d == 0 ? OpenWorld.storeyBase + 1 : d + 1
     }
 }

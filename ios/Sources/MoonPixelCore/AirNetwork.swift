@@ -116,6 +116,15 @@ extension Society {
             pos = s.spot.center
         case 1:
             pos = teleportBelow(to: t)
+        case 2..<OpenWorld.storeyBase:
+            // a deep level: the nearest free floor there (a small room is cleared in the rock if there is none)
+            let d = layer(depth)
+            _ = digDeep(around: t, level: depth)
+            let f = d.findFree(near: t, maxR: 24)
+            if d.blocked(f.x, f.y) {
+                for dy in -1...1 { for dx in -1...1 { d.setTile(2, t.x + dx, t.y + dy, 0); if content.water[Int(d.tile(0, t.x + dx, t.y + dy))] || d.tile(0, t.x + dx, t.y + dy) == content.tid("lava") { d.setTile(0, t.x + dx, t.y + dy, content.tid("cave_floor")) } } }
+                pos = t.center
+            } else { pos = f.center }
         default:
             guard depth >= OpenWorld.storeyBase else { return nil }
             let w = layer(depth)
@@ -169,6 +178,7 @@ extension Society {
     public static func layerName(_ depth: Int, zh: Bool) -> String {
         if depth == 0 { return zh ? "地面" : "surface" }
         if depth == 1 { return zh ? "地下" : "underground" }
+        if MP.isBelow(depth) { return zh ? "地下第 \(depth) 层" : "level B\(depth) underground" }
         if depth == SkyTune.depth { return zh ? "天空" : "sky" }
         return zh ? "第 \(depth - OpenWorld.storeyBase) 层" : "storey \(depth - OpenWorld.storeyBase)"
     }

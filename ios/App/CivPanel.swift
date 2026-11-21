@@ -43,11 +43,16 @@ struct CivWorldSection: View {
             Text(sea ? L("海底国度", "Nations of the sea floor") : L("地下国度", "Nations of the underground")).font(.system(size: 15, weight: .bold, design: .rounded))
             Text(sea ? L("海底的人能在水中呼吸，拒绝一切战争。他们在海底城下方挖出自己的海底世界：沙地、珊瑚房屋、海带田、珍珠灯和玻璃墙，天空是海蓝色的人造光。",
                          "The people of the sea floor breathe the water and refuse every war. Under their cities they dig a world of their own: sand, coral houses, kelp fields, pearl lamps and glass walls, under a sea-blue sky of lamps.")
-                     : L("地下国家从不和地面开战，只是不断向外挖掘：挖开的地方和地面一样有草地、道路、房屋和农田，天空是人造灯光。",
-                         "The underground nations never fight the surface; they only dig on, and what they dig is land like the surface's, with grass, roads, houses and fields, under a sky of lamps."))
+                     : L("地下国家从不和地面开战，只是不断向外、向下挖掘：挖开的地方和地面一样有草地、道路、房屋和农田，天空是人造灯光；城市一层层往下建，最深到地下第 8 层，每层比上一层略窄，广场里有阶梯通往下一层。",
+                         "The underground nations never fight the surface; they only dig on, outward and down: what they dig is land like the surface's, with grass, roads, houses and fields, under a sky of lamps. Their cities build down level by level, to B8 at the deepest, each a little narrower than the one above, with stairs down in each plaza."))
                 .font(.system(size: 11, design: .rounded)).opacity(0.85).fixedSize(horizontal: false, vertical: true)
             Text(L("在位国家 \(list.count) 个 · 人口 \(people)", "\(list.count) nations standing · \(people) people"))
                 .font(.system(size: 11, weight: .semibold, design: .rounded)).accessibilityIdentifier("civ-below-summary")
+            let deepest = c.cities.values.filter { sea ? $0.sea == true : $0.under == true }.map { Civ.levelsDown($0) }.max() ?? 0
+            if deepest > 1 {
+                Text(L("最深的城市已向下建到地下第 \(deepest) 层", "The deepest city has built down to level B\(deepest)"))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(Color(red: 0.8, green: 0.7, blue: 1)).accessibilityIdentifier("civ-below-deepest")
+            }
             if list.isEmpty {
                 Text(sea ? L("还没有发现海底国家：带海洋的新世界里，往深海探索就会遇到（地图“找地方”→ 海底城）。", "No sea-floor nation found yet: in new worlds with oceans, explore the deep sea (map → Find → Sea-floor city).")
                          : L("还没有发现地下国家：在地面上走得越远，认识的地下城越多（地图“找地方”→ 地下城）。", "No underground nation found yet: the further you walk, the more underground cities you know (map → Find → Underground city)."))
@@ -209,6 +214,15 @@ struct CivGoMenu: View {
                 Button { model.goToCity(city.id) } label: {
                     Label((city.id == p?.capital ? "★ " : "") + city.name(zh: GameModel.zh) + " · " + L("\(city.pop) 人", "\(city.pop) people"),
                           systemImage: city.under == true ? "arrow.down.to.line" : (city.sea == true ? "water.waves" : "building.2"))
+                }
+                // the levels a city below has built down to: straight to the plaza of any of them
+                let down = Civ.levelsDown(city)
+                if down > 1 {
+                    Menu(city.name(zh: GameModel.zh) + L(" · 向下 \(down) 层", " · \(down) levels down")) {
+                        ForEach(Array(2...down), id: \.self) { lv in
+                            Button(L("地下第 \(lv) 层广场", "Level B\(lv) plaza")) { model.goDeep(city.id, level: lv) }
+                        }
+                    }
                 }
             }
         } label: {

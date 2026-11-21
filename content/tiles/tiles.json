@@ -2947,6 +2947,110 @@
 "en": "Supply Box",
 "zh": "物资箱"
 }
+},
+{
+"id": 180,
+"key": "marble_floor",
+"layer": 0,
+"prio": 0,
+"built": 1,
+"art": [
+"bricks",
+"#f4f1ea",
+"#d9d2c4",
+"#e6c56a"
+],
+"name": {
+"en": "Marble Floor",
+"zh": "大理石地面"
+}
+},
+{
+"id": 181,
+"key": "marble_path",
+"layer": 1,
+"walk": 1.2,
+"built": 1,
+"art": [
+"cobble",
+"#f7f4ee",
+"#dcd4c4"
+],
+"name": {
+"en": "Marble Path",
+"zh": "大理石路"
+}
+},
+{
+"id": 182,
+"key": "marble_wall",
+"layer": 2,
+"solid": 1,
+"tall": 1,
+"built": 1,
+"hard": 6,
+"tier": 1,
+"art": [
+"wall",
+"#f8f6f0",
+"#ddd5c6",
+"#e2b850"
+],
+"name": {
+"en": "Marble Wall",
+"zh": "大理石墙"
+}
+},
+{
+"id": 183,
+"key": "wing_e",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"art": [
+"wing",
+"#fcfaf4",
+"#d8ccb8",
+"#e2b850"
+],
+"name": {
+"en": "Angel Wing (east)",
+"zh": "天使之翼（东）"
+}
+},
+{
+"id": 184,
+"key": "wing_w",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"art": [
+"wing",
+"#fcfaf4",
+"#d8ccb8",
+"#e2b850"
+],
+"name": {
+"en": "Angel Wing (west)",
+"zh": "天使之翼（西）"
+}
+},
+{
+"id": 185,
+"key": "sky_rail",
+"layer": 2,
+"solid": 1,
+"built": 1,
+"hard": 4,
+"art": [
+"fence",
+"#f6f2ea",
+"#d2c8b6"
+],
+"name": {
+"en": "Cloud Balustrade",
+"zh": "云端栏杆"
+}
 }
 ]
 }

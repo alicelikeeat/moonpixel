@@ -87,7 +87,8 @@ extension Society {
         supplyTowers()
         c.advance(to: world.time)
         // underground, near the player, the nations' digging is carved into the rock as it goes
-        if realm.player.depth == 1, let t = explorer { digUnderground(around: t) }
+        if realm.player.depth == 1, let t = explorer { digUnderground(around: t); digDeep(around: t, level: 1) }
+        if let d = realm.player.depth, d > 1, MP.isBelow(d), let t = explorer { digDeep(around: t, level: d) }
         worldDemoHourly()
         releasePrisoners()
         refreshStanding(c)

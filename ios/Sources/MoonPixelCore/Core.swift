@@ -2,6 +2,11 @@ import Foundation
 
 /// Shared constants and deterministic helpers.
 public enum MP {
+    /// Is this layer depth below the ground (the underground, depth 1, or a deep level, 2 ... 99)?
+    @inline(__always) public static func isBelow(_ depth: Int) -> Bool { depth >= 1 && depth < OpenWorld.storeyBase }
+    /// The deepest level a city digs down to (B1 ... B8).
+    public static let deepest = 8
+
     public static let tile = 16
     public static let chunk = 32
     public static let chunkArea = 1024

@@ -54,7 +54,7 @@ extension Society {
     /// pack, or when the place above is taken (a floor, a wall: a ceiling). Returns why not, or nil.
     @discardableResult public func pillarUp(with good: String = "stone") -> String? {
         guard var b = realm.player.body, b.vehicle == nil, b.platform == nil else { return "not standing" }
-        guard b.depth != 1 else { return "underground" }
+        guard !MP.isBelow(b.depth) else { return "underground" }
         guard let block = Society.pillarBlock(for: good) else { return "not a block" }
         guard carried(good) >= 1 else { return "none left" }
         let t = Motion.tile(b.x, b.y)

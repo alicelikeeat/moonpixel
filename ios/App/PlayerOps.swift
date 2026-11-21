@@ -157,7 +157,7 @@ extension GameModel {
     /// "Storey 3 · 6.0 m" (and the car's way when riding), for the HUD and 2D.
     func refreshHeight() {
         guard society != nil, let b = society.realm.player.body else { heightLine = ""; nearLift = nil; return }
-        var s = b.depth >= OpenWorld.storeyBase ? String(format: L("第 %d 层", "Storey %d"), b.depth - OpenWorld.storeyBase) : (b.depth == 1 ? L("地下", "Underground") : L("地面", "Ground"))
+        var s = b.depth >= OpenWorld.storeyBase ? String(format: L("第 %d 层", "Storey %d"), b.depth - OpenWorld.storeyBase) : (b.depth == 1 ? L("地下", "Underground") : (MP.isBelow(b.depth) ? String(format: L("地下第 %d 层", "Level B%d"), b.depth) : L("地面", "Ground")))
         s += String(format: " · %.1f m", b.z * 2)
         if let id = b.platform, let e = society.lift(id) {
             let above = e.stops.lastIndex { $0.z <= e.z + 1e-6 }.map { e.stops[$0] }

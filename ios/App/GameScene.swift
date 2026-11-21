@@ -221,7 +221,7 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard let model = model, model.world != nil, let society = model.society else { return }
         let world = model.activeWorld
-        let under = model.depth == 1
+        let under = MP.isBelow(model.depth)
         let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, currentTime - lastTime)
         lastTime = currentTime
         frameAvg = frameAvg * 0.95 + dt * 0.05
@@ -316,7 +316,7 @@ final class GameScene: SKScene {
         if flat == drawn3D { drawn3D = !flat; show2D(flat) }
         if flat {
             // underground the cave is dim, but within a nation's underland its own lamps make a day of their own
-            if under, let sky = society.underSky(at: viewPos.tile) {
+            if under, let sky = society.underSky(at: viewPos.tile, level: model.depth) {
                 night.alpha = CGFloat((1 - sky.light) * 0.5)
                 night.color = sky.sea ? UIColor(red: 0.0, green: 0.12, blue: 0.2, alpha: 1) : UIColor(red: 0.08, green: 0.05, blue: 0.0, alpha: 1)
             } else {
@@ -345,7 +345,9 @@ final class GameScene: SKScene {
             maintAcc = 0
             if !under { world.survey(center: TilePos(Int((viewPos.x / 512).rounded(.down)), Int((viewPos.y / 512).rounded(.down))), count: 16) }
             world.maintain()
-            if under { model.world.maintain() } else { society.under?.maintain() }
+            if under { model.world.maintain() }
+            if model.depth != 1 { society.under?.maintain() }
+            for w in society.deeps.values where w !== model.activeWorld { w.maintain() }
             for w in society.storeys.values where w !== model.activeWorld { w.maintain() }
             // storey layers a fall or a look passed through, with nothing built on them, are let go
             society.trimStoreys(around: model.depth >= OpenWorld.storeyBase ? model.depth - OpenWorld.storeyBase : 0)
@@ -405,13 +407,22 @@ final class GameScene: SKScene {
             let snap = ChunkSnapshot(world.chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)))
             // on a storey, the ground and the storeys under it show (darkened) through the open air
             // (the ground and at most the three storeys right under this one: never every storey of a tall tower)
+            // the sky storey: no storeys under it, only the ground far below in the blue, clouds, and the
+            // islands' undersides hanging below their coasts
+            let isSky = world.storey == SkyTune.storey
             let below: [[[UInt8]]]? = world.storey > 0
-                ? ([0] + Array(max(1, world.storey - 3)..<world.storey)).map { model.society.layer($0 == 0 ? 0 : OpenWorld.storeyBase + $0).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)).layers } : nil
+                ? (isSky ? [0] : [0] + Array(max(1, world.storey - 3)..<world.storey)).map { model.society.layer($0 == 0 ? 0 : OpenWorld.storeyBase + $0).chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk)).layers } : nil
+            let sky = isSky ? SkyBackdrop(north: world.chunk(MP.keyCX(key.chunk), MP.keyCY(key.chunk) - 1).layers[0], cx: MP.keyCX(key.chunk), cy: MP.keyCY(key.chunk), seed: world.seed) : nil
             bakeWork.async { [weak self] in
                 let t0 = CACurrentMediaTime()
-                let cg = Bitmap.animeStyle
-                    ? (below.map { AnimeArt.bakeStorey(layers: snap.layers, below: $0) } ?? AnimeArt.bakeChunk(layers: snap.layers)).cgImage
-                    : (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).cgImage
+                let cg: CGImage?
+                if let sky = sky, let ground = below?.first {
+                    cg = (Bitmap.animeStyle ? AnimeArt.bakeSky(layers: snap.layers, ground: ground, sky: sky) : PixelArt.bakeSky(layers: snap.layers, ground: ground, sky: sky)).cgImage
+                } else {
+                    cg = Bitmap.animeStyle
+                        ? (below.map { AnimeArt.bakeStorey(layers: snap.layers, below: $0) } ?? AnimeArt.bakeChunk(layers: snap.layers)).cgImage
+                        : (below.map { PixelArt.bakeStorey(layers: snap.layers, below: $0) } ?? PixelArt.bakeChunk(layers: snap.layers)).cgImage
+                }
                 let took = CACurrentMediaTime() - t0
                 DispatchQueue.main.async { self?.baked(key, cg, took) }
             }
@@ -498,8 +509,17 @@ final class GameScene: SKScene {
         for (id, n) in warNodes where !seen.contains(id) { n.removeFromParent(); warNodes[id] = nil }
     }
 
+    /// Mirror a figure walking to the left: the pixel figures and a picture's own frames have one side view;
+    /// the anime figures are drawn turned to the angle they look (never mirrored).
+    static func flip(_ facing: Vec2, ownFrames: Bool) -> CGFloat {
+        if Bitmap.animeStyle && !ownFrames { return 1 }
+        return abs(facing.x) > abs(facing.y) && facing.x < 0 ? -1 : 1
+    }
+
     private func charTexture(_ look: Look, _ facing: Vec2, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> SKTexture {
-        let dir = abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down")
+        // the anime figures turn to any of 16 angles; the pixel figures keep their four views
+        let dir = Bitmap.animeStyle ? AnimeArt.turnDir(AnimeArt.turnStep(facing: facing))
+                                    : (abs(facing.x) > abs(facing.y) ? "side" : (facing.y < 0 ? "up" : "down"))
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
         let key = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(dir)\(frame)\(held)\(child)\(female)"
         if let t = texCache[key] { return t }
@@ -555,8 +575,7 @@ final class GameScene: SKScene {
             }
             node.texture = tex
             node.size = GameScene.personSize(tex)
-            let side = abs(a.facing.x) > abs(a.facing.y)
-            node.xScale = side && a.facing.x < 0 ? -1 : 1
+            node.xScale = GameScene.flip(a.facing, ownFrames: look.anim.flatMap { model.anims[$0] }?.isEmpty == false)
             node.zRotation = a.sleeping ? -.pi / 2 : 0
             let ap = upstairs.at[a.id] ?? a.pos
             node.position = CGPoint(x: ap.x, y: -(ap.y + 4))
@@ -584,7 +603,7 @@ final class GameScene: SKScene {
             }
         }
         // underground: the people of the nations' underlands, walking their roads
-        if model.depth == 1 || model.depth == SkyTune.depth {
+        if MP.isBelow(model.depth) || model.depth == SkyTune.depth {
             for f in society.folk(depth: model.depth, center: viewPos, halfW: halfW, halfH: halfH) {
                 seen.insert(f.id)
                 let node = agentNodes[f.id] ?? {
@@ -597,7 +616,7 @@ final class GameScene: SKScene {
                 let tex = charTexture(f.look, f.facing, moving: f.moving, acting: false, held: "", child: f.child, female: f.female, phase: phase + f.id)
                 node.texture = tex
                 node.size = GameScene.personSize(tex)
-                node.xScale = abs(f.facing.x) > abs(f.facing.y) && f.facing.x < 0 ? -1 : 1
+                node.xScale = GameScene.flip(f.facing, ownFrames: false)
                 node.position = CGPoint(x: f.pos.x, y: -(f.pos.y + 4))
                 node.zPosition = 10 + CGFloat(f.pos.y) * 0.001
             }
@@ -615,7 +634,7 @@ final class GameScene: SKScene {
         playerNode.texture = ptex
         playerNode.size = GameScene.personSize(ptex)
         let side = abs(facing.x) > abs(facing.y)
-        playerNode.xScale = side && facing.x < 0 ? -1 : 1
+        playerNode.xScale = GameScene.flip(facing, ownFrames: model.playerLook.anim.flatMap { model.anims[$0] }?.isEmpty == false)
         playerNode.position = CGPoint(x: player.x, y: -(player.y + 4))
         playerNode.zPosition = 10 + CGFloat(player.y) * 0.001
         playerRing.position = CGPoint(x: player.x, y: -(player.y + 2))
@@ -657,11 +676,11 @@ final class GameScene: SKScene {
         guard attackT <= 0, let model = model, !model.worldLocked else { return }
         var dir = (target - player).normalized
         if dir == .zero { dir = facing }
-        if GameModel.weapons[model.weaponIndex] == "pick" || model.depth == 1 {
+        if GameModel.weapons[model.weaponIndex] == "pick" || MP.isBelow(model.depth) {
             facing = dir; attackT = 0.3
             let t = (player + dir * 16).tile
             if model.dig(at: t) { model.solid?.burst(at: t.center, lift: 0.4, color: RGBA(hex: "#b0b0b0")); dust(at: CGPoint(x: t.center.x, y: -(t.center.y - 8)), color: UIColor(white: 0.7, alpha: 1)); return }
-            if model.depth == 1 { return }
+            if MP.isBelow(model.depth) { return }
         }
         if !model.activePower.isEmpty {
             facing = dir

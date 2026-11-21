@@ -191,7 +191,17 @@ public enum AnimeArt {
 
     /// An anime chibi figure on a 64 x 80 canvas (feet at y 76): the same look, directions and frames as the
     /// pixel figure (dir "down" | "up" | "side"; frame 0 stand, 1 and 2 walk, 3 acting), painted.
+    /// A turn step ("t0" ... "t15", see AnimeTurn.swift) gives the figure turned to that angle.
     public static func character(_ look: Look, dir: String, frame: Int, held: String, child: Bool, female: Bool) -> Bitmap {
+        if let step = turnIndex(dir) {
+            // the model figures are drawn in the four views only: the nearest one (mirrored to the left)
+            if look.anim == nil && CharacterModels.of(look.model) != nil {
+                let v = cardinal(step)
+                let pic = character(look, dir: v.dir, frame: frame, held: held, child: child, female: female)
+                return v.mirrored ? mirrored(pic) : pic
+            }
+            return turned(look, step: step, frame: frame, held: held, child: child, female: female, kind: figure)
+        }
         if look.anim == nil, let m = CharacterModels.of(look.model) {
             var plain = look; plain.model = nil
             return modelFigure(m, base: { character(plain, dir: dir, frame: frame, held: held, child: child, female: female) }, look: look, dir: dir, frame: frame, held: held, child: child, female: female)
@@ -551,6 +561,12 @@ public enum AnimeArt {
                 c.rect(bx, by - 12, 32, 15, c1.lightened(0.15), ink: 1.2, radius: 1.5)
                 for x in [0.0, 10.5, 21] { c.rect(bx + x + 1, by + 4, 9, 26, c1.lightened(0.05), ink: 0.8, radius: 1) }
                 c.poly([(bx + 3, by + 26), (bx + 8, by + 6), (bx + 11, by + 6), (bx + 6, by + 26)], RGBA(255, 255, 255, 110))
+            } else if t.key == "marble_wall" {
+                // white marble: a fluted pilaster each side, a gold band under the cornice and a gold rosette
+                c.rect(bx, by - 12, 32, 15, c1.lightened(0.1), ink: 1.2, radius: 1.5)
+                c.rect(bx, by + 1, 32, 2.4, c3, ink: 0.6)
+                for x in [2.0, 24] { c.rect(bx + x, by + 5, 6, 26, c1, ink: 0.9, radius: 1); for f in [1.5, 3, 4.5] { c.line(bx + x + f, by + 7, bx + x + f, by + 29, 0.4, shadowed(c1, 0.25)) } }
+                c.ellipse(bx + 16, by + 16, 3.4, 3.4, c3, ink: 0.7, shade: Shade(shadow: 0.25)); c.ellipse(bx + 16, by + 16, 1.2, 1.2, c1)
             } else if t.key == "wall_concrete" {
                 c.rect(bx + 6, by + 8, 20, 13, c3, ink: 1.1, radius: 1, shade: Shade(shadow: 0.25))
                 c.rect(bx + 15.4, by + 8, 1.2, 13, c2)
@@ -680,6 +696,21 @@ public enum AnimeArt {
             c.rect(bx + 5, by - 7, 22, 5, c1.lightened(0.1), ink: 1.2, radius: 1.5); c.rect(bx + 5, by + 27, 22, 4, shadowed(c1, 0.15), ink: 1.2, radius: 1)
             for x in [12.0, 16, 20] { c.line(bx + x, by - 1, bx + x, by + 26, 0.8, shadowed(c1, 0.3)) }
             c.line(bx + 10, by + 6, bx + 14, by + 12, 1.0, shadowed(c1, 0.5))       // a crack
+        case "wing":
+            // an angel's wing on a sky house: from the wall beside it (west for an east wing) up and out, the
+            // long white flight feathers hanging in a fan, gold coverts along the top
+            let s: Double = t.key.hasSuffix("_w") ? -1 : 1
+            func W(_ x: Double, _ y: Double) -> (Double, Double) { (bx + 16 + s * (x - 16), by + y) }
+            c.inkColor = shadowed(c2, 0.4)
+            soft(&c, [W(0, 14), W(6, 2), W(16, -10), W(28, -16), W(32, -12), W(31, -2), W(28, 10), W(23, 22), W(16, 30), W(9, 28), W(3, 22)], c1, ink: 1.2, light: 0.2, shadow: 0.18, rim: false)
+            c.inkColor = nil
+            for i in 0..<6 {
+                let u = Double(i) / 5
+                let a = W(6 + u * 20, 4 - u * 12), e = W(8 + u * 21, 28 - u * 26)
+                c.line(a.0, a.1, e.0, e.1, 0.7, c2)
+                c.ellipse(e.0, e.1, 2.2, 1.5, c1.lightened(0.1), ink: 0.5)
+            }
+            for i in 0..<5 { let u = Double(i) / 4; let p = W(4 + u * 22, 6 - u * 16); c.ellipse(p.0, p.1, 2.4, 1.7, i % 2 == 0 ? c3 : shadowed(c3, 0.25), ink: 0.5) }
         case "statue":
             c.rect(bx + 6, by + 22, 20, 9, shadowed(c1, 0.15), ink: 1.3, radius: 1.5, shade: Shade())
             c.ellipse(bx + 16, by - 4, 5, 5.5, c1, ink: 1.3, shade: Shade(shadow: 0.25))
@@ -843,6 +874,26 @@ public enum AnimeArt {
         }
         dim(0.55)
         for l in below.dropFirst() { lay(l); dim(0.8) }
+        lay(layers)
+        return img
+    }
+
+    /// A storey's tiles laid over a picture already made (the sky's backdrop).
+    public static func bakeStorey(layers: [[UInt8]], onto base: Bitmap) -> Bitmap {
+        var img = base
+        let at = atlas, cl = cell
+        func lay(_ l: [[UInt8]]) {
+            let g = l[0], st = l[1], ob = l[2], de = l[3]
+            for i in 0..<MP.chunkArea where g[i] != 0 {
+                let x = ((i % 32) * 16 + 8) * 2, y = ((i / 32) * 16 + 24) * 2
+                img.blit(at, sx: (Int(g[i]) % 16) * cl, sy: (Int(g[i]) / 16) * cl, sw: 32, sh: 32, dx: x, dy: y, blend: false)
+                if st[i] != 0 { img.blit(at, sx: (Int(st[i]) % 16) * cl, sy: (Int(st[i]) / 16) * cl, sw: 32, sh: 32, dx: x, dy: y, blend: false) }
+            }
+            for i in 0..<MP.chunkArea where g[i] != 0 {
+                let x = ((i % 32) * 16) * 2, y = ((i / 32) * 16 + 8) * 2
+                for id in [de[i], ob[i]] where id != 0 { img.blit(at, sx: (Int(id) % 16) * cl, sy: (Int(id) / 16) * cl, sw: cl, sh: cl, dx: x, dy: y, blend: true) }
+            }
+        }
         lay(layers)
         return img
     }

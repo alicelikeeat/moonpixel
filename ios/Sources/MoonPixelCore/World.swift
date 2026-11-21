@@ -185,8 +185,36 @@ public final class Generator {
         return !oceans || (h >> 16) % 3 == 0
     }
 
+    /// The deep levels under the underground (depth 2 ... 9): solid rock with winding caverns, richer in ore
+    /// the deeper it goes, basalt and pools of lava from the fourth level down; no ruins, no old cities.
+    func generateDeep(_ cx: Int, _ cy: Int) -> Chunk {
+        let c = Chunk(cx: cx, cy: cy)
+        let ct = Content.shared
+        let floor = depth >= 4 ? ct.tid("basalt") : ct.tid("cave_floor"), wall = ct.tid("cave_wall"), lake = depth >= 4 ? ct.tid("lava") : ct.tid("cave_water")
+        let rich = Double(depth - 1) * 0.02
+        let ores: [(UInt8, Double)] = [(ct.tid("ore_iron"), 0.05 + rich), (ct.tid("ore_copper"), 0.07 + rich), (ct.tid("ore_moon"), 0.08 + rich * 1.5), (ct.tid("ore_gold"), 0.09 + rich * 2)]
+        var g = [UInt8](repeating: floor, count: MP.chunkArea), st = [UInt8](repeating: 0, count: MP.chunkArea), ob = st, de = st
+        let off = Double(depth) * 1777
+        for ty in 0..<32 { for tx in 0..<32 {
+            let wx = cx * 32 + tx, wy = cy * 32 + ty
+            let x = Double(wx) + off, y = Double(wy) - off
+            let tunnel = abs(nForest.get(x * 0.5, y * 0.5)), cavern = nMoist.get(x * 6, y * 6), wet = nRiver.get(x * 2, y * 2)
+            let open = tunnel < 0.14 || cavern > 0.26
+            let i = ty * 32 + tx
+            if !open {
+                let r = Double(MP.h2(seed &+ 31 &+ depth &* 977, wx, wy) & 0xffff) / 65536.0
+                ob[i] = ores.first { r < $0.1 }?.0 ?? wall
+            } else if cavern > 0.34 && wet > 0.3 {
+                g[i] = lake
+            } else if MP.h01(seed &+ 5 &+ depth, wx, wy) < 0.01 { de[i] = ct.tid("mushroom") }
+        } }
+        c.layers = [g, st, ob, de]
+        return c
+    }
+
     public func generate(_ cx: Int, _ cy: Int) -> Chunk {
         if depth == 1 { return generateCave(cx, cy) }
+        if depth > 1 && depth < OpenWorld.storeyBase { return generateDeep(cx, cy) }
         // a storey above the ground is air until someone lays a floor on it
         if depth >= OpenWorld.storeyBase { return Chunk(cx: cx, cy: cy) }
         let c = Chunk(cx: cx, cy: cy)
@@ -584,7 +612,10 @@ public final class OpenWorld {
     /// of the towers that reach it (they are made from the tower itself when first looked at, never stored
     /// unless someone changes them).
     public var overlay: ((Chunk) -> Void)?
-    public var isUnder: Bool { depth == 1 }
+    /// Below the surface: the underground (depth 1) or one of the deep levels under it (2 ... 99).
+    public var isUnder: Bool { MP.isBelow(depth) }
+    /// Which level down this layer is (1: the underground, 2: the level under it ...; 0 above ground).
+    public var below: Int { MP.isBelow(depth) ? depth : 0 }
     /// Which storey this layer is (0 for the surface and the underground).
     public var storey: Int { depth >= OpenWorld.storeyBase ? depth - OpenWorld.storeyBase : 0 }
 

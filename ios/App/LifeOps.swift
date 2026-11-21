@@ -162,6 +162,14 @@ extension GameModel {
         if gate.below { teleportBelow(to: gate.tile, name: city.name(zh: GameModel.zh)) } else { teleport(to: gate.tile, name: city.name(zh: GameModel.zh)) }
     }
 
+    /// Go straight to the plaza of a level a city below has built down to.
+    func goDeep(_ id: Int, level: Int) {
+        guard let t = society.deepGate(id, level: level), let city = society.civ.cities[id] else { return }
+        civDetail = nil
+        showRealm = false
+        teleportAny(TeleportTarget(group: .under, name: city.name(zh: GameModel.zh) + String(format: L(" · 地下第 %d 层", " · level B%d"), level), tile: t + TilePos(0, 2), depth: level, detail: ""))
+    }
+
     /// Go there at once (on the surface): from anywhere, in a vehicle, underground, upstairs or in the sky.
     func teleport(to t: TilePos, name: String? = nil) {
         let place = name ?? WorldMap.describe(society, t, zh: GameModel.zh)

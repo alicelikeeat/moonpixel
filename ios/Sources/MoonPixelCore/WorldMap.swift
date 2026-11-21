@@ -335,6 +335,17 @@ public final class WorldMap {
                 if owner[MP.chunkKey(x, y)] == nil { owner[MP.chunkKey(x, y)] = z }
             } }
         }
+        // how many levels a city has built down under each chunk (it digs each level a little narrower: seen from
+        // above, terraces stepping down to its middle, like a great pit)
+        var depthUnder: [Int64: Int] = [:]
+        for level in 2...MP.deepest {
+            let deep = s.underlandZones(level: level).filter { $0.sea == sea }
+            if deep.isEmpty { break }
+            for z in deep {
+                let r = Int(z.r.rounded(.up))
+                for y in (z.cy - r)...(z.cy + r) { for x in (z.cx - r)...(z.cx + r) where z.contains(x, y) { depthUnder[MP.chunkKey(x, y)] = level } }
+            }
+        }
         let rock = RGBA(52, 46, 56), rockSea = RGBA(36, 48, 70), seabed = RGBA(26, 58, 100), seabedDeep = RGBA(16, 38, 76), landAbove = RGBA(30, 30, 36)
         let grass = RGBA(110, 160, 86), sand = RGBA(220, 200, 146), road = RGBA(236, 228, 210), glass = RGBA(160, 220, 240)
         for cy in 0..<side { for cx in 0..<side {
@@ -346,7 +357,18 @@ public final class WorldMap {
             if let z = owner[MP.chunkKey(x, y)] {
                 var land = z.sea ? sand : grass
                 if political { land = land.lerp(RGBA(hex: civ.polities[z.nation]?.color ?? "#cccccc"), 0.5) }
+                // each level built below darkens it one step (the terraces of the city going down)
+                let levels = depthUnder[MP.chunkKey(x, y)] ?? 1
+                land = land.darkened(Double(levels - 1) * 0.07)
                 img.rect(cx * ppc, cy * ppc, ppc, ppc, land)
+                if ppc >= 3 {
+                    // the edge of each terrace: a lighter line where the next level down begins
+                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] where (depthUnder[MP.chunkKey(x + dx, y + dy)] ?? 1) < levels && owner[MP.chunkKey(x + dx, y + dy)] != nil {
+                        let e = max(1, ppc / 6)
+                        let rx = dx < 0 ? cx * ppc : (dx > 0 ? cx * ppc + ppc - e : cx * ppc), ry = dy < 0 ? cy * ppc : (dy > 0 ? cy * ppc + ppc - e : cy * ppc)
+                        img.rect(rx, ry, dx != 0 ? e : ppc, dy != 0 ? e : ppc, land.lightened(0.3))
+                    }
+                }
                 // its roads, and a glass rim where it meets the rock
                 if ppc >= 4 {
                     let m = ppc / 2
@@ -375,7 +397,10 @@ public final class WorldMap {
         for c in civ.cities.values.sorted(by: { $0.id < $1.id }) where (sea ? c.sea == true : c.under == true) {
             guard let (ux, uy) = c.underAt, let p = civ.polities[c.nation], p.status == .active else { continue }
             let t = s.cityGate(c.id)?.tile ?? TilePos(ux * 32 + 16, uy * 32 + 18)
-            add(p.capital == c.id ? .capital : .city, c.name(zh: zh), p.color, t)
+            // the name says how far down it has built
+            let down = Civ.levelsDown(c)
+            let label = down > 1 ? c.name(zh: zh) + (zh ? " ↓\(down)层" : " ↓B\(down)") : c.name(zh: zh)
+            add(p.capital == c.id ? .capital : .city, label, p.color, t)
             byNation[c.nation, default: []].append(t)
         }
         for (n, ts) in byNation.sorted(by: { $0.key < $1.key }) {

@@ -155,4 +155,60 @@ final class UndergroundTests: XCTestCase {
         XCTAssertEqual(sc.layers[2][16 * 32 + 16], ct.tid("stairs_down"))
         XCTAssertEqual(sc.layers[0][17 * 32 + 16], ct.tid("sand"), "dry floor in the dome")
     }
+
+    func testCitiesBuildDownLevelByLevelEachNarrowerWithStairsBetween() {
+        let s = makeSociety(9)
+        let city = underNation(s, dug: 40)
+        XCTAssertEqual(Civ.levelsDown(city), 1, "a young city has only its underland")
+        XCTAssertTrue(s.underlandZones(level: 2).isEmpty)
+        city.dug = 200                                          // it digs on: 1 + (200 - 32) / 40 levels
+        s.underlandCache = nil; s.deepCache = [:]
+        XCTAssertEqual(Civ.levelsDown(city), 5)
+        let z1 = s.underlandZones(level: 1).first!, z3 = s.underlandZones(level: 3).first!, z5 = s.underlandZones(level: 5).first!
+        XCTAssertGreaterThan(z1.r, z3.r); XCTAssertGreaterThan(z3.r, z5.r)
+        XCTAssertTrue(s.underlandZones(level: 6).isEmpty, "not deeper than it has dug")
+        // the deep levels are open land with houses and lamps too, round the same middle
+        let ct = s.content
+        let b3 = s.deepWorld(3)
+        let mid = b3.chunk(320, 320)
+        XCTAssertTrue(mid.layers[0].contains(ct.tid("grass")) || mid.layers[0].contains(ct.tid("stone_floor")))
+        XCTAssertNotEqual(b3.chunk(321, 320).layers[2], s.underworld().chunk(321, 320).layers[2], "each level has its own streets")
+        // the plazas are joined: down from B1 to B2 ... and the stairs up on each level come out where the one
+        // above went down
+        let (dx, dy) = DeepTune.stairDown(1)
+        XCTAssertEqual(s.underworld().tile(2, 320 * 32 + dx, 320 * 32 + dy), ct.tid("stairs_down"), "B1's plaza has a way down")
+        _ = s.place(at: TilePos(320 * 32 + dx, 320 * 32 + dy + 1), depth: 1)
+        var depth = 1
+        for level in 1..<5 {
+            let (x, y) = DeepTune.stairDown(level)
+            let w = s.layer(level)
+            XCTAssertEqual(w.tile(2, 320 * 32 + x, 320 * 32 + y), ct.tid("stairs_down"), "B\(level) goes down")
+            guard let r = s.useStairs(at: TilePos(320 * 32 + x, 320 * 32 + y).center) else { return XCTFail("down from B\(level)") }
+            depth = r.depth
+            XCTAssertEqual(depth, level + 1)
+            XCTAssertEqual(s.layer(depth).tile(2, 320 * 32 + x, 320 * 32 + y), ct.tid("stairs_up"))
+        }
+        XCTAssertNotEqual(s.layer(5).tile(2, 320 * 32 + DeepTune.stairDown(5).0, 320 * 32 + DeepTune.stairDown(5).1), ct.tid("stairs_down"), "B5 is its deepest")
+        // and back up, level by level
+        let (ux, uy) = DeepTune.stairDown(4)
+        let up = s.useStairs(at: TilePos(320 * 32 + ux, 320 * 32 + uy).center)
+        XCTAssertEqual(up?.depth, 4)
+        XCTAssertEqual(s.realm.player.depth, 4)
+        // its people walk the deep levels' roads, and the light is theirs
+        XCTAssertFalse(s.folk(depth: 4, center: Vec2(Double(320 * 32 + 16) * 16, Double(320 * 32 + 16) * 16), halfW: 1200, halfH: 1200).isEmpty)
+        s.world.time = MP.daySeconds * 0.5
+        XCTAssertNotNil(s.underSky(at: TilePos(320 * 32, 320 * 32), level: 4))
+        // the deep rock away from the city: caverns, basalt and lava from B4 down; more ore
+        let rockB6 = s.deepWorld(6).chunk(300, 300)
+        XCTAssertTrue(rockB6.layers[0].contains(ct.tid("basalt")))
+        // going straight to a level's plaza
+        XCTAssertNotNil(s.deepGate(city.id, level: 4))
+        XCTAssertNil(s.deepGate(city.id, level: 6))
+        XCTAssertNotNil(s.place(at: s.deepGate(city.id, level: 4)! + TilePos(0, 2), depth: 4))
+        XCTAssertEqual(s.realm.player.depth, 4)
+        // the map shows the city's terraces and how deep it goes
+        var m = WorldMap(); m.layer = .underground
+        let (_, marks) = m.renderBelow(s, centre: TilePos(320 * 32, 320 * 32), reach: 12, ppc: 8, zh: true)
+        XCTAssertTrue(marks.contains { $0.name.contains("↓5层") }, marks.map { $0.name }.joined(separator: ","))
+    }
 }

@@ -331,17 +331,19 @@ public struct UnderFolk {
 extension Society {
     /// The people of the underlands near a place: two or three on the roads of every chunk within reach,
     /// walking up and down, by the clock (the same people at the same time, wherever you look from).
-    public func underFolk(center: Vec2, halfW: Double, halfH: Double, limit: Int = 40) -> [UnderFolk] {
-        guard !underlandZones().isEmpty else { return [] }
+    public func underFolk(center: Vec2, halfW: Double, halfH: Double, limit: Int = 40, level: Int = 1) -> [UnderFolk] {
+        let zones = underlandZones(level: level)
+        guard !zones.isEmpty else { return [] }
         let x0 = Int(((center.x - halfW) / 512).rounded(.down)), x1 = Int(((center.x + halfW) / 512).rounded(.down))
         let y0 = Int(((center.y - halfH) / 512).rounded(.down)), y1 = Int(((center.y + halfH) / 512).rounded(.down))
         var out: [UnderFolk] = []
         let t = world.time
         for cy in y0...y1 { for cx in x0...x1 {
-            guard let z = underlandZones().first(where: { $0.contains(cx, cy) }) else { continue }
-            let n = 2 + Int(MP.h2(world.seed &+ 7070, cx, cy) % 2)
+            guard let z = zones.first(where: { $0.contains(cx, cy) }) else { continue }
+            let salt = (level - 1) &* 131
+            let n = 2 + Int(MP.h2(world.seed &+ 7070 &+ salt, cx, cy) % 2)
             for i in 0..<n {
-                let h = MP.h2(world.seed &+ 7071 &+ i, cx, cy)
+                let h = MP.h2(world.seed &+ 7071 &+ salt &+ i, cx, cy)
                 let who = CharacterModels.resident(h, sea: z.sea)
                 // a walk along one of the chunk's two roads, there and back, about a minute of world time each way
                 let period = 60.0 + Double(h % 40)
@@ -354,7 +356,7 @@ extension Society {
                 let d: Vec2 = vertical ? Vec2(0, back ? -1 : 1) : Vec2(back ? -1 : 1, 0)
                 // a rest at each end of the road
                 let resting = f < 0.03 || f > 0.97
-                let id = 900_000_000 + Int((MP.h2(world.seed &+ 7072, cx, cy) & 0xffff)) * 8 + i
+                let id = 900_000_000 + (level - 1) * 1_000_000 + Int((MP.h2(world.seed &+ 7072, cx, cy) & 0xffff)) * 8 + i
                 out.append(UnderFolk(id: id, pos: Vec2(tx * 16, ty * 16), facing: resting ? Vec2(0, 1) : d, moving: !resting, look: who.look, female: who.female, child: who.child))
                 if out.count >= limit { return out }
             }

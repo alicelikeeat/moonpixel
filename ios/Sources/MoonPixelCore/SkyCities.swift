@@ -60,33 +60,119 @@ extension Generator {
     }
 }
 
+extension Generator {
+    /// How far the coast of the island centred on chunk `c` is from its middle, in tiles, in direction `a`
+    /// (radians): a rounded island with bays and headlands, never past the island's chunks, and always wide
+    /// enough to the east for the airport.
+    public func skyCoast(_ c: (Int, Int), angle a: Double) -> Double {
+        let h = MP.h2(seed &+ 9595, c.0, c.1)
+        let p1 = Double(h % 628) / 100, p2 = Double((h >> 10) % 628) / 100, p3 = Double((h >> 20) % 628) / 100
+        var r = 57 + 5 * sin(3 * a + p1) + 3 * sin(5 * a + p2) + 1.5 * sin(9 * a + p3)
+        if abs(atan2(sin(a), cos(a))) < 0.62 { r = max(r, 56) }                  // the airport's side
+        return min(66, r)
+    }
+
+    /// Is this tile on the island (inside its coast), and how far inside (tiles; negative: off it)?
+    public func skyInside(_ x: Int, _ y: Int, centre c: (Int, Int)) -> Double {
+        let dx = Double(x - (c.0 * 32 + 16)) + 0.5, dy = Double(y - (c.1 * 32 + 16)) + 0.5
+        return skyCoast(c, angle: atan2(dy, dx)) - (dx * dx + dy * dy).squareRoot()
+    }
+
+    /// A chunk of a sky city: white marble houses with angel wings on either side, gold lamps, gardens of
+    /// flowers and trees, marble paths in a grid, and the coast: grass to the edge, a balustrade along it,
+    /// and nothing past it (open air). The middle chunk is the plaza with the stairway down; the one east of it
+    /// the airport.
+    public func skyPlan(_ cx: Int, _ cy: Int, centre c: (Int, Int)) -> [[UInt8]] {
+        let k = Content.shared
+        let grass = k.tid("grass"), marble = k.tid("marble_floor"), path = k.tid("marble_path"), wall = k.tid("marble_wall")
+        let wingE = k.tid("wing_e"), wingW = k.tid("wing_w"), rail = k.tid("sky_rail"), lamp = k.tid("lamp_on")
+        var g = [UInt8](repeating: grass, count: MP.chunkArea), st = [UInt8](repeating: 0, count: MP.chunkArea), ob = st, de = st
+        @inline(__always) func i(_ x: Int, _ y: Int) -> Int { y * 32 + x }
+        let inside: (Int, Int) -> Double = { x, y in self.skyInside(cx * 32 + x, cy * 32 + y, centre: c) }
+        var r = RNG(seed: Int(MP.h2(seed &+ 9696, cx, cy)))
+        let home = (cx, cy) == c
+        let flowers = [k.tid("flower_red"), k.tid("flower_yellow"), k.tid("flower_blue")]
+        if home {
+            // the plaza: marble, an angel statue, fountains (wells), lamps, flower beds; the stairway in the middle
+            for y in 5...26 { for x in 5...26 { g[i(x, y)] = marble } }
+            ob[i(16, 11)] = k.tid("statue")
+            for (x, y) in [(10, 16), (22, 16)] { ob[i(x, y)] = k.tid("well") }
+            for (x, y) in [(7, 7), (24, 7), (7, 24), (24, 24), (12, 12), (20, 12), (12, 20), (20, 20)] { ob[i(x, y)] = lamp }
+            for (x, y) in [(9, 9), (22, 9), (9, 22), (22, 22)] { for d in 0..<3 { de[i(x + d, y)] = flowers[(x + d) % 3] } }
+            ob[i(16, 16)] = k.tid("stairs_down")
+        } else {
+            // what fills each quarter between the paths
+            for (qx, qy) in [(1, 1), (18, 1), (1, 18), (18, 18)] {
+                let w = 7 + r.index(2), h = 6 + r.index(2)
+                let bx = qx + 2 + r.index(13 - w - 2), by = qy + 2 + r.index(13 - h - 3)
+                // a house only where it and its wings stand well inside the coast
+                let fits = [(bx - 2, by - 1), (bx + w + 1, by - 1), (bx - 2, by + h), (bx + w + 1, by + h)].allSatisfy { inside($0.0, $0.1) > 3 }
+                if fits && r.unit() < 0.8 {
+                    for y in by..<(by + h) { for x in bx..<(bx + w) {
+                        g[i(x, y)] = marble
+                        ob[i(x, y)] = x == bx || x == bx + w - 1 || y == by || y == by + h - 1 ? wall : 0
+                    } }
+                    ob[i(bx + w / 2, qy < 15 ? by + h - 1 : by)] = k.tid("door_wood")
+                    ob[i(bx + 1, by + 1)] = k.tid("bed")
+                    ob[i(bx + w - 2, by + 1)] = r.unit() < 0.5 ? k.tid("table") : k.tid("bookshelf")
+                    // the wings: one on each side wall, outside it, at its middle
+                    let wy = by + h / 2
+                    ob[i(bx + w, wy)] = wingE; ob[i(bx - 1, wy)] = wingW
+                    // a gold lamp at the door, flowers round the house
+                    let lx = bx + w / 2 + 1, ly = qy < 15 ? by + h : by - 1
+                    if lx < 32, ly >= 0, ly < 32 { ob[i(lx, ly)] = lamp }
+                    for _ in 0..<5 {
+                        let x = qx + r.index(13), y = qy + r.index(13)
+                        if ob[i(x, y)] == 0 && g[i(x, y)] == grass { de[i(x, y)] = flowers[r.index(3)] }
+                    }
+                } else {
+                    // a garden: trees, bushes, flowers, a marble pillar or two
+                    for y in qy..<(qy + 13) { for x in qx..<(qx + 13) {
+                        let u = r.unit()
+                        if u < 0.05 { ob[i(x, y)] = [k.tid("tree_oak"), k.tid("tree_willow")][r.index(2)] }
+                        else if u < 0.065 { ob[i(x, y)] = k.tid("pillar") }
+                        else if u < 0.08 { ob[i(x, y)] = k.tid("bush") }
+                        else if u < 0.2 { de[i(x, y)] = (flowers + [k.tid("tall_grass")])[r.index(4)] }
+                    } }
+                }
+            }
+            // the paths, gold lamps at the crossing
+            for y in 0..<32 { for x in 0..<32 where x == 15 || x == 16 || y == 15 || y == 16 { st[i(x, y)] = path; ob[i(x, y)] = 0; de[i(x, y)] = 0 } }
+            for (x, y) in [(14, 14), (17, 14), (14, 17), (17, 17)] { ob[i(x, y)] = lamp; de[i(x, y)] = 0 }
+        }
+        // the coast: off the island nothing at all (open air); the last tile a balustrade; grass inside it
+        for y in 0..<32 { for x in 0..<32 {
+            let d = inside(x, y)
+            if d < 0 { g[i(x, y)] = 0; st[i(x, y)] = 0; ob[i(x, y)] = 0; de[i(x, y)] = 0 }
+            else if d < 1.2 { g[i(x, y)] = grass; st[i(x, y)] = 0; ob[i(x, y)] = rail; de[i(x, y)] = 0 }
+            else if d < 2.5 && st[i(x, y)] == 0 { if ob[i(x, y)] != 0 && ob[i(x, y)] != lamp { ob[i(x, y)] = 0 }; if r.unit() < 0.25 { de[i(x, y)] = flowers[r.index(3)] } }
+        } }
+        return [g, st, ob, de]
+    }
+}
+
 extension Society {
     /// A chunk of the sky storey made for the first time: if it is part of an island, it is made so.
     func stampSky(_ ch: Chunk) {
         let gen = world.gen
         guard let c = gen.skyIsland(ch.cx, ch.cy) else { return }
-        let fence = content.tid("fence")
-        let home = c == (ch.cx, ch.cy)
-        var p = gen.underlandPlan(ch.cx, ch.cy, sea: false, home: home, rim: fence, inZone: { x, y in gen.skyIsland(x, y).map { $0 == c } ?? false })
-        if home {
-            // the long stairway down, in the middle of the plaza
-            p.layers[2][16 * 32 + 16] = content.tid("stairs_down")
-        } else if ch.cx == c.0 + 1 && ch.cy == c.1 {
+        var p = gen.skyPlan(ch.cx, ch.cy, centre: c)
+        if ch.cx == c.0 + 1 && ch.cy == c.1 {
             // the airport: a runway along the middle, an apron to the south, a UFO pad, lamps
-            let runway = content.tid("runway"), apron = content.tid("apron"), pad = content.tid("ufo_pad"), stone = content.tid("stone_floor")
-            for y in 2..<30 { for x in 1..<31 {
+            let runway = content.tid("runway"), apron = content.tid("apron"), pad = content.tid("ufo_pad"), stone = content.tid("marble_floor")
+            for y in 2..<30 { for x in 1..<31 where p[0][y * 32 + x] != 0 {
                 let i = y * 32 + x
-                p.layers[0][i] = stone; p.layers[2][i] = 0; p.layers[3][i] = 0; p.layers[1][i] = 0
-                if y >= 6 && y <= 9 { p.layers[1][i] = runway }
-                if y >= 13 && y <= 18 && x >= 3 && x <= 15 { p.layers[1][i] = apron }
-                if y >= 20 && y <= 26 && x >= 19 && x <= 27 { p.layers[0][i] = pad }
+                p[0][i] = stone; p[2][i] = 0; p[3][i] = 0; p[1][i] = 0
+                if y >= 6 && y <= 9 { p[1][i] = runway }
+                if y >= 13 && y <= 18 && x >= 3 && x <= 15 { p[1][i] = apron }
+                if y >= 20 && y <= 26 && x >= 19 && x <= 27 { p[0][i] = pad }
             } }
-            for (x, y) in [(2, 11), (16, 11), (29, 11), (17, 27)] { p.layers[2][y * 32 + x] = content.tid("lamp_on") }
-            // the road in from the plaza stays open
-            for y in 15...16 { for x in 0..<3 { p.layers[1][y * 32 + x] = content.tid("cobble_road"); p.layers[0][y * 32 + x] = stone } }
+            for (x, y) in [(2, 11), (16, 11), (29, 11), (17, 27)] where p[0][y * 32 + x] != 0 { p[2][y * 32 + x] = content.tid("lamp_on") }
+            // the path in from the plaza stays open
+            for y in 15...16 { for x in 0..<3 { p[1][y * 32 + x] = content.tid("marble_path"); p[0][y * 32 + x] = stone } }
         }
         for k in 0..<MP.chunkArea where ch.layers[0][k] == 0 && ch.layers[2][k] == 0 {
-            for l in 0..<4 { ch.layers[l][k] = p.layers[l][k] }
+            for l in 0..<4 { ch.layers[l][k] = p[l][k] }
         }
     }
 
@@ -124,7 +210,8 @@ extension Society {
         var out: [UnderFolk] = []
         for cy in y0...y1 { for cx in x0...x1 {
             guard let c = gen.skyIsland(cx, cy), !(cx == c.0 + 1 && cy == c.1) else { continue }
-            out += walkers(cx, cy, salt: 8080, sea: false)
+            // (only on the island: a path that reaches the coast ends at the balustrade)
+            out += walkers(cx, cy, salt: 8080, sea: false).filter { gen.skyInside(Int($0.pos.x / 16), Int($0.pos.y / 16), centre: c) > 1.5 }
             if out.count >= limit { return Array(out.prefix(limit)) }
         } }
         return out
@@ -155,7 +242,7 @@ extension Society {
 
     /// The people to draw on a layer (underground or in the sky), near a place.
     public func folk(depth: Int, center: Vec2, halfW: Double, halfH: Double, limit: Int = 40) -> [UnderFolk] {
-        if depth == 1 { return underFolk(center: center, halfW: halfW, halfH: halfH, limit: limit) }
+        if MP.isBelow(depth) { return underFolk(center: center, halfW: halfW, halfH: halfH, limit: limit, level: depth) }
         if depth == SkyTune.depth { return skyFolk(center: center, halfW: halfW, halfH: halfH, limit: limit) }
         return []
     }

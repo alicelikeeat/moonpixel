@@ -305,15 +305,15 @@ final class SolidRenderer {
         } else if shownDepth != model.depth {
             // another layer of the same world (a block placed underfoot, stairs, a lift): what is on screen stays
             // until each chunk of the new layer is ready, so the picture never goes blank
-            let fromUnder = shownDepth == 1 || model.depth == 1
+            let fromUnder = MP.isBelow(shownDepth) || MP.isBelow(model.depth)
             shownDepth = model.depth
             if fromUnder { reset() } else { layerChanged() }
         }
         // light and sky
-        let under = model.depth == 1
+        let under = MP.isBelow(model.depth)
         let w = society.weather(at: scene.player)
         // within a nation's underland the light is its own: an artificial day, bright, then dimmed at night
-        let made = under ? society.underSky(at: scene.viewPos.tile) : nil
+        let made = under ? society.underSky(at: scene.viewPos.tile, level: model.depth) : nil
         var l = made.map { Float(0.4 + 0.6 * $0.light) } ?? (under ? 0.62 : Float(0.25 + 0.75 * world.daylight))
         if !under { l *= 1 - Float(w.dim) * 0.6 }
         let day = CGFloat(under ? 0 : world.daylight)
@@ -386,6 +386,7 @@ final class SolidRenderer {
         updateLayers(model)
         hideAroundRide()
         updateSkyline(model)
+        updateClouds(model)
         let reach = Double(distance) * 1.5 * 16 + 64
         updateActors(world, society, model, scene, reach: reach, dt: dt)
         if !model.plainRender { updateSoldiers(world, society, model, reach: reach, dt: dt); updateRoofs(world, society, model, scene, reach: reach) }
@@ -584,7 +585,7 @@ final class SolidRenderer {
         guard let society = model.society else { return }
         let here = model.depth
         var show: [Int] = []
-        if here != 1 {
+        if !MP.isBelow(here) {
             // the storeys near the one you are on (built ones and the floors of standing towers), never all of them
             let n = here >= OpenWorld.storeyBase ? here - OpenWorld.storeyBase : 0
             show = society.storeysNear(n, span: Solid3DLimits.storeySpan).map { OpenWorld.storeyBase + $0 } + [0]
@@ -639,6 +640,42 @@ final class SolidRenderer {
         }
     }
 
+    // MARK: clouds round the sky islands
+
+    private let clouds = ModelEntity()
+    private var cloudKey = ""
+
+    /// On the sky storey: heaps of cloud drifting below the islands' floors and among them (soft white puffs,
+    /// a little blue underneath), so the islands float over a sea of cloud with the ground far below.
+    private func updateClouds(_ model: GameModel) {
+        if clouds.parent == nil { clouds.name = "clouds"; root.addChild(clouds) }
+        let onSky = model.depth == SkyTune.depth
+        clouds.isEnabled = onSky
+        guard onSky, target.x.isFinite, target.z.isFinite else { return }
+        let ccx = Int((target.x / 32).rounded(.down)), ccy = Int((target.z / 32).rounded(.down))
+        let key = "\(ccx):\(ccy):\(Bitmap.animeStyle)"
+        if key == cloudKey { return }
+        cloudKey = key
+        var m = Mesh3D()
+        m.cel = Bitmap.animeStyle
+        let base = target.y
+        for cy in (ccy - 3)...(ccy + 3) { for cx in (ccx - 3)...(ccx + 3) {
+            var r = RNG(seed: Int(MP.h2(model.society.world.seed &+ 8383, cx, cy)))
+            for _ in 0..<(1 + r.index(2)) {
+                let ox = Float(cx * 32) + Float(r.range(2, 30)), oz = Float(cy * 32) + Float(r.range(2, 30))
+                let oy = base - Float(r.range(6, 30))
+                let puffs = 4 + r.index(4)
+                for p in 0..<puffs {
+                    let w = Float(r.range(4, 9)), h = Float(r.range(1.5, 3.5))
+                    let px = ox + Float(p) * 3.5 - Float(puffs) * 1.7, pz = oz + Float(r.range(-3, 3)), py = oy + Float(r.range(-0.8, 1.2))
+                    m.box(px - w / 2, py, pz - w / 2, px + w / 2, py + h, pz + w / 2, RGBA(252, 252, 255), faces: .all)
+                    m.box(px - w / 2 + 0.4, py - 0.6, pz - w / 2 + 0.4, px + w / 2 - 0.4, py, pz + w / 2 - 0.4, RGBA(214, 224, 242), faces: [.bottom, .sides])
+                }
+            }
+        } }
+        clouds.model = resource(m).map { ModelComponent(mesh: $0, materials: [solidMaterial]) }
+    }
+
     // MARK: the skyline: tall district towers drawn whole
 
     private let skyline = ModelEntity()
@@ -652,8 +689,8 @@ final class SolidRenderer {
     private func updateSkyline(_ model: GameModel) {
         guard let society = model.society else { return }
         if skyline.parent == nil { skyline.name = "skyline"; root.addChild(skyline) }
-        skyline.isEnabled = model.depth != 1
-        guard model.depth != 1 else { return }
+        skyline.isEnabled = !MP.isBelow(model.depth)
+        guard !MP.isBelow(model.depth) else { return }
         skylineFrame += 1
         if skylineFrame % 20 != 1 { return }                 // a few times a second is plenty
         guard target.x.isFinite, target.z.isFinite, abs(target.x) < 1e9, abs(target.z) < 1e9 else { return }
@@ -682,7 +719,7 @@ final class SolidRenderer {
 
     private func layerBuilt(_ lk: LayerChunk, _ mesh: ChunkMesh3D, _ cg: CGImage?, _ rev: Int) {
         layerWaiting.remove(lk)
-        guard let model = model, model.render3D, model.depth != 1 else { return }
+        guard let model = model, model.render3D, !MP.isBelow(model.depth) else { return }
         let tex = cg.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)) }
         // parts at fixed places: the ground picture 0, the palette 1, the cut-outs 2 (a missing one's place is held)
         var parts: [MeshDescriptor] = []
@@ -768,7 +805,9 @@ final class SolidRenderer {
             return
         }
         let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        let view = AnimeArt.cardView(facing: f, toward: Vec2(Double(-sin(yaw)), Double(-cos(yaw))), right: Vec2(Double(cos(yaw)), Double(-sin(yaw))))
+        // the drawing of the angle the camera sees (16 turns round the figure; never mirrored)
+        let step = AnimeArt.turnStep(facing: f, toward: Vec2(Double(-sin(yaw)), Double(-cos(yaw))), right: Vec2(Double(cos(yaw)), Double(-sin(yaw))))
+        let view = (dir: AnimeArt.turnDir(step), mirrored: false)
         let drawing = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(view.dir)\(frame)\(held)\(child)\(female)"
         let key = drawing + (view.mirrored ? "m" : "") + "\(Int(light * 20))"
         if cardModels[key] == nil {
@@ -841,7 +880,7 @@ final class SolidRenderer {
             settle(e, at: place(upstairs.at[a.id] ?? a.pos, world, lift: (rides ? Figure3D.saddleHeight : 0) + (a.sleeping ? 0.25 : 0)), dt: dt, fresh: fresh)
         }
         // underground: the people of the nations' underlands, walking their roads
-        if model.depth == 1 || model.depth == SkyTune.depth {
+        if MP.isBelow(model.depth) || model.depth == SkyTune.depth {
             for f in society.folk(depth: model.depth, center: scene.viewPos, halfW: reach, halfH: reach, limit: 30) {
                 seen.insert(f.id)
                 let fresh = agents[f.id] == nil
@@ -984,7 +1023,7 @@ final class SolidRenderer {
 
     private func updateLifts(_ society: Society, _ model: GameModel, reach: Double) {
         var seen = Set<Int>()
-        if model.depth != 1 {
+        if !MP.isBelow(model.depth) {
             for e in society.realm.lifts where !e.stops.isEmpty {
                 let c = Vec2(Double(e.x * 16 + e.w * 8), Double(e.y * 16 + e.d * 8))
                 guard c.distance(to: model.scene?.viewPos ?? c) <= reach + 64 else { continue }

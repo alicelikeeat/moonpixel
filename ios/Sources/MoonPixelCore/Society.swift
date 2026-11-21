@@ -448,6 +448,12 @@ public final class Society {
     public internal(set) var under: OpenWorld?
     /// The open lands below, as last read from the nations (refreshed when their digging moves on).
     var underlandCache: (stamp: Int, zones: [UnderlandZone])?
+    /// The same for the deep levels (by level, 2 ... 8).
+    var deepCache: [Int: (stamp: Int, zones: [UnderlandZone])] = [:]
+    /// The deep levels under the underground (by depth 2 ... 8), made on first use.
+    public internal(set) var deeps: [Int: OpenWorld] = [:]
+    /// What `digDeep` last did, by level (a level in which nothing has moved costs nothing).
+    var deepDone: [Int: Int] = [:]
     /// Where and how far the underlands were last carved into chunks already in use (so an unchanged hour costs nothing).
     var underlandDone: Int?
     /// Storeys above the surface, by number (1, 2, ...), created as someone builds up to them.

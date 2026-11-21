@@ -17,7 +17,7 @@ final class SkyTests: XCTestCase {
         let ct = s.content
         let home = w.chunk(c.cx, c.cy)
         XCTAssertEqual(home.layers[2][16 * 32 + 16], ct.tid("stairs_down"), "the way down in its plaza")
-        XCTAssertTrue(home.layers[0].contains(ct.tid("grass")) || home.layers[0].contains(ct.tid("stone_floor")))
+        XCTAssertTrue(home.layers[0].contains(ct.tid("marble_floor")), "a marble plaza")
         let port = w.chunk(c.cx + 1, c.cy)
         XCTAssertTrue(port.layers[1].contains(ct.tid("runway")), "a runway")
         XCTAssertTrue(port.layers[0].contains(ct.tid("ufo_pad")), "a UFO pad")
@@ -25,8 +25,8 @@ final class SkyTests: XCTestCase {
         let far = w.chunk(c.cx + 4, c.cy)
         XCTAssertTrue(far.layers[0].allSatisfy { $0 == 0 }, "open air off the island")
         var fenced = false
-        for y in 0..<32 { for x in 0..<32 where w.chunk(c.cx + 2, c.cy).layers[2][y * 32 + x] == ct.tid("fence") { fenced = true } }
-        XCTAssertTrue(fenced, "a fence round its edge")
+        for y in 0..<32 { for x in 0..<32 where w.chunk(c.cx + 2, c.cy).layers[2][y * 32 + x] == ct.tid("sky_rail") { fenced = true } }
+        XCTAssertTrue(fenced, "a balustrade round its edge")
         XCTAssertFalse(s.skyFolk(center: Vec2(Double(c.cx * 32) * 16, Double(c.cy * 32) * 16), halfW: 1200, halfH: 1200).isEmpty, "its people")
         // the stairway down comes out on the ground right below
         _ = s.place(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 17), depth: SkyTune.depth)
@@ -87,5 +87,88 @@ final class SkyTests: XCTestCase {
         let data = try! JSONEncoder().encode(s.realm)
         let back = try! JSONDecoder().decode(Realm.self, from: data)
         XCTAssertEqual(back.waypoints?.first?.name, "云上")
+    }
+
+    func testTheIslandIsRoundWithWingedMarbleHousesAndARockyUnderside() {
+        let s = makeSociety(24)
+        let c = firstSky(s)
+        let w = s.skyWorld(), ct = s.content, gen = s.world.gen
+        // the coast is a curve, not the edge of chunks: along a row through the middle, land then air, and the
+        // reach differs from one direction to another
+        var reach: [Int] = []
+        for a in stride(from: 0.0, to: 2 * Double.pi, by: Double.pi / 4) {
+            var d = 0
+            while d < 100 {
+                let x = c.cx * 32 + 16 + Int((Double(d) * cos(a)).rounded()), y = c.cy * 32 + 16 + Int((Double(d) * sin(a)).rounded())
+                if w.tile(0, x, y) == 0 { break }
+                d += 1
+            }
+            reach.append(d)
+        }
+        XCTAssertTrue(reach.allSatisfy { $0 > 40 && $0 < 70 }, "\(reach)")
+        XCTAssertGreaterThan(Set(reach).count, 2, "bays and headlands")
+        // houses of white marble with an angel's wing on each side
+        var walls = 0, wingsE = 0, wingsW = 0, rails = 0
+        for cy in (c.cy - 2)...(c.cy + 2) { for cx in (c.cx - 2)...(c.cx + 2) {
+            let l = w.chunk(cx, cy).layers[2]
+            walls += l.filter { $0 == ct.tid("marble_wall") }.count
+            wingsE += l.filter { $0 == ct.tid("wing_e") }.count; wingsW += l.filter { $0 == ct.tid("wing_w") }.count
+            rails += l.filter { $0 == ct.tid("sky_rail") }.count
+        } }
+        XCTAssertGreaterThan(walls, 50, "marble houses")
+        XCTAssertGreaterThan(wingsE, 2); XCTAssertEqual(wingsE, wingsW, "a wing on each side of every house")
+        XCTAssertGreaterThan(rails, 150, "a balustrade all round the coast")
+        // every wing stands outside a wall (east wing: the wall to its west)
+        for cy in (c.cy - 2)...(c.cy + 2) { for cx in (c.cx - 2)...(c.cx + 2) {
+            for i in 0..<MP.chunkArea where w.chunk(cx, cy).layers[2][i] == ct.tid("wing_e") {
+                XCTAssertEqual(w.tile(2, cx * 32 + i % 32 - 1, cy * 32 + i / 32), ct.tid("marble_wall"))
+            }
+        } }
+        // the 3D island has a deep underside of rock under its middle, shallow at the coast
+        let mid = Mesher3D.build(ChunkInput3D(world: w, cx: c.cx, cy: c.cy), gen: gen)
+        let lowest = mid.solid.positions.map { $0.y }.min() ?? 0
+        let floor = mid.heights[16 * 32 + 16]
+        XCTAssertLessThan(lowest, floor - 12, "a deep underside under the middle")
+        // 2D: under the coast the underside hangs in the open air; elsewhere the ground below is washed blue
+        // (the chunk with the south coast: island at the top, air below it)
+        let south = (c.cx, c.cy + 2)
+        let ch = w.chunk(south.0, south.1)
+        XCTAssertTrue(ch.layers[0].contains(0) && ch.layers[0].contains(where: { $0 != 0 }))
+        let sky = SkyBackdrop(north: w.chunk(south.0, south.1 - 1).layers[0], cx: south.0, cy: south.1, seed: s.world.seed)
+        let pic = PixelArt.bakeSky(layers: ch.layers, ground: s.world.chunk(south.0, south.1).layers, sky: sky)
+        XCTAssertEqual(pic.w, MP.chunkPx + 16)
+        var earthy = 0
+        for tx in 0..<32 {
+            // the first tile of air under the coast in this column
+            guard let ty = (1..<32).first(where: { ch.layers[0][$0 * 32 + tx] == 0 && ch.layers[0][($0 - 1) * 32 + tx] != 0 }) else { continue }
+            let p = pic.get(tx * 16 + 8 + 8, ty * 16 + 24 + 8)
+            if p.r > p.b { earthy += 1 }
+        }
+        XCTAssertGreaterThan(earthy, 10, "the underside hangs below the coast")
+        let corner = pic.get(500, 500)
+        XCTAssertGreaterThan(Int(corner.b), Int(corner.r), "blue air below")
+        // the wings and marble are drawn in both looks and as solids
+        for key in ["wing_e", "wing_w", "marble_wall", "sky_rail"] {
+            let t = ct.tiles[Int(ct.tid(key))]!
+            XCTAssertGreaterThan(AnimeArt.tile(t).px.count, 0)
+        }
+    }
+
+    /// A picture of a whole sky island (MP_PREVIEW set to a directory): 6 x 6 chunks in the anime look, halved.
+    func testPreviewIsland() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MP_PREVIEW"] else { throw XCTSkip("set MP_PREVIEW") }
+        let s = makeSociety(24)
+        let c = firstSky(s)
+        let w = s.skyWorld()
+        let n = 6, cw = MP.chunkPx
+        var sheet = Bitmap(cw * n, cw * n)
+        for j in 0..<n { for i in 0..<n {
+            let cx = c.cx - 3 + i, cy = c.cy - 3 + j
+            let sky = SkyBackdrop(north: w.chunk(cx, cy - 1).layers[0], cx: cx, cy: cy, seed: s.world.seed)
+            let pic = AnimeArt.bakeSky(layers: w.chunk(cx, cy).layers, ground: s.world.chunk(cx, cy).layers, sky: sky)
+            for y in 0..<cw { for x in 0..<cw { sheet.set(i * cw + x, j * cw + y, pic.get((x + 8) * 2, (y + 24) * 2)) } }
+        } }
+        var d = Data("\(sheet.w) \(sheet.h)\n".utf8); d.append(contentsOf: sheet.px)
+        try d.write(to: URL(fileURLWithPath: dir).appendingPathComponent("island.rgba"))
     }
 }

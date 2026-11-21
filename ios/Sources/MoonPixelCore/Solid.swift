@@ -174,14 +174,14 @@ public enum Terrain3D {
     public static func groundY(level: Int, ground: UInt8, structure: UInt8, depth: Int) -> Float {
         let c = Content.shared
         let wet = c.water[Int(ground)] && !c.bridge[Int(structure)]
-        let base = depth == 1 ? 0 : Float(level) * step
+        let base = MP.isBelow(depth) ? 0 : Float(level) * step
         return wet ? base - waterDrop : base
     }
 
     /// Top of the ground under a point of the world (points are in the simulation's units, 16 per tile).
     public static func groundY(world: OpenWorld, at p: Vec2) -> Float {
         let t = p.tile
-        let lv = world.depth == 1 ? 0 : level(elevation: world.gen.elevation(t.x, t.y)) + world.storey * storeyLevels
+        let lv = MP.isBelow(world.depth) ? 0 : level(elevation: world.gen.elevation(t.x, t.y)) + world.storey * storeyLevels
         return groundY(level: lv, ground: world.tile(MP.lGround, t.x, t.y), structure: world.tile(MP.lStruct, t.x, t.y), depth: world.depth)
     }
 
@@ -386,7 +386,7 @@ public enum Mesher3D {
         for ty in -1...32 { for tx in -1...32 {
             let inside = tx >= 0 && tx < 32 && ty >= 0 && ty < 32
             let ids = inside ? (g[ty * 32 + tx], st[ty * 32 + tx]) : edge(tx, ty)
-            let lv = input.depth == 1 ? 0 : Terrain3D.level(elevation: gen.elevation(bx + tx, by + ty)) + storey * Terrain3D.storeyLevels
+            let lv = MP.isBelow(input.depth) ? 0 : Terrain3D.level(elevation: gen.elevation(bx + tx, by + ty)) + storey * Terrain3D.storeyLevels
             // air on a storey: nothing to stand on, nothing drawn
             h[(ty + 1) * 34 + tx + 1] = storey > 0 && ids.0 == 0 ? Mesher3D.air : Terrain3D.groundY(level: lv, ground: ids.0, structure: ids.1, depth: input.depth)
         } }
@@ -399,7 +399,7 @@ public enum Mesher3D {
             // the sun is in the south-east (as for every solid): ground climbing towards the north-west faces it
             let rise = nw - se
             let wet = Content.shared.water[Int(g[ty * 32 + tx])]
-            out.relief[ty * 32 + tx] = wet || input.depth == 1 ? 1 : Swift.max(0.55, Swift.min(1.32, 1 + rise * 0.42))
+            out.relief[ty * 32 + tx] = wet || MP.isBelow(input.depth) ? 1 : Swift.max(0.55, Swift.min(1.32, 1 + rise * 0.42))
         } }
 
         // ground tops: runs of equal height along a row become one quad over the ground picture
@@ -430,6 +430,40 @@ public enum Mesher3D {
                 if H(tx + 1, ty) == Mesher3D.air { f.insert(.east) }
                 if H(tx - 1, ty) == Mesher3D.air { f.insert(.west) }
                 out.solid.box(Float(tx), y - 0.25, Float(ty), Float(tx + 1), y, Float(ty + 1), c, faces: f)
+            } }
+        }
+        // a sky island's underside: a great lump of earth and rock under its floor, deepest in the middle and
+        // thinning to the coast, ragged at the bottom, in bands of earth, rock and crystal
+        if storey == SkyTune.storey, let centre = gen.skyIsland(input.cx, input.cy) {
+            func under(_ tx: Int, _ ty: Int) -> Float {
+                let inside: Double
+                if tx >= 0 && tx < 32 && ty >= 0 && ty < 32 { guard g[ty * 32 + tx] != 0 else { return 0 }; inside = gen.skyInside(bx + tx, by + ty, centre: centre) }
+                else { inside = gen.skyInside(bx + tx, by + ty, centre: centre); guard inside >= 0 else { return 0 } }
+                let ragged = Double(MP.h2(gen.seed &+ 6262, bx + tx, by + ty) % 100) / 100
+                return Float(1.2 + pow(max(0, min(60, inside)), 0.85) * 0.55 + ragged * 1.6)
+            }
+            let bands: [(Float, RGBA)] = [(1.4, RGBA(138, 100, 68)), (4, RGBA(112, 104, 128)), (7, RGBA(94, 88, 112)), (10, RGBA(112, 104, 128)), (14, RGBA(84, 78, 102)), (1000, RGBA(70, 66, 90))]
+            func colour(_ depth: Float) -> RGBA { bands.first { depth < $0.0 }!.1 }
+            /// One side face from depth d0 down to d1 below the slab's underside at y, cut where the bands change.
+            func side(_ tx: Int, _ ty: Int, _ y: Float, _ d0: Float, _ d1: Float, _ f: Mesh3D.Faces) {
+                var top = d0
+                while top < d1 {
+                    let next = min(d1, bands.first { top < $0.0 }!.0)
+                    out.solid.box(Float(tx), y - next, Float(ty), Float(tx + 1), y - top, Float(ty + 1), colour(top), faces: f)
+                    top = next
+                }
+            }
+            for ty in 0..<32 { for tx in 0..<32 {
+                let y = H(tx, ty)
+                guard y != Mesher3D.air else { continue }
+                let d = under(tx, ty), bottom = y - 0.25
+                // the ragged foot: crystal at the deepest points
+                let tip = d > 6 && MP.h2(gen.seed &+ 6363, bx + tx, by + ty) % 7 == 0
+                out.solid.box(Float(tx), bottom - d, Float(ty), Float(tx + 1), bottom - d + 0.01, Float(ty + 1), tip ? RGBA(170, 214, 255) : colour(d - 0.01), faces: .bottom)
+                for (dx, dy, f) in [(0, 1, Mesh3D.Faces.south), (0, -1, .north), (1, 0, .east), (-1, 0, .west)] {
+                    let nd = under(tx + dx, ty + dy)
+                    if nd < d { side(tx, ty, bottom, nd, d, f) }
+                }
             } }
         }
         // the sides of every step down to a lower neighbour
@@ -637,6 +671,22 @@ enum TileShapes {
             for i in 0..<4 { b(3, 2 + Float(i) * 5, 12, 10, 3, 0.5, i % 2 == 0 ? c2 : c3) }
         case "pillar":
             b(4, 0, 4, 8, 24, 8, c1); b(3, 24, 3, 10, 2, 10, c2); b(3, 0, 3, 10, 2, 10, c2)
+        case "wing":
+            // an angel's wing on a sky house: it springs from the wall beside the tile (west of an east wing)
+            // high under the cornice, its bone arching up and out, a fan of long white flight feathers hanging
+            // from it with lighter tips, gold coverts along the bone
+            let s: Float = t.key.hasSuffix("_w") ? -1 : 1
+            func w(_ x: Float, _ y: Float, _ z: Float, _ wd: Float, _ h: Float, _ d: Float, _ col: RGBA) { b(s > 0 ? x : 16 - x - wd, y, z, wd, h, d, col) }
+            for (i, (x, y)) in [(-2, 22), (2, 26), (6, 30), (10, 33), (14, 35), (18, 36), (22, 35), (26, 33)].enumerated() {
+                w(Float(x), Float(y), 6.5, 5, 3, 3, i % 2 == 0 ? c3 : c3.darkened(0.12))           // the bone, gold-clad
+            }
+            for (i, (x, top, len)) in [(-1, 22, 10), (3, 25, 14), (7, 28, 18), (11, 31, 21), (15, 33, 22), (19, 34, 20), (23, 33, 16), (27, 31, 10)].enumerated() {
+                let tf = Float(top), lf = Float(len)
+                w(Float(x), tf - lf, 7, 3.6, lf, 2, i % 2 == 0 ? c1 : c1.darkened(0.04))          // a flight feather
+                w(Float(x) + 0.3, tf - lf - 2, 7.2, 3, 2.4, 1.6, c1.lightened(0.1))                 // its rounded tip
+                w(Float(x) + 1.4, tf - lf + 2, 8.9, 0.8, lf - 4, 0.3, c2)                           // its quill
+            }
+            for (x, y) in [(1, 27), (6, 31), (11, 34), (16, 36), (21, 36)] { w(Float(x), Float(y) - 4, 6, 4, 4, 2.5, c1.lightened(0.06)) }   // coverts
         case "statue":
             b(3, 0, 3, 10, 4, 10, c2); b(5, 4, 6, 6, 10, 4, c1); b(6, 14, 6, 4, 4, 4, c1); b(3, 8, 7, 2, 6, 2, c1); b(11, 8, 7, 2, 6, 2, c1)
         case "altar":
