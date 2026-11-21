@@ -127,7 +127,8 @@ final class UndergroundTests: XCTestCase {
         city.dug = 130                                            // the nation digs on
         s.underlandCache = nil
         XCTAssertGreaterThan(s.digUnderground(around: TilePos(323 * 32, 320 * 32)), 0)
-        XCTAssertEqual(u.tile(0, 323 * 32 + 20, 320 * 32 + 20) == ct.tid("grass") || ct.tile(u.tile(0, 323 * 32 + 20, 320 * 32 + 20))?.built == true || u.tile(0, 323 * 32 + 20, 320 * 32 + 20) == ct.tid("farmland"), true, "the cave became land")
+        let g = u.tile(0, 323 * 32 + 20, 320 * 32 + 20)
+        XCTAssertTrue(g != 0 && g != ct.tid("cave_floor") && g != ct.tid("cave_water"), "the cave became land (a copy of the ground above)")
         XCTAssertEqual(u.tile(2, x, y), ct.tid("wall_stone"), "what was built stays")
         XCTAssertEqual(s.digUnderground(around: TilePos(323 * 32, 320 * 32)), 0, "nothing more until it digs again")
     }
@@ -139,8 +140,12 @@ final class UndergroundTests: XCTestCase {
         let ct = s.content
         let home = u.chunk(320, 320)
         XCTAssertTrue(home.layers[0].contains(ct.tid("sand")), "sand underfoot")
-        let edge = u.chunk(321, 320)                               // r = 1.25: the next chunk east is the edge
-        XCTAssertEqual(edge.layers[2][10 * 32 + 31], ct.tid("wall_glass"), "glass holds the flooded rock out")
+        // a dome of glass in the sea: r = 1.25 chunks, the glass 16 tiles out, the open sea beyond
+        let edge = u.chunk(321, 320)
+        XCTAssertEqual(edge.layers[2][16 * 32 + 0], ct.tid("wall_glass"), "the dome's glass")
+        XCTAssertEqual(edge.layers[0][16 * 32 + 12], ct.tid("water"), "the sea outside the glass")
+        XCTAssertEqual(u.chunk(322, 320).layers[0][16 * 32 + 16], ct.tid("water"), "the sea goes on round the dome")
+        XCTAssertEqual(home.layers[2][16 * 32 + 16], ct.tid("glass_lift"), "a glass elevator in the middle")
         XCTAssertEqual(s.underSky(at: TilePos(320 * 32 + 16, 320 * 32 + 16))?.sea, true)
         // the sea-floor nations dig on, without war
         let before = city.dug
@@ -152,7 +157,7 @@ final class UndergroundTests: XCTestCase {
         for cy in -80...80 where found == nil { for cx in -80...80 where found == nil && gen.isSeaCity(cx, cy) { found = (cx, cy) } }
         guard let (cx, cy) = found else { return }
         let sc = gen.generate(cx, cy)
-        XCTAssertEqual(sc.layers[2][16 * 32 + 16], ct.tid("stairs_down"))
+        XCTAssertEqual(sc.layers[2][16 * 32 + 16], ct.tid("glass_lift"))
         XCTAssertEqual(sc.layers[0][17 * 32 + 16], ct.tid("sand"), "dry floor in the dome")
     }
 
@@ -172,28 +177,32 @@ final class UndergroundTests: XCTestCase {
         let b3 = s.deepWorld(3)
         let mid = b3.chunk(320, 320)
         XCTAssertTrue(mid.layers[0].contains(ct.tid("grass")) || mid.layers[0].contains(ct.tid("stone_floor")))
-        XCTAssertNotEqual(b3.chunk(321, 320).layers[2], s.underworld().chunk(321, 320).layers[2], "each level has its own streets")
-        // the plazas are joined: down from B1 to B2 ... and the stairs up on each level come out where the one
-        // above went down
-        let (dx, dy) = DeepTune.stairDown(1)
-        XCTAssertEqual(s.underworld().tile(2, 320 * 32 + dx, 320 * 32 + dy), ct.tid("stairs_down"), "B1's plaza has a way down")
-        _ = s.place(at: TilePos(320 * 32 + dx, 320 * 32 + dy + 1), depth: 1)
-        var depth = 1
-        for level in 1..<5 {
-            let (x, y) = DeepTune.stairDown(level)
-            let w = s.layer(level)
-            XCTAssertEqual(w.tile(2, 320 * 32 + x, 320 * 32 + y), ct.tid("stairs_down"), "B\(level) goes down")
-            guard let r = s.useStairs(at: TilePos(320 * 32 + x, 320 * 32 + y).center) else { return XCTFail("down from B\(level)") }
-            depth = r.depth
-            XCTAssertEqual(depth, level + 1)
-            XCTAssertEqual(s.layer(depth).tile(2, 320 * 32 + x, 320 * 32 + y), ct.tid("stairs_up"))
+        // every level is a copy of the ground above: where the ground is land, the same ground
+        let surf = s.world.chunk(321, 320).layers[0]
+        let land = (0..<MP.chunkArea).filter { !ct.water[Int(surf[$0])] && surf[$0] != 0 }
+        if land.count > 300 {
+            let same = land.filter { b3.chunk(321, 320).layers[0][$0] == surf[$0] }.count
+            XCTAssertGreaterThan(same, land.count / 2, "B3 is a copy of the ground")
         }
-        XCTAssertNotEqual(s.layer(5).tile(2, 320 * 32 + DeepTune.stairDown(5).0, 320 * 32 + DeepTune.stairDown(5).1), ct.tid("stairs_down"), "B5 is its deepest")
-        // and back up, level by level
-        let (ux, uy) = DeepTune.stairDown(4)
-        let up = s.useStairs(at: TilePos(320 * 32 + ux, 320 * 32 + uy).center)
-        XCTAssertEqual(up?.depth, 4)
+        // one glass elevator through every level, in the middle of the plaza
+        let lift = TilePos(320 * 32 + RealmLift.x, 320 * 32 + RealmLift.y)
+        _ = s.digDeep(around: lift, level: 1)
+        XCTAssertEqual(s.underworld().tile(2, lift.x, lift.y), ct.tid("glass_lift"), "B1's plaza has the elevator")
+        XCTAssertEqual(s.liftFloors(at: lift).map { $0.depth }, [0, 1, 2, 3, 4, 5], "the ground and every level built")
+        _ = s.place(at: lift + TilePos(0, 1), depth: 1)
+        for level in [3, 5, 2] {
+            guard let out = s.rideLift(at: lift, to: level) else { return XCTFail("to B\(level)") }
+            XCTAssertEqual(s.realm.player.depth, level)
+            XCTAssertEqual(s.layer(level).tile(2, lift.x, lift.y), ct.tid("glass_lift"), "the shaft on B\(level)")
+            XCTAssertLessThan(out.tile.distance2(lift), 30)
+        }
+        XCTAssertNil(s.rideLift(at: lift, to: 6), "B6 is not built")
+        _ = s.rideLift(at: lift, to: 4)
         XCTAssertEqual(s.realm.player.depth, 4)
+        _ = s.rideLift(at: lift, to: 0)
+        XCTAssertEqual(s.realm.player.depth, 0)
+        XCTAssertEqual(s.world.tile(2, lift.x, lift.y), ct.tid("glass_lift"), "it comes up on the ground")
+        _ = s.rideLift(at: lift, to: 4)
         // its people walk the deep levels' roads, and the light is theirs
         XCTAssertFalse(s.folk(depth: 4, center: Vec2(Double(320 * 32 + 16) * 16, Double(320 * 32 + 16) * 16), halfW: 1200, halfH: 1200).isEmpty)
         s.world.time = MP.daySeconds * 0.5

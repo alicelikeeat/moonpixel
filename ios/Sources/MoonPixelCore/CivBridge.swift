@@ -79,7 +79,9 @@ extension Society {
         c.applyCoastRule(gen: world.gen)
         // the nations of the underground cities (worlds from v2.16 on; old worlds meet them as they explore)
         if !c.underNations { c.underNations = true; for k in c.regions.keys.sorted() { c.foundUnder(k, gen: world.gen); c.foundSea(k, gen: world.gen) } }
-        if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t) }
+        // the nations of the sky islands (worlds from v3.2 on; older worlds meet them now, once per region)
+        for k in c.regions.keys.sorted() where c.regions[k]?.skySeen != true { c.foundSky(k, gen: world.gen) }
+        if let t = explorer { showNearby(c, around: t); showForces(c); showInvaders(c); foldCamps(c, from: t); foldAway(c, from: t); placeGroundLifts(around: t) }
         syncShownOwners(c)
         // towers with real elevators get their food by them, and only while they stand
         let served = liftServedTowers

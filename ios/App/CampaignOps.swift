@@ -95,6 +95,7 @@ extension GameModel {
             if let r = s.useStairs(at: t.center) { switchLayer(to: r.pos) }
             return true
         }
+        if key == "glass_lift" { realmLiftAt = t; return true }
         let done = s.interact(at: t, in: w)
         if !done.isEmpty {
             let says: [String: String] = ["lever_on": L("拉杆：开", "Lever on"), "lever_off": L("拉杆：关", "Lever off"), "gate_open": L("城门打开", "Gate opened"),
@@ -121,6 +122,15 @@ extension GameModel {
         return depth == 0 && tapWorld(t)
     }
 
+    /// Ride the glass elevator the traveller stands in to another realm's floor.
+    func rideRealmLift(to depth: Int) {
+        guard let s = society, let t = realmLiftAt else { return }
+        realmLiftAt = nil
+        guard depth != self.depth, let p = s.rideLift(at: t, to: depth) else { return }
+        switchLayer(to: p)
+        scene?.stairLock = p.tile
+    }
+
     /// Change between the surface and the underground.
     func switchLayer(to pos: Vec2) {
         guard let sc = scene, let s = society else { return }
@@ -131,7 +141,7 @@ extension GameModel {
         following = false
         watch = .none
         if depth == SkyTune.depth {
-            showToast(L("天空城：岛中央的楼梯直通下方地面；东侧空港可以坐飞机或飞碟去别处", "A sky city: the stairway in the middle goes straight down to the ground; its airport to the east flies planes and saucers"))
+            showToast(L("天空城：岛中央的玻璃电梯直通下方地面；东侧空港可以坐飞机或飞碟去别处", "A sky city: the glass elevator in the middle goes straight down to the ground; its airport to the east flies planes and saucers"))
             return
         }
         if depth >= OpenWorld.storeyBase {
@@ -144,10 +154,10 @@ extension GameModel {
             let z = s.underland(sc.player.tile.x >> 5, sc.player.tile.y >> 5, level: depth)
             let home = z.flatMap { z in s.civ.cities.values.first { $0.underAt.map { $0 == (z.cx, z.cy) } ?? false } }
             let here = home.map { String(format: L("（%@建到了这里，这一层住着 %d 人）", " (%@ has built down to here: %d people live on this level)"), $0.name(zh: GameModel.zh), Civ.levelPopulation($0, level: depth)) } ?? ""
-            showToast(String(format: L("地下第 %d 层%@：向上的阶梯回到上一层，向下的阶梯通往更深处", "Level B%d underground%@: stairs up go back a level, stairs down go deeper"), depth, here))
+            showToast(String(format: L("地下第 %d 层%@：和地面一模一样的城；广场中央的玻璃电梯通往各层和地面", "Level B%d underground%@: a copy of the city above; the glass elevator in the plaza goes to every level and the ground"), depth, here))
             return
         }
-        showToast(depth > 0 ? L("进入地下：用镐挖掘岩壁和矿脉，阶梯可以返回地面；城市广场里的向下阶梯通往更深的地下层", "Underground: dig rock and ore with the pick; take the stairs back up. Stairs down in a city's plaza lead to the levels it has built below")
+        showToast(depth > 0 ? L("进入地下：城市是地面的复制，广场中央的玻璃电梯连通地面、地下各层和海底；用镐可以挖掘岩壁和矿脉", "Underground: the cities are copies of the ground above; the glass elevator in each plaza joins the ground, every level below and the sea floor. Dig rock and ore with the pick")
                             : L("回到地面", "Back on the surface"))
     }
 

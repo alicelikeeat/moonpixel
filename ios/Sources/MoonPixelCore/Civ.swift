@@ -89,6 +89,8 @@ public struct CivRegion: Codable, Equatable {
     public var underCity: Int?
     /// The city on its sea floor (Undersea.swift).
     public var seaCity: Int?
+    /// The city of a sky nation over the region, and whether the region was looked at for a sky island.
+    public var skyCity: Int?, skySeen: Bool?
     public var key: Int64 { MP.chunkKey(rx, ry) }
     public var coast: Bool { land > 0.25 && water > 0.12 }
 }
@@ -102,6 +104,9 @@ public struct CivTrip: Codable, Equatable {
     public var people = CivPeople()
     public var cargo: [String: Double] = [:]
     public var refugee = false
+    /// How they go between the realms: "air" (planes and saucers), "ship" (ships and submarines), "lift" (the
+    /// glass elevators), "rail" (the trains below); nil on the roads of the ground.
+    public var mode: String?
     public var settle: Int64?                               // a new town is founded here when they arrive
     public var waiting = 0.0                                // days held up by a blockade
     /// The nation the goods were sent to (a purchase goes to another nation's city). If the city has
@@ -127,6 +132,12 @@ public final class CivCity: Codable {
     /// Underground: the chunk its hall is in, how far it has dug (tiles from the centre), how far the detailed
     /// world has been carved to match, and whether it stands under the sea behind glass.
     public var underAtBox: [Int]?, dugBox: Double?, carvedBox: Int?, sealed: Bool?
+    /// A city on a sky island (RealmTrade.swift), and the island's middle chunk.
+    public var sky: Bool?, skyAtBox: [Int]?
+    public var skyAt: (Int, Int)? {
+        get { skyAtBox.flatMap { $0.count == 2 ? ($0[0], $0[1]) : nil } }
+        set { skyAtBox = newValue.map { [$0.0, $0.1] } }
+    }
     public var dug: Double { get { dugBox ?? 0 } set { dugBox = newValue } }
     public var carved: Int { get { carvedBox ?? 0 } set { carvedBox = newValue } }
     public var underAt: (Int, Int)? {
@@ -497,7 +508,7 @@ public final class Civ: Codable {
         politicsDaily()
         if envoys { vassalsDaily(); resourcesDaily(); envoyChoices() }
         releasePrisoners()
-        if underNations { undergroundDaily() }
+        if underNations { undergroundDaily(); realmsDaily() }
         tripsDaily()
         industryDaily()
         forcesDaily()
@@ -776,6 +787,7 @@ public final class Civ: Codable {
         var trip = CivTrip(); trip.id = nextTrip; nextTrip += 1
         trip.nation = mine; trip.from = c.id; trip.to = to.id; trip.route = path; trip.people = group
         trip.refugee = group.state(3) + group.state(4) + group.state(5) > group.total / 2
+        trip.mode = realmWay(from: c, to: to)?.mode
         trip.cargo = takeFood(from: c, nutrition: days * Double(group.total) * 0.9)
         c.today.migOut += group.total; c.ledger.migOut += group.total; totals.migOut += group.total
         c.sick = min(c.sick, c.pop)
@@ -916,7 +928,7 @@ public final class Civ: Codable {
 
     /// A city in a region, with people who were not counted before (a place found for the first time)
     /// or who came from elsewhere (settlers, already counted on the road).
-    @discardableResult func newCity(at key: Int64, nation: Int, people: CivPeople, firstCount: Bool, under: Bool = false, sea: Bool = false) -> CivCity {
+    @discardableResult func newCity(at key: Int64, nation: Int, people: CivPeople, firstCount: Bool, under: Bool = false, sea: Bool = false, sky: Bool = false) -> CivCity {
         let c = CivCity()
         c.id = nextCity; nextCity += 1
         let (rx, ry) = (MP.keyCX(key), MP.keyCY(key))
@@ -936,6 +948,7 @@ public final class Civ: Codable {
         }
         if under { c.under = true; regions[key]?.underCity = c.id }
         else if sea { c.sea = true; regions[key]?.seaCity = c.id }
+        else if sky { c.sky = true; regions[key]?.skyCity = c.id }
         else { regions[key]?.city = c.id }
         cities[c.id] = c
         return c

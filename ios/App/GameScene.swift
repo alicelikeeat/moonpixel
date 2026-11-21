@@ -159,8 +159,14 @@ final class GameScene: SKScene {
         guard player.x.isFinite, player.y.isFinite else { return }
         let t = player.tile
         let key = Content.shared.tile(society.layer(model.depth).tile(2, t.x, t.y))?.key
-        guard key == "stairs_up" || key == "stairs_down" else { stairLock = nil; return }
+        guard key == "stairs_up" || key == "stairs_down" || key == "glass_lift" else { stairLock = nil; return }
         if stairLock == t { return }
+        if key == "glass_lift" {
+            // the glass elevator asks which floor (once per stepping in)
+            stairLock = t
+            if model.realmLiftAt == nil { model.realmLiftAt = t }
+            return
+        }
         let before = model.depth
         guard let r = society.useStairs(at: t.center) else { stairLock = t; return }
         model.switchLayer(to: r.pos)

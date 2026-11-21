@@ -291,7 +291,26 @@ extension GameScene {
 
     // MARK: animals
     func updateAnimals(_ society: Society) {
-        if model?.depth ?? 0 > 0 { for n in animalNodes.values { n.removeFromParent() }; animalNodes = [:]; return }
+        if model?.depth ?? 0 > 0 {
+            // round the domes on the sea floor: the sea's creatures swimming past the glass
+            var seen = Set<Int>()
+            if model?.depth == 1 {
+                let frame = Int(CACurrentMediaTime() * 5)
+                for a in society.domeLife(around: viewPos, reach: 700 / Double(min(1, zoom))) {
+                    let id = -1_000_000 - abs(a.id % 900_000)
+                    seen.insert(id)
+                    let node = animalNodes[id] ?? { let n = SKSpriteNode(); n.anchorPoint = CGPoint(x: 0.5, y: 0.1); addChild(n); animalNodes[id] = n; return n }()
+                    let key = "\(a.species.key)-\(frame % 2)-false"
+                    let tex = animalTex[key] ?? { let t = PixelArt.animal(a.species, frame: frame % 2, tame: false).texture; animalTex[key] = t; return t }()
+                    node.texture = tex; node.size = tex.size()
+                    node.xScale = a.facing.x < 0 ? -1 : 1
+                    node.position = CGPoint(x: a.pos.x, y: -(a.pos.y + 4))
+                    node.zPosition = 10 + CGFloat(a.pos.y) * 0.001
+                }
+            }
+            for (id, n) in animalNodes where !seen.contains(id) { n.removeFromParent(); animalNodes[id] = nil }
+            return
+        }
         var seen = Set<Int>()
         let frame = Int(CACurrentMediaTime() * 5)
         for a in society.realm.fauna.animals {

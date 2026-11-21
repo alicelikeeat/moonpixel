@@ -842,46 +842,19 @@ final class SolidRenderer {
         return model3D(key: key) { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }
     }
 
-    /// A person in the current look: a cel-shaded figure, or (anime) the 2D anime drawing on a card turned to
-    /// the camera, the drawing the camera would see (face, back or side, mirrored to the left).
+    /// A person in the current look: a cel-shaded figure, or (anime) the anime figure modelled in 3D (big eyes,
+    /// pointed locks, frills; outlined in ink): a real model seen from every side, not a picture on a card.
     private func dress(_ e: ModelEntity, _ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int, facing f: Vec2, lying: Bool = false) {
-        guard Bitmap.animeStyle else {
-            e.name = ""
+        e.name = ""
+        if Bitmap.animeStyle {
+            let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
+            let kind = AnimeArt.figure
+            let key = "a\(kind.rawValue)\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
+            e.model = model3D(key: key) { Figure3D.anime(look, frame: frame, held: held, child: child, female: female, kind: kind) }
+        } else {
             e.model = human(look, moving: moving, acting: acting, held: held, child: child, female: female, phase: phase)
-            turn(e, facing: f, lying: lying)
-            return
         }
-        let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        // the drawing of the angle the camera sees (24 turns round the figure; never mirrored)
-        let step = AnimeArt.turnStep(facing: f, toward: Vec2(Double(-sin(yaw)), Double(-cos(yaw))), right: Vec2(Double(cos(yaw)), Double(-sin(yaw))))
-        let view = (dir: AnimeArt.turnDir(step), mirrored: false)
-        let lookKey = "\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")"
-        let tail = "\(frame)\(held)\(child)\(female)"
-        var drawing = lookKey + view.dir + tail
-        // a frame that has drawn several new figures already shows the nearest turn it has (drawn later)
-        if cardTextures[drawing] == nil, cardDraws >= 4 {
-            outer: for d in 1...(AnimeArt.turnSteps / 2) { for j in [step + d, step - d] where cardTextures[lookKey + AnimeArt.turnDir(j) + tail] != nil { drawing = lookKey + AnimeArt.turnDir(j) + tail; break outer } }
-        }
-        let key = drawing + (view.mirrored ? "m" : "") + "\(Int(light * 20))"
-        if cardModels[key] == nil {
-            if cardTextures[drawing] == nil {
-                cardDraws += 1
-                // memory: bounded (about 40 MB of pictures with their mipmaps), refilled on demand
-                if cardTextures.count > 380 { cardTextures = [:]; cardModels = [:] }
-                let pic = AnimeArt.character(look, dir: view.dir, frame: frame, held: held, child: child, female: female)
-                cardTextures[drawing] = pic.cgImage.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)) }
-            }
-            let mesh = cardMeshes[view.mirrored] ?? {
-                let r = try? MeshResource.generate(from: [descriptor(AnimeArt.cardMesh(height: (child ? 1.4 : 1.9) * Figure3D.personScale, mirrored: view.mirrored), material: 0)])
-                if let r = r, !child { cardMeshes[view.mirrored] = r }
-                return r
-            }()
-            if let m = mesh, let t = cardTextures[drawing] { cardModels[key] = ModelComponent(mesh: m, materials: [cutout(t)]) }
-        }
-        e.name = "card"
-        e.model = cardModels[key]
-        let q = simd_quatf(angle: yaw, axis: [0, 1, 0])
-        e.orientation = lying ? q * simd_quatf(angle: -.pi / 2, axis: [1, 0, 0]) : q
+        turn(e, facing: f, lying: lying)
     }
 
     /// A rider drawn on a card turns to the camera; the horse under it keeps to the way it goes.
@@ -1011,6 +984,21 @@ final class SolidRenderer {
                 let d = a.to - a.pos
                 turn(e, facing: a.moving && d.length > 1 ? d : Vec2(a.facing, 0.4))
                 settle(e, at: place(a.pos, world), dt: dt, fresh: fresh)
+            }
+        }
+        // round the domes on the sea floor, the sea's creatures swim past outside the glass
+        if model.depth == 1, let scene = model.scene {
+            let frame = Int(CACurrentMediaTime() * 5)
+            for a in society.domeLife(around: scene.viewPos, reach: reach) {
+                let id = -1_000_000 - abs(a.id % 900_000)
+                seen.insert(id)
+                let fresh = animals[id] == nil
+                let e = animals[id] ?? take()
+                animals[id] = e
+                let f = frame % 2
+                e.model = model3D(key: "a\(a.species.key)-\(f)") { Figure3D.animal(a.species, frame: f) }
+                turn(e, facing: a.facing)
+                settle(e, at: place(a.pos, world, lift: 0.3), dt: dt, fresh: fresh)
             }
         }
         for (id, e) in animals where !seen.contains(id) { give(e); animals[id] = nil }

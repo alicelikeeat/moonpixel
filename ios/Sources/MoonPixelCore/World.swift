@@ -451,7 +451,7 @@ public final class Generator {
             let edge = x == 12 || x == 20 || y == 12 || y == 20
             ob[i] = edge ? (y == 20 && abs(x - 16) <= 1 ? c.tid("gate_open") : wall) : 0
         } }
-        ob[16 * 32 + 16] = c.tid("stairs_down")
+        ob[16 * 32 + 16] = c.tid("glass_lift")
         ob[14 * 32 + 14] = c.tid("torch"); ob[14 * 32 + 18] = c.tid("torch")
         ob[21 * 32 + 14] = c.tid("banner_1"); ob[21 * 32 + 18] = c.tid("banner_1")
         ob[23 * 32 + 15] = c.tid("lantern_post"); ob[23 * 32 + 17] = c.tid("lantern_post")
@@ -500,7 +500,7 @@ public final class Generator {
         for (x, y) in [(11, 11), (20, 11), (11, 20), (20, 20)] { ob[y * 32 + x] = c.tid("banner_1") }
         for (x, y) in [(13, 15), (18, 16)] { de[y * 32 + x] = c.tid("fallen_leaves") }
         // the stairway up, at the spot of the gatehouse's stairs above
-        ob[16 * 32 + 16] = c.tid("stairs_up")
+        ob[16 * 32 + 16] = c.tid("glass_lift")
     }
 }
 

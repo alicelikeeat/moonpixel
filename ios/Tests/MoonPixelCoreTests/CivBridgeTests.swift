@@ -19,7 +19,7 @@ final class CivBridgeTests: XCTestCase {
         XCTAssertEqual(s.knownPopulation, s.agents.count + c.people, "townsfolk once, regional people once")
         XCTAssertEqual(c.audit(), [])
         // no city-state is made up on top of a real town
-        for t in detailed { XCTAssertNil(c.cities.values.first { $0.detail == nil && $0.under != true && $0.sea != true && $0.regionKey == t.regionKey }) }     // (cities underground or on the sea floor are beneath, not on top)
+        for t in detailed { XCTAssertNil(c.cities.values.first { $0.detail == nil && $0.under != true && $0.sea != true && $0.sky != true && $0.regionKey == t.regionKey }) }     // (cities underground or on the sea floor are beneath, not on top)
         // the camera does not find land: only walking does
         let known = c.regions.count
         s.viewer = Vec2(90000, 90000); hours(s, 1)
@@ -126,7 +126,7 @@ final class CivBridgeTests: XCTestCase {
         let s = makeSociety(5)
         hours(s, 3)
         let c = s.civ
-        let far = c.cities.values.filter { $0.detail == nil && $0.shownAs == nil && $0.under != true && $0.sea != true && $0.pop >= 12 }.sorted { $0.id < $1.id }
+        let far = c.cities.values.filter { $0.detail == nil && $0.shownAs == nil && $0.under != true && $0.sea != true && $0.sky != true && $0.pop >= 12 }.sorted { $0.id < $1.id }
         guard let city = far.last else { return XCTFail("no regional city") }
         let nationBefore = c.nationPop(city.nation), whole = city.livePop
         // teleport to it from the teleport centre: the town is made, one stands in it
@@ -267,7 +267,7 @@ final class CivBridgeTests: XCTestCase {
         let s = makeSociety(5)
         hours(s, 3)
         let c = s.civ
-        guard let city = c.cities.values.filter({ $0.detail == nil && $0.shownAs == nil && $0.under != true && $0.sea != true && $0.pop >= 12 }).sorted(by: { $0.id < $1.id }).last else { return XCTFail("no city") }
+        guard let city = c.cities.values.filter({ $0.detail == nil && $0.shownAs == nil && $0.under != true && $0.sea != true && $0.sky != true && $0.pop >= 12 }).sorted(by: { $0.id < $1.id }).last else { return XCTFail("no city") }
         guard let planned = s.plannedSite(city) else { return XCTFail("no room for it") }
         let m = WorldMap()
         let (_, marks) = m.render(s, centre: planned, reach: 30, zh: true)

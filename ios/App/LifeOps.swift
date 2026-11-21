@@ -158,9 +158,16 @@ extension GameModel {
 
     /// Go to a city of any nation: its town, its region, or its plaza below.
     func goToCity(_ id: Int) {
-        guard let gate = society.cityGate(id), let city = society.civ.cities[id] else { return }
+        guard let city = society.civ.cities[id] else { return }
         civDetail = nil
         showRealm = false
+        if city.sky == true, let (sx, sy) = city.skyAt {
+            // a sky nation's city: up to its island
+            let a = Society.skyArrival(sx, sy, by: .sky)
+            teleportAny(TeleportTarget(group: .sky, name: city.name(zh: GameModel.zh), tile: a, depth: SkyTune.depth, detail: ""))
+            return
+        }
+        guard let gate = society.cityGate(id) else { return }
         if gate.below { teleportBelow(to: gate.tile, name: city.name(zh: GameModel.zh)); return }
         // a city far away is made a real town now, and one arrives in its middle
         if let t = society.arriveAtCity(id) {

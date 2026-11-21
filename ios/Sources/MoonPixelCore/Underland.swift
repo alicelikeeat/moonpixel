@@ -118,9 +118,9 @@ extension Generator {
             for (x, y) in [(11, 20), (20, 20)] { ob[i(x, y)] = c.tid("market_stall") }
             for (x, y) in [(8, 8), (23, 8), (8, 23), (23, 23)] { ob[i(x, y)] = lamp }
             if sea { for (x, y) in [(7, 12), (24, 12), (12, 24), (19, 7)] { de[i(x, y)] = c.tid("kelp") } }
-            // the stairways: up from a deep level (where the one above comes down), down to the next
-            if level > 1 { let (x, y) = DeepTune.stairDown(level - 1); ob[i(x, y)] = c.tid("stairs_up"); de[i(x, y)] = 0 }
-            if down { let (x, y) = DeepTune.stairDown(level); ob[i(x, y)] = c.tid("stairs_down"); de[i(x, y)] = 0 }
+            // the glass elevator in the middle: one shaft through every level, up to the ground (Realms.swift)
+            ob[i(RealmLift.x, RealmLift.y)] = c.tid("glass_lift"); de[i(RealmLift.x, RealmLift.y)] = 0
+            _ = (level, down)
         } else if kind < 50 {
             // town: a house in each quarter, its door on the road, a bed and a table inside, flowers by it
             for (qx, qy) in quarters {
@@ -234,8 +234,11 @@ extension Society {
 
     func underlandPlan(_ cx: Int, _ cy: Int, _ z: UnderlandZone) -> UnderlandPlan {
         let home = z.cx == cx && z.cy == cy
-        return world.gen.underlandPlan(cx, cy, sea: z.sea, home: home, level: z.level, down: home && goesDeeper(z),
-                                       inZone: { [unowned self] x, y in self.inAnyUnderland(x, y, level: z.level) })
+        var p = world.gen.underlandPlan(cx, cy, sea: z.sea, home: home, level: z.level, down: home && goesDeeper(z),
+                                        inZone: { [unowned self] x, y in self.inAnyUnderland(x, y, level: z.level) })
+        // below the ground: a copy of the ground above; on the sea floor: a dome of glass in the sea (Realms.swift)
+        if z.sea { seaDome(&p, cx, cy, z) } else { copyGround(&p, cx, cy, home: home) }
+        return p
     }
 
     /// A deep level (depth 2 ... 8, under the underground; created on first use, in the same store).
@@ -275,11 +278,11 @@ extension Society {
         if deepDone[level] == sig { return 0 }
         deepDone[level] = sig
         var changed = 0
-        for z in zones where abs(z.cx - pcx) <= rc + 1 && abs(z.cy - pcy) <= rc + 1 && goesDeeper(z) {
-            // the stairway down in the plaza (unless something was built on its spot)
-            let (x, y) = DeepTune.stairDown(level)
-            let wx = z.cx * 32 + x, wy = z.cy * 32 + y
-            if u.tile(2, wx, wy) == 0 { u.setTile(2, wx, wy, content.tid("stairs_down")); changed += 1 }
+        for z in zones where abs(z.cx - pcx) <= rc + 1 && abs(z.cy - pcy) <= rc + 1 {
+            // the glass elevator in the plaza (unless something was built on its spot; old stairs make way)
+            let wx = z.cx * 32 + RealmLift.x, wy = z.cy * 32 + RealmLift.y
+            let o = u.tile(2, wx, wy)
+            if o == 0 || o == content.tid("stairs_down") || o == content.tid("stairs_up") { u.setTile(2, wx, wy, content.tid("glass_lift")); changed += 1 }
         }
         guard level > 1 else { return changed }
         for cy in (pcy - rc)...(pcy + rc) { for cx in (pcx - rc)...(pcx + rc) where u.touched(cx, cy) {
@@ -291,7 +294,16 @@ extension Society {
 
     /// A chunk of the underground made for the first time: if it is within an underland, it is made so.
     func stampUnderland(_ ch: Chunk) {
-        guard let z = underland(ch.cx, ch.cy) else { return }
+        guard let z = underland(ch.cx, ch.cy) else {
+            // round a dome on the sea floor: the sea itself
+            if let h = seaHalo(ch.cx, ch.cy) {
+                let p = haloPlan(ch.cx, ch.cy, h)
+                for k in 0..<MP.chunkArea where Generator.naturalCave(ch.layers[0][k], ch.layers[1][k], ch.layers[2][k], ch.layers[3][k]) {
+                    for l in 0..<4 { ch.layers[l][k] = p[l][k] }
+                }
+            }
+            return
+        }
         let p = underlandPlan(ch.cx, ch.cy, z)
         for k in 0..<MP.chunkArea where Generator.naturalCave(ch.layers[0][k], ch.layers[1][k], ch.layers[2][k], ch.layers[3][k]) {
             for l in 0..<4 { ch.layers[l][k] = p.layers[l][k] }

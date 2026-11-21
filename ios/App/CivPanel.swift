@@ -34,20 +34,39 @@ struct CivWorldSection: View {
         }
     }
 
+    /// The trade and travel between the four realms going on now, by way.
+    func realmTrafficLine(_ c: Civ) -> some View {
+        let t = c.realmTraffic()
+        let parts: [(String, String, String)] = [("air", "✈️", L("飞机/飞碟", "planes")), ("ship", "🚢", L("轮船/潜艇", "ships")), ("lift", "🛗", L("玻璃电梯", "elevators")), ("rail", "🚇", L("地下列车", "trains below"))]
+        let text = parts.compactMap { p -> String? in
+            guard let v = t[p.0], v.routes + v.loads + v.people > 0 else { return nil }
+            return "\(p.1) \(p.2) " + L("\(v.routes) 条线 · \(v.loads) 批货 · \(v.people) 人在路上", "\(v.routes) routes · \(v.loads) loads · \(v.people) travelling")
+        }
+        return Text(text.isEmpty ? L("四界之间暂时没有贸易和人口往来", "No trade or travel between the four realms yet") : L("四界往来：", "Between the realms: ") + text.joined(separator: "；"))
+            .font(.system(size: 11, design: .rounded)).opacity(0.85).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("civ-realm-traffic")
+    }
+
     /// The nations below: what they are, how many, and the map of their world.
     private func belowSummary(_ c: Civ) -> some View {
-        let sea = realm == .seaFloor
-        let list = c.polities.values.filter { (sea ? $0.undersea == true : $0.underground == true) && $0.status == .active }
+        let sea = realm == .seaFloor, sky = realm == .sky
+        let list = c.polities.values.filter { (sky ? $0.sky == true : (sea ? $0.undersea == true : $0.underground == true)) && $0.status == .active }
         let people = list.reduce(0) { $0 + $1.pop }
         return VStack(alignment: .leading, spacing: 4) {
-            Text(sea ? L("海底国度", "Nations of the sea floor") : L("地下国度", "Nations of the underground")).font(.system(size: 15, weight: .bold, design: .rounded))
-            Text(sea ? L("海底的人能在水中呼吸，拒绝一切战争。他们在海底城下方挖出自己的海底世界：沙地、珊瑚房屋、海带田、珍珠灯和玻璃墙，天空是海蓝色的人造光。",
-                         "The people of the sea floor breathe the water and refuse every war. Under their cities they dig a world of their own: sand, coral houses, kelp fields, pearl lamps and glass walls, under a sea-blue sky of lamps.")
-                     : L("地下国家从不和地面开战，只是不断向外、向下挖掘：挖开的地方和地面一样有草地、道路、房屋和农田，天空是人造灯光；城市一层层往下建，最深到地下第 8 层，每层比上一层略窄，广场里有阶梯通往下一层。",
-                         "The underground nations never fight the surface; they only dig on, outward and down: what they dig is land like the surface's, with grass, roads, houses and fields, under a sky of lamps. Their cities build down level by level, to B8 at the deepest, each a little narrower than the one above, with stairs down in each plaza."))
+            Text(sky ? L("天空国度", "Nations of the sky") : (sea ? L("海底国度", "Nations of the sea floor") : L("地下国度", "Nations of the underground"))).font(.system(size: 15, weight: .bold, design: .rounded))
+            if sky {
+                Text(L("每座天空浮岛都是一个国家：在岛上种田，用飞机和飞碟和其他三界贸易、迁徙，不参与任何战争。岛中央的玻璃电梯直通下方地面。",
+                       "Every sky island is a nation: it farms its island, trades and moves people with the other three realms by plane and saucer, and takes part in no war. The glass elevator in its middle goes straight down to the ground."))
+                    .font(.system(size: 11, design: .rounded)).opacity(0.85).fixedSize(horizontal: false, vertical: true)
+            } else {
+            Text(sea ? L("海底的人能在水中呼吸，不参与任何战争。海底城是海里的一座玻璃穹顶：里面是沙地、珊瑚房屋、海带田和珍珠灯，边缘一圈玻璃墙，墙外就是大海，鱼群、海龟、蝠鲼、海豚和鲸从旁游过。穹顶中央的玻璃电梯通往地面。",
+                         "The people of the sea floor breathe the water and take part in no war. A sea-floor city is a dome of glass in the sea: sand, coral houses, kelp fields and pearl lamps inside, a ring of glass round the edge, and the open sea outside where shoals, turtles, rays, dolphins and whales swim past. A glass elevator in the middle goes up to the ground.")
+                     : L("地下国家不参与任何战争。地下的城市就是地面的复制：同样的地形、河流、树木和房屋，一层层向下建到地下第 8 层，每一层都是地面的复制；城市中央的透明玻璃电梯贯穿地面和各层。",
+                         "The underground nations take part in no war. A city below is a copy of the ground above: the same land, rivers, trees and houses, built down level after level to B8, every level a copy of the ground; a clear glass elevator in the middle runs through the ground and every level."))
                 .font(.system(size: 11, design: .rounded)).opacity(0.85).fixedSize(horizontal: false, vertical: true)
+            }
             Text(L("在位国家 \(list.count) 个 · 人口 \(people)", "\(list.count) nations standing · \(people) people"))
                 .font(.system(size: 11, weight: .semibold, design: .rounded)).accessibilityIdentifier("civ-below-summary")
+            realmTrafficLine(c)
             let deepest = c.cities.values.filter { sea ? $0.sea == true : $0.under == true }.map { Civ.levelsDown($0) }.max() ?? 0
             if deepest > 1 {
                 Text(L("最深的城市已向下建到地下第 \(deepest) 层", "The deepest city has built down to level B\(deepest)"))
@@ -71,6 +90,9 @@ struct CivWorldSection: View {
         let wars = c.relations.values.filter { $0.state == 1 }.count
         return VStack(alignment: .leading, spacing: 2) {
             Text(L("已知世界", "The known world")).font(.system(size: 15, weight: .bold, design: .rounded))
+            Text(L("只有地面国家之间会打仗；地下、海底、天空国家与各界和平贸易、迁徙。", "Only the nations of the ground go to war; those below, on the sea floor and in the sky trade and move people in peace."))
+                .font(.system(size: 10, design: .rounded)).opacity(0.7)
+            realmTrafficLine(c)
             Text(L("已知地区人口 \(model.society.knownPopulation) · 国家 \(active) 个在位 / 共 \(total) 个 · 战争 \(wars) 处 · 已知地区 \(c.regions.count) 块",
                    "Known population \(model.society.knownPopulation) · nations \(active) standing / \(total) in all · wars \(wars) · regions known \(c.regions.count)"))
                 .font(.system(size: 11, design: .rounded)).opacity(0.85).accessibilityIdentifier("civ-summary")
@@ -115,7 +137,8 @@ struct CivWorldSection: View {
         switch realm {
         case .underground: list = list.filter { $0.underground == true }
         case .seaFloor: list = list.filter { $0.undersea == true }
-        case .surface, .sky: break
+        case .sky: list = list.filter { $0.sky == true }
+        case .surface: list = list.filter { $0.onSurface }
         }
         if nearOnly, let t = model.society.explorer {
             // nations with a city within three regions of where you are (and the towns about you)
@@ -149,6 +172,7 @@ struct CivWorldSection: View {
                     Text(statusText(p)).font(.system(size: 9, weight: .semibold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.white.opacity(0.18), in: Capsule())
                     if model.civCommand == p.id { Text(L("执政中", "in your hands")).font(.system(size: 9, weight: .bold, design: .rounded)).foregroundStyle(.yellow) }
                     if p.underground == true { Text(L("地下", "below")).font(.system(size: 9, weight: .bold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.purple.opacity(0.45), in: Capsule()) }
+                    if p.sky == true { Text(L("天空", "sky")).font(.system(size: 9, weight: .bold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.cyan.opacity(0.35), in: Capsule()) }
                     if p.undersea == true { Text(L("海底", "sea floor")).font(.system(size: 9, weight: .bold, design: .rounded)).padding(.horizontal, 5).padding(.vertical, 1).background(Color.teal.opacity(0.5), in: Capsule()) }
                 }
                 HStack(spacing: 6) {
@@ -213,7 +237,7 @@ struct CivGoMenu: View {
             ForEach(cities.prefix(30), id: \.id) { city in
                 Button { model.goToCity(city.id) } label: {
                     Label((city.id == p?.capital ? "★ " : "") + city.name(zh: GameModel.zh) + " · " + L("\(city.pop) 人", "\(city.pop) people"),
-                          systemImage: city.under == true ? "arrow.down.to.line" : (city.sea == true ? "water.waves" : "building.2"))
+                          systemImage: city.under == true ? "arrow.down.to.line" : (city.sea == true ? "water.waves" : (city.sky == true ? "cloud.fill" : "building.2")))
                 }
                 // the levels a city below has built down to: straight to the plaza of any of them
                 let down = Civ.levelsDown(city)
@@ -652,7 +676,15 @@ enum CivText {
         "convoy_sunk": ("A convoy of %@ carrying %@ was sunk", "%@ 运送%@的船队被击沉"), "spy_caught": ("%@ caught a spy of %@", "%@ 抓获了 %@ 的间谍"),
         "under_nation": ("%@ was founded underground", "地下国家 %@ 建立"), "under_town": ("%@ dug out a new town: %@", "%@ 向地下开拓了新城 %@"),
         "under_sea_town": ("%@ dug a town under the sea, walled with glass: %@", "%@ 在海底之下挖出新城 %@，以高强度玻璃挡住海水"),
-        "sea_nation": ("%@ was founded on the sea floor", "海底国家 %@ 建立"), "giantess_rises": ("%@ rises for %@", "%@ 为 %@ 而起"), "migrants_left": ("%@ people left %@ for %@", "%@ 人离开 %@，迁往 %@"),
+        "sea_nation": ("%@ was founded on the sea floor", "海底国家 %@ 建立"), "sky_nation": ("%@ was founded on a sky island", "天空国家 %@ 在浮岛上建立"),
+        "realm_trade_air": ("%@ flies %@ its %@ (planes and saucers)", "%@ 用飞机和飞碟向 %@ 运送%@"),
+        "realm_trade_ship": ("%@ ships %@ its %@ (ships and submarines)", "%@ 用轮船和潜艇向 %@ 运送%@"),
+        "realm_trade_lift": ("%@ sends %@ its %@ up and down the glass elevators", "%@ 通过玻璃电梯向 %@ 运送%@"),
+        "realm_trade_rail": ("%@ sends %@ its %@ by the trains below", "%@ 用地下列车向 %@ 运送%@"),
+        "realm_move_air": ("%@ people flew from %@ to %@", "%@ 人从 %@ 乘飞机迁往 %@"),
+        "realm_move_ship": ("%@ people sailed from %@ to %@", "%@ 人从 %@ 乘船迁往 %@"),
+        "realm_move_lift": ("%@ people took the glass elevators from %@ to %@", "%@ 人从 %@ 乘玻璃电梯迁往 %@"),
+        "realm_move_rail": ("%@ people took the trains below from %@ to %@", "%@ 人从 %@ 乘地下列车迁往 %@"), "giantess_rises": ("%@ rises for %@", "%@ 为 %@ 而起"), "migrants_left": ("%@ people left %@ for %@", "%@ 人离开 %@，迁往 %@"),
     ]
     /// News carries both languages side by side (en, zh, en, zh ...); pick one of each pair.
     static func line(_ n: CivNews) -> String {

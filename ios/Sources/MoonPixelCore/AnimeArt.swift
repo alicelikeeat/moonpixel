@@ -698,6 +698,18 @@ public enum AnimeArt {
             c.rect(bx + 14.5, by + 12, 3, 19, RGBA(120, 82, 50), ink: 1.1, radius: 1)
             c.rect(bx + 4, by + 2, 24, 13, c1, ink: 1.4, radius: 2, shade: Shade(shadow: 0.18))
             for y in [6.0, 10] { c.line(bx + 8, by + y, bx + 24, by + y, 1.0, shadowed(c1, 0.45)) }
+        case "lift":
+            // a glass elevator: a tall pane of pale glass between steel posts, the car inside (its lit floor,
+            // a hand rail, a light under its roof), a gleam across the glass
+            c.ellipse(bx + 16, by + 30, 15, 3.5, RGBA(0, 0, 0, 45))
+            c.rect(bx + 2, by - 26, 28, 56, RGBA(c1.r, c1.g, c1.b, 150), ink: 1.3, radius: 2)
+            c.rect(bx + 6, by + 22, 20, 6, c3, ink: 1, radius: 1.5, shade: Shade(shadow: 0.15))
+            c.line(bx + 6, by + 10, bx + 26, by + 10, 1.2, c2)
+            c.rect(bx + 10, by - 22, 12, 3, c3, ink: 0.8, radius: 1)
+            for x in [2.0, 30] { c.line(bx + x, by - 26, bx + x, by + 30, 2.4, c2, ink: 0.8) }
+            c.line(bx + 2, by - 26, bx + 30, by - 26, 3, c2, ink: 0.8)
+            c.line(bx + 9, by - 14, bx + 15, by + 2, 1.6, RGBA(255, 255, 255, 170))
+            c.line(bx + 13, by - 18, bx + 17, by - 10, 1.0, RGBA(255, 255, 255, 150))
         case "pillar":
             c.rect(bx + 8, by - 4, 16, 34, c1, ink: 1.4, radius: 1.5, shade: Shade(shadow: 0.22))
             c.rect(bx + 5, by - 7, 22, 5, c1.lightened(0.1), ink: 1.2, radius: 1.5); c.rect(bx + 5, by + 27, 22, 4, shadowed(c1, 0.15), ink: 1.2, radius: 1)

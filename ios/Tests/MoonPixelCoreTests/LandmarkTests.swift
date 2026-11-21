@@ -92,8 +92,8 @@ final class LandmarkTests: XCTestCase {
         let u = s.underworld()
         let ox = c.0 * 32, oy = c.1 * 32
         XCTAssertEqual(u.tile(2, ox + 15, oy + 14), s.content.tid("statue"), "the square's statue")
-        XCTAssertEqual(u.tile(2, ox + 16, oy + 16), s.content.tid("stairs_up"), "the stairway up")
-        XCTAssertEqual(w.tile(2, ox + 16, oy + 16), s.content.tid("stairs_down"), "the gatehouse's stairs on the surface above")
+        XCTAssertEqual(u.tile(2, ox + 16, oy + 16), s.content.tid("glass_lift"), "the glass elevator up")
+        XCTAssertEqual(w.tile(2, ox + 16, oy + 16), s.content.tid("glass_lift"), "the gatehouse's glass elevator on the surface above")
         var beds = 0, stalls = 0, lamps = 0
         for y in oy..<(oy + 32) { for x in ox..<(ox + 32) {
             let k = s.content.tile(u.tile(2, x, y))?.key

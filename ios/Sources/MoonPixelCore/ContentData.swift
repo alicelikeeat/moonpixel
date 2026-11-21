@@ -166,6 +166,7 @@ enum ContentData {
         TileDef(id: 183, key: "wing_e", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wing", c1: "#fcfaf4", c2: "#d8ccb8", c3: "#e2b850", stage: 0, nameEn: "Angel Wing (east)", nameZh: "天使之翼（东）"),
         TileDef(id: 184, key: "wing_w", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "wing", c1: "#fcfaf4", c2: "#d8ccb8", c3: "#e2b850", stage: 0, nameEn: "Angel Wing (west)", nameZh: "天使之翼（西）"),
         TileDef(id: 185, key: "sky_rail", layer: 2, solid: true, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "fence", c1: "#f6f2ea", c2: "#d2c8b6", c3: "", stage: 0, nameEn: "Cloud Balustrade", nameZh: "云端栏杆"),
+        TileDef(id: 186, key: "glass_lift", layer: 2, solid: false, water: false, bridge: false, natural: false, big: false, built: true, walk: 1.0, light: 0, growTo: "", growTime: 0.0, after: "", artKind: "lift", c1: "#bfe4f4", c2: "#8a96a8", c3: "#fff2c0", stage: 0, nameEn: "Glass Elevator", nameZh: "玻璃电梯"),
     ]
 
     static let biomes: [BiomeDef] = [

@@ -117,7 +117,10 @@ extension Society {
         underlandDone = sig
         var changed = 0
         for cy in (pcy - rc)...(pcy + rc) { for cx in (pcx - rc)...(pcx + rc) where u.touched(cx, cy) {
-            guard let z = underland(cx, cy) else { continue }
+            guard let z = underland(cx, cy) else {
+                if let h = seaHalo(cx, cy) { changed += carveHalo(cx, cy, h, in: u) }
+                continue
+            }
             changed += carveUnderland(cx, cy, z, in: u)
         } }
         return changed

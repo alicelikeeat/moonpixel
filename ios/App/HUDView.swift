@@ -90,6 +90,7 @@ struct HUDView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay { if model.showBackpack { BackpackPanel() } }
         .overlay { if let id = model.liftPanel { LiftPanel(id: id) } }
+        .overlay { if let t = model.realmLiftAt { RealmLiftPanel(at: t) } }
         .overlay { if model.showTravel { TravelPanel() } }
         .overlay { if model.showTeleport { TeleportPanel() } }
         .overlay { if model.showTransport { TransportPanel() } }

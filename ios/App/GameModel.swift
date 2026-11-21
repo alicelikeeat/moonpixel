@@ -111,6 +111,8 @@ final class GameModel: ObservableObject {
     @Published var showBackpack = false { didSet { if showBackpack { inputReset += 1 } } }
     /// The elevator whose panel is open (inside it, or at one of its landings).
     @Published var liftPanel: Int?
+    /// The glass elevator between the realms the traveller stands in (its floor chooser is open).
+    @Published var realmLiftAt: TilePos?
     /// The elevator the traveller is in or beside, if any (the button to open its panel shows then).
     @Published var nearLift: Int?
     @Published var inLift = false              // riding a lift

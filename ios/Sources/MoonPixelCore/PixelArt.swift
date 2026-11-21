@@ -351,6 +351,13 @@ public enum PixelArt {
             img.rect(bx + 7, by + 7, 2, 2, c3)
         case "citygate_open":
             img.rect(bx, by - 6, 3, 22, c3.darkened(0.3)); img.rect(bx + 13, by - 6, 3, 22, c3.darkened(0.3)); img.rect(bx, by - 6, 16, 3, c3.darkened(0.2))
+        case "lift":
+            // a glass elevator: steel posts, pale glass, the car's lit floor and a light on its roof
+            img.rect(bx + 1, by - 10, 14, 25, c1)
+            img.rect(bx + 1, by - 10, 1, 25, c2); img.rect(bx + 14, by - 10, 1, 25, c2); img.rect(bx + 1, by - 10, 14, 1, c2)
+            img.rect(bx + 3, by + 9, 10, 2, c3); img.rect(bx + 3, by - 2, 10, 1, c2)
+            img.rect(bx + 6, by - 8, 4, 1, c3)
+            img.rect(bx + 4, by - 7, 1, 14, c1.lightened(0.35))
         case "stairs":
             img.rect(bx + 1, by + 1, 14, 14, c2)
             for i in 0..<4 { img.rect(bx + 2, by + 2 + i * 3, 12 - i * 2, 2, c1.lerp(c3, Double(i) / 4)) }

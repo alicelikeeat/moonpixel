@@ -24,6 +24,9 @@ public struct CivTradeRoute: Codable, Equatable {
     public var since = 0.0, next = 0.0
     public var shipped = 0.0, paid = 0.0, lost = 0
     public var active = true
+    /// Between the realms: how the goods go ("air", "ship", "lift", "rail"; nil by road or sea on the ground),
+    /// and whether it is a standing exchange of what one realm makes for another (not a shortage's).
+    public var mode: String?, exchange: Bool?
 }
 
 public struct CivShipment: Codable, Equatable {
@@ -112,12 +115,17 @@ extension Civ {
     /// Open trade routes for what nations lack, from nations at peace that have it to spare.
     func tradeChoices() {
         for id in polities.keys.sorted() {
-            guard let p = polities[id], p.status == .active, polities[id]!.underground != true, let home = homeCity(id) else { continue }
+            guard let p = polities[id], p.status == .active, let home = homeCity(id) else { continue }
             for good in shortages(id) {
                 if tradeRoutes.contains(where: { $0.active && $0.good == good && cities[$0.buyer]?.nation == id }) { continue }
                 var best: (Double, CivCity, (sea: Bool, path: [Int64]))?
                 for o in polities.keys.sorted() where o != id {
-                    guard let q = polities[o], q.status == .active, q.underground != true, !atWar(id, o), let seller = spareCity(o, good) else { continue }
+                    guard let q = polities[o], q.status == .active, !atWar(id, o), let seller = spareCity(o, good) else { continue }
+                    if let rw = realmWay(from: seller, to: home) {
+                        // between the realms: by air, by ship, by the glass elevators or the trains below
+                        if best == nil || rw.days < best!.0 { best = (rw.days, seller, (false, [seller.regionKey, home.regionKey])) }
+                        continue
+                    }
                     guard let way = tradeWay(from: seller, to: home) else { continue }
                     let len = Double(way.path.count) * (way.sea ? ResourceTune.seaDaysPerRegion : ResourceTune.landDaysPerRegion)
                     if best == nil || len < best!.0 { best = (len, seller, way) }
@@ -126,6 +134,7 @@ extension Civ {
                 var r = CivTradeRoute()
                 r.id = nextRoute; nextRoute += 1
                 r.seller = seller.id; r.buyer = home.id; r.good = good; r.sea = way.sea; r.path = way.path
+                r.mode = realmWay(from: seller, to: home)?.mode
                 r.since = now; r.next = now
                 tradeRoutes.append(r)
                 say(way.sea ? "sea_route" : "trade_route", [polities[seller.nation]!.nameEn, polities[seller.nation]!.nameZh, p.nameEn, p.nameZh, CivItem.byKey[good]?.en ?? good, CivItem.byKey[good]?.zh ?? good], [seller.nation, id], region: seller.regionKey)
@@ -142,12 +151,17 @@ extension Civ {
                 r.active = false; tradeRoutes[i] = r; continue
             }
             // the buyer has what it needs again: the route closes
-            if !shortages(b.nation).contains(r.good) && now - r.since > 4 * MP.daySeconds { r.active = false; tradeRoutes[i] = r; continue }
+            if r.exchange != true && !shortages(b.nation).contains(r.good) && now - r.since > 4 * MP.daySeconds { r.active = false; tradeRoutes[i] = r; continue }
+            // a standing exchange ends when the buyer is full of it, or the seller has had none to spare for long
+            if r.exchange == true && ((b.stock[r.good] ?? 0) > RealmTune.full || ((s.stock[r.good] ?? 0) < RealmTune.keep && now - r.since > 10 * MP.daySeconds)) {
+                r.active = false; tradeRoutes[i] = r; continue
+            }
             if now >= r.next {
-                let amount = min(ResourceTune.shipAmount, max(0, (s.stock[r.good] ?? 0) - (ResourceTune.spare[r.good] ?? 0) * 0.5))
+                let amount = r.exchange == true ? min(RealmTune.load, max(0, (s.stock[r.good] ?? 0) - RealmTune.keep))
+                    : min(ResourceTune.shipAmount, max(0, (s.stock[r.good] ?? 0) - (ResourceTune.spare[r.good] ?? 0) * 0.5))
                 if amount > 1 {
                     s.stock[r.good]! -= amount
-                    let days = Double(r.path.count) * (r.sea ? ResourceTune.seaDaysPerRegion : ResourceTune.landDaysPerRegion)
+                    let days = routeDays(r)
                     shipments.append(CivShipment(route: r.id, good: r.good, amount: amount, arrives: now + max(0.5, days) * MP.daySeconds))
                 }
                 r.next = now + ResourceTune.shipEvery * MP.daySeconds

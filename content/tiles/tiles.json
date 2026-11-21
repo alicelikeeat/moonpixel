@@ -3051,6 +3051,22 @@
 "en": "Cloud Balustrade",
 "zh": "云端栏杆"
 }
+},
+{
+"id": 186,
+"key": "glass_lift",
+"layer": 2,
+"built": 1,
+"art": [
+"lift",
+"#bfe4f4",
+"#8a96a8",
+"#fff2c0"
+],
+"name": {
+"en": "Glass Elevator",
+"zh": "玻璃电梯"
+}
 }
 ]
 }

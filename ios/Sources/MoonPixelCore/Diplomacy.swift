@@ -249,6 +249,7 @@ extension Civ {
     public func envoyBlocked(_ a: Int, _ b: Int) -> String? {
         if (polities[a]?.underground == true) != (polities[b]?.underground == true) { return "other_world" }
         if polities[a]?.undersea == true || polities[b]?.undersea == true { return "refuses_war" }
+        if polities[a]?.onSurface != true || polities[b]?.onSurface != true { return "refuses_war" }
         if envoysOut.contains(where: { $0.state == .travelling && Set([$0.from, $0.to]) == Set([a, b]) }) { return "envoy_pending" }
         if let r = relation(a, b) {
             if r.state == 1 { return "at_war" }

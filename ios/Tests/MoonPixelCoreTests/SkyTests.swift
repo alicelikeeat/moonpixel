@@ -16,7 +16,7 @@ final class SkyTests: XCTestCase {
         let w = s.skyWorld()
         let ct = s.content
         let home = w.chunk(c.cx, c.cy)
-        XCTAssertEqual(home.layers[2][16 * 32 + 16], ct.tid("stairs_down"), "the way down in its plaza")
+        XCTAssertEqual(home.layers[2][16 * 32 + 16], ct.tid("glass_lift"), "the glass elevator down in its plaza")
         XCTAssertTrue(home.layers[0].contains(ct.tid("marble_floor")), "a marble plaza")
         let port = w.chunk(c.cx + 1, c.cy)
         XCTAssertTrue(port.layers[1].contains(ct.tid("runway")), "a runway")
@@ -28,12 +28,12 @@ final class SkyTests: XCTestCase {
         for y in 0..<32 { for x in 0..<32 where w.chunk(c.cx + 2, c.cy).layers[2][y * 32 + x] == ct.tid("sky_rail") { fenced = true } }
         XCTAssertTrue(fenced, "a balustrade round its edge")
         XCTAssertFalse(s.skyFolk(center: Vec2(Double(c.cx * 32) * 16, Double(c.cy * 32) * 16), halfW: 1200, halfH: 1200).isEmpty, "its people")
-        // the stairway down comes out on the ground right below
+        // the glass elevator down comes out on the ground right below
         _ = s.place(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 17), depth: SkyTune.depth)
         XCTAssertEqual(s.realm.player.depth, SkyTune.depth)
-        let down = s.useStairs(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 16).center)
-        XCTAssertEqual(down?.depth, 0)
-        XCTAssertLessThan(abs((down?.pos.tile.x ?? 0) - (c.cx * 32 + 16)), 30)
+        let down = s.rideLift(at: TilePos(c.cx * 32 + 16, c.cy * 32 + 16), to: 0)
+        XCTAssertEqual(s.realm.player.depth, 0)
+        XCTAssertLessThan(abs((down?.tile.x ?? 0) - (c.cx * 32 + 16)), 30)
     }
 
     func testPlanesAndSaucersFlyBetweenAirportsUfoPortsAndSkyCities() {

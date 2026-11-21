@@ -290,7 +290,15 @@ public final class WorldMap {
             civ.regions[k].map { ((Double($0.rx) * rc + rc / 2 - Double(origin.x * 32)) / tpp, (Double($0.ry) * rc + rc / 2 - Double(origin.y * 32)) / tpp) }
         }
         for r in civ.tradeRoutes where r.active {
-            let col = r.sea ? RGBA(250, 210, 80) : RGBA(170, 110, 60)
+            // between the realms: sky blue by air, sea green by ship, glass white by the elevators, violet by the trains below
+            let col: RGBA
+            switch r.mode {
+            case "air": col = RGBA(120, 200, 255)
+            case "ship": col = RGBA(60, 210, 190)
+            case "lift": col = RGBA(235, 245, 255)
+            case "rail": col = RGBA(190, 140, 255)
+            default: col = r.sea ? RGBA(250, 210, 80) : RGBA(170, 110, 60)
+            }
             let dot = max(1, ppc / 6)
             for (a, b) in zip(r.path, r.path.dropFirst()) {
                 guard let p0 = px(a), let p1 = px(b) else { continue }

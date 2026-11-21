@@ -248,7 +248,7 @@ extension Civ {
     /// once; one that still has none is reported, never made up.
     @discardableResult public func applyCoastRule(gen: Generator?) -> [Int] {
         guard coastRule else { return [] }
-        let todo = polities.keys.sorted().filter { polities[$0]!.status == .active && polities[$0]!.underground != true && polities[$0]!.undersea != true && !seaChecked.contains($0) && homeCity($0) != nil }
+        let todo = polities.keys.sorted().filter { polities[$0]!.status == .active && polities[$0]!.onSurface && !seaChecked.contains($0) && homeCity($0) != nil }
         guard !todo.isEmpty else { return [] }
         refreshTerritory()
         var bodies = waterBodies()

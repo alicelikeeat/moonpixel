@@ -22,6 +22,8 @@ public struct Mesh3D {
     /// bands it is asked for (so 2 is four times the faces on a round surface). People, animals, vehicles and
     /// machines are built at `Figure3D.detail`; everything else at 1.
     public var detail = 1
+    /// Quads from this vertex on get no ink outline (a face's eyes and mouth, painted on).
+    public var inkEnd: Int?
     public init() {}
     public init(detail: Int) { self.detail = Swift.max(1, Swift.min(4, detail)) }
     public var isEmpty: Bool { indices.isEmpty }
@@ -91,7 +93,8 @@ public struct Mesh3D {
         var out = self
         let uv = Palette3D.uv(Mesh3D.ink)
         var q = 0
-        while q + 3 < positions.count {
+        let end = inkEnd ?? positions.count
+        while q + 3 < end {
             let p = [positions[q], positions[q + 1], positions[q + 2], positions[q + 3]]
             let n = normals[q]
             let centre = (p[0] + p[1] + p[2] + p[3]) * 0.25
@@ -730,6 +733,16 @@ enum TileShapes {
             b(7, 0, 7, 2, 20, 2, c2); b(2, 13, 7, 12, 2, 2, c2); b(5, 15, 5.5, 6, 6, 5, c1); b(4, 21, 4.5, 8, 2, 7, c3)
         case "tent":
             b(1, 0, 1, 14, 5, 14, c1); b(3, 5, 3, 10, 5, 10, c1); b(5, 10, 5, 6, 4, 6, c2); b(6, 0, 15, 4, 6, 0.5, c2.darkened(0.4))
+        case "lift":
+            // a glass elevator: four steel posts two and a half tiles tall, glass on three sides (open where the
+            // doors are, to the south), the car resting at the bottom: a lit floor, a hand rail, a roof with a light
+            let glass = c1.lightened(0.15)
+            for (x, z) in [(Float(0.5), Float(0.5)), (14.5, 0.5), (0.5, 14.5), (14.5, 14.5)] { b(x, 0, z, 1, 40, 1, c2) }
+            b(0.5, 40, 0.5, 15, 1, 15, c2)
+            b(1.5, 1, 0.6, 13, 38, 0.3, glass); b(0.6, 1, 1.5, 0.3, 38, 13, glass); b(15.1, 1, 1.5, 0.3, 38, 13, glass)
+            b(1.5, 0, 1.5, 13, 1, 13, c3)
+            b(1.5, 8, 1.2, 13, 0.6, 0.6, c2); b(1.2, 8, 1.5, 0.6, 0.6, 13, c2); b(14.2, 8, 1.5, 0.6, 0.6, 13, c2)
+            b(1.5, 15, 1.5, 13, 1, 13, c2.darkened(0.1)); b(5, 14.6, 5, 6, 0.4, 6, c3)
         case "stairs":
             b(1, 0, 1, 14, 1, 14, c2)
             for i in 0..<4 { b(2, 1, 2 + Float(i) * 3, 12, Float(i + 1) * 2, 3, c1.lerp(c3, Double(i) / 4)) }
@@ -854,8 +867,16 @@ public enum Figure3D {
             }
             m.frustum(P(-0.6, 17.0, 3.55), P(0.6, 17.0, 3.55), 0.16 * u, 0.16 * u, RGBA(170, 80, 90), seg: 4)
         }
-        // what the right hand holds
-        let hy: Float = acting ? 20 : 7, hz: Float = acting ? 0 : sw
+        holdItem(&m, held: held, acting: acting, sw: sw, k: k)
+        if let r = cm { dressModel(r, &m, look: look, frame: frame, held: held, child: child, female: female, k: k) }
+        return m
+    }
+
+    /// What the right hand holds (sword, bow, staff, tools), in sixteenths round the figure's origin.
+    static func holdItem(_ m: inout Mesh3D, held: String, acting: Bool, sw: Float, k: Float, handY: Float = 0) {
+        let o = SIMD3<Float>(0, 0, 0)
+        func b(_ x: Float, _ y: Float, _ z: Float, _ w: Float, _ h: Float, _ d: Float, _ c: RGBA) { m.px(o, x, y, z, w, h, d, c, scale: k, faces: .all) }
+        let hy: Float = (acting ? 20 : 7) + handY, hz: Float = acting ? 0 : sw
         let steel = RGBA(hex: "#c8ccd8"), wood = RGBA(hex: "#8a5a30")
         switch held {
         case "sword": b(4.5, hy + 1, hz - 0.5, 1, 2, 1, wood); b(4.5, hy + 3, hz - 0.5, 1, 9, 1, steel); b(3.5, hy + 2.5, hz - 0.5, 3, 1, 1, wood)
@@ -869,8 +890,6 @@ public enum Figure3D {
         case "cane": b(5, 0, hz + 2, 1, 9, 1, wood)
         default: break
         }
-        if let r = cm { dressModel(r, &m, look: look, frame: frame, held: held, child: child, female: female, k: k) }
-        return m
     }
 
     /// A four-legged animal looking south; the golem and the chicken walk on two.

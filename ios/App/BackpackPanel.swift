@@ -309,3 +309,28 @@ struct LiftPanel: View {
         return String(format: L("%@ · 高 %.1f m · 载重 %.0f / %.0f", "%@ · %.1f m up · load %.0f / %.0f"), st, e.z * 2, e.load, model.society?.liftCfg.capacity ?? 0)
     }
 }
+
+/// A glass elevator between the realms: the ground, the levels below, the sea-floor city, the sky city.
+struct RealmLiftPanel: View {
+    @EnvironmentObject var model: GameModel
+    let at: TilePos
+
+    var body: some View {
+        GlassSheet(title: L("玻璃电梯", "Glass elevator"), subtitle: L("选择要去的楼层", "Choose a floor"), close: { model.realmLiftAt = nil }) {
+            VStack(alignment: .leading, spacing: 8) {
+                let floors = model.society?.liftFloors(at: at) ?? []
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))], spacing: 6) {
+                    ForEach(floors.reversed(), id: \.depth) { f in
+                        let here = f.depth == model.depth
+                        Chip(title: f.name(zh: GameModel.zh) + (here ? " ●" : ""), icon: f.depth == SkyTune.depth ? "cloud.fill" : (f.depth == 0 ? "house.fill" : "arrow.down.circle.fill"),
+                             tint: here ? Color.gray.opacity(0.5) : Color(red: 0.3, green: 0.6, blue: 0.95).opacity(0.8), id: "realm-lift-\(f.depth)") {
+                            model.rideRealmLift(to: f.depth)
+                        }
+                    }
+                }
+                Text(L("透明玻璃轿厢，穿过地面、地下各层、海底和天空。", "A car of clear glass through the ground, the levels below, the sea floor and the sky."))
+                    .font(.system(size: 10, design: .rounded)).opacity(0.7)
+            }
+        }
+    }
+}

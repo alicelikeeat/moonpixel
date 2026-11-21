@@ -197,7 +197,15 @@ extension Society {
         let c = civ
         var cities: [TeleportTarget] = []
         for city in c.cities.values {
-            guard let p = c.polities[city.nation], p.status == .active, let g = cityGate(city.id) else { continue }
+            guard let p = c.polities[city.nation], p.status == .active else { continue }
+            if city.sky == true, let (sx, sy) = city.skyAt {
+                // a sky nation's city: its island (its arrival on the plaza)
+                let a = Society.skyArrival(sx, sy, by: .sky)
+                cities.append(TeleportTarget(group: .sky, name: (p.capital == city.id ? "★" : "") + city.name(zh: zh), tile: a, depth: SkyTune.depth,
+                                             detail: L(zh, "\(city.livePop) 人", "\(city.livePop) people") + " · " + dist(a)))
+                continue
+            }
+            guard let g = cityGate(city.id) else { continue }
             let group: TeleportTarget.Group = city.under == true ? .under : (city.sea == true ? .sea : .city)
             cities.append(TeleportTarget(group: group, name: (p.capital == city.id ? "★" : "") + city.name(zh: zh), tile: g.tile, depth: g.below ? 1 : 0,
                                          detail: p.name(zh: zh) + " · " + L(zh, "\(city.livePop) 人", "\(city.livePop) people") + " · " + dist(g.tile), city: g.below ? nil : city.id))
@@ -213,7 +221,7 @@ extension Society {
         if let s = nearestSeaCity(cx: OpenWorld.floorDiv(t.x, 32), cy: OpenWorld.floorDiv(t.y, 32)) {
             out.append(TeleportTarget(group: .sea, name: zh ? "最近的海底城（珍珠穹顶）" : "Nearest sea-floor city (pearl dome)", tile: TilePos(s.x, s.y + 1), depth: 0, detail: dist(s)))
         }
-        for s in skyCities(near: t, within: 80, zh: zh).prefix(20) {
+        for s in skyCities(near: t, within: 80, zh: zh).prefix(20) where !c.cities.values.contains(where: { $0.skyAt.map { $0 == (s.cx, s.cy) } ?? false }) {
             let a = Society.skyArrival(s.cx, s.cy, by: .sky)
             out.append(TeleportTarget(group: .sky, name: s.name, tile: a, depth: SkyTune.depth, detail: dist(a)))
         }

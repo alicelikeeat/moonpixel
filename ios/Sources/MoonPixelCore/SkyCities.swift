@@ -99,7 +99,7 @@ extension Generator {
             for (x, y) in [(10, 16), (22, 16)] { ob[i(x, y)] = k.tid("well") }
             for (x, y) in [(7, 7), (24, 7), (7, 24), (24, 24), (12, 12), (20, 12), (12, 20), (20, 20)] { ob[i(x, y)] = lamp }
             for (x, y) in [(9, 9), (22, 9), (9, 22), (22, 22)] { for d in 0..<3 { de[i(x + d, y)] = flowers[(x + d) % 3] } }
-            ob[i(16, 16)] = k.tid("stairs_down")
+            ob[i(16, 16)] = k.tid("glass_lift")
         } else {
             // what fills each quarter between the paths
             for (qx, qy) in [(1, 1), (18, 1), (1, 18), (18, 18)] {
