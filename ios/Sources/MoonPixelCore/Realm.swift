@@ -774,7 +774,8 @@ extension Society {
         // the attacked nation's allies come to its defence: they go to war with the attacker at once (an ally's
         // duty is not weighed against how strong the attacker is) and send their armies
         for c in allies(of: b) where c != a {
-            guard let rc = realm.ri(c, a), realm.relations[rc].state == 0 else { continue }
+            // (an ally just out of a truce with the attacker keeps its rest: it sends no war until the peace is old enough)
+            guard let rc = realm.ri(c, a), realm.relations[rc].state == 0, world.time - realm.relations[rc].since >= realm.cfg.peaceCooldown * MP.year else { continue }
             setState(rc, 1)
             emit("ally_aid", [realm.nation(c)?.name(zh: zh) ?? "", realm.nation(b)?.name(zh: zh) ?? "", realm.nation(a)?.name(zh: zh) ?? ""],
                  towns(of: b).first?.center.center ?? .zero, nations: [c, b, a], cause: "alliance", result: "war")
