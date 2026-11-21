@@ -38,6 +38,8 @@ jobs:
         run: |
           set +e
           swift test -c release -Xswiftc -enable-testing > core-tests.log 2>&1; rc=$?
+          # the failures first (whole), then the summary lines
+          grep -E "error:|Test Case .* failed" core-tests.log | cut -c1-400 | head -40
           grep -E "error|failed|Executed|CYCLE|REPEAT|BENCH|STRESS|signal|Fatal" core-tests.log | cut -c1-300 | tail -60
           [ $rc -eq 0 ] || tail -40 core-tests.log | cut -c1-300
           exit $rc
