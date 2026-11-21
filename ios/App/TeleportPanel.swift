@@ -40,8 +40,19 @@ struct TeleportPanel: View {
                             .padding(.horizontal, 8).frame(width: 74, height: 32).background(Color.white.opacity(0.12), in: Capsule()).accessibilityIdentifier("tp-x")
                         TextField("y", text: $coordY).keyboardType(.numbersAndPunctuation).textFieldStyle(.plain).font(.system(size: 12, design: .monospaced))
                             .padding(.horizontal, 8).frame(width: 74, height: 32).background(Color.white.opacity(0.12), in: Capsule()).accessibilityIdentifier("tp-y")
-                        Picker("", selection: $coordLayer) { ForEach(0..<TeleportPanel.layers.count, id: \.self) { i in Text(TeleportPanel.layers[i].0).tag(i) } }
-                            .pickerStyle(.segmented).frame(maxWidth: 200)
+                        // (plain buttons: a system segmented picker did not take taps in these panels)
+                        HStack(spacing: 2) {
+                            ForEach(0..<TeleportPanel.layers.count, id: \.self) { i in
+                                Button { coordLayer = i } label: {
+                                    Text(TeleportPanel.layers[i].0).font(.system(size: 11, weight: coordLayer == i ? .bold : .medium, design: .rounded)).lineLimit(1).minimumScaleFactor(0.6)
+                                        .frame(maxWidth: .infinity).frame(height: 28)
+                                        .background(coordLayer == i ? Color.white.opacity(0.32) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PressStyle()).accessibilityIdentifier("tp-layer-\(i)")
+                            }
+                        }
+                        .padding(2).background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous)).frame(maxWidth: 220)
                         Chip(title: L("前往坐标", "Go"), icon: "scope", id: "tp-coords") {
                             guard let x = Int(coordX.trimmingCharacters(in: .whitespaces)), let y = Int(coordY.trimmingCharacters(in: .whitespaces)) else { model.showToast(L("请输入整数坐标", "Enter whole-number coordinates")); return }
                             let l = TeleportPanel.layers[coordLayer]

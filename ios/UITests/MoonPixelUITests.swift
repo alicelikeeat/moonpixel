@@ -93,6 +93,14 @@ final class MoonPixelUITests: XCTestCase {
         shot("05h-storm")
         // the map: zoom, pick a place, teleport
         map.tap(); sleep(2)
+        // every layer and the nations view can be chosen (each becomes the selected one)
+        for id in ["map-layer-underground", "map-layer-seaFloor", "map-layer-sky", "map-mode-nations", "map-mode-terrain", "map-layer-surface"] {
+            let b = app.buttons[id]
+            XCTAssertTrue(b.waitForExistence(timeout: 4), id)
+            b.tap(); sleep(1)
+            XCTAssertTrue(b.isSelected, "\(id) chosen")
+        }
+        shot("05h2-map-layers")
         app.buttons["map-zoom-2"].tap(); sleep(1)
         // the enlarged picture is bigger than its box: tap the middle of what can be seen of it
         let mapBox = app.scrollViews.containing(.image, identifier: "map-image").firstMatch

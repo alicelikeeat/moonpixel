@@ -658,6 +658,25 @@ struct HUDView: View {
         }
     }
 
+    /// A row of choices, one of them chosen (drawn like a segmented control, made of plain buttons).
+    private func segments(_ items: [(String, String)], selected: String, id: String, choose: @escaping (String) -> Void) -> some View {
+        HStack(spacing: 3) {
+            ForEach(items, id: \.1) { item in
+                Button { choose(item.1) } label: {
+                    Text(item.0).font(.system(size: 13, weight: item.1 == selected ? .bold : .medium, design: .rounded))
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                        .frame(maxWidth: .infinity).frame(height: 32)
+                        .background(item.1 == selected ? Color.white.opacity(0.32) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityIdentifier(id + "-" + item.1)
+                .accessibilityAddTraits(item.1 == selected ? .isSelected : [])
+            }
+        }
+        .padding(3).background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     /// A small button that shares a row with others (wraps instead of running off the panel).
     private func gridPill(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -683,13 +702,9 @@ struct HUDView: View {
                 gridPill(L("8× 详细", "8× detail"), "building.2") { model.setMapZoom(8) }.accessibilityIdentifier("map-zoom-8")
             }
             // 地面｜地下｜海底: which world the map shows
-            Picker("", selection: Binding(get: { model.mapLayer }, set: { model.setMapLayer($0) })) {
-                Text(L("地面", "Surface")).tag(WorldMap.Layer.surface)
-                Text(L("地下世界", "Underground")).tag(WorldMap.Layer.underground)
-                Text(L("海底世界", "Sea floor")).tag(WorldMap.Layer.seaFloor)
-                Text(L("天空", "Sky")).tag(WorldMap.Layer.sky)
-            }
-            .pickerStyle(.segmented).accessibilityIdentifier("map-layer")
+            // (plain buttons, not a system segmented picker: that one did not take taps inside the map panel)
+            segments([(L("地面", "Surface"), "surface"), (L("地下", "Underground"), "underground"), (L("海底", "Sea floor"), "seaFloor"), (L("天空", "Sky"), "sky")],
+                     selected: model.mapLayer.rawValue, id: "map-layer") { model.setMapLayer(WorldMap.Layer(rawValue: $0) ?? .surface) }
             if model.mapLayer == .sky {
                 Text(L("浅蓝是远处的地面；绿色岛屿是天空城，岛东侧有跑道和 UFO 停机坪，四周有围栏。点地图任意处可直接瞬移到天上。", "Pale blue: the ground far below; green islands: the sky cities, with a runway and a UFO pad on their east side and a fence round them. Tap anywhere to teleport up there."))
                     .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
@@ -700,11 +715,9 @@ struct HUDView: View {
                     .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
             }
             // 地形｜国土: the land as it is, or as the nations hold it
-            Picker("", selection: Binding(get: { model.mapPolitical }, set: { model.setMapPolitical($0) })) {
-                Text(L("地形", "Terrain")).tag(false)
-                Text(L("国土", "Nations")).tag(true)
+            segments([(L("地形", "Terrain"), "terrain"), (L("国土", "Nations"), "nations")], selected: model.mapPolitical ? "nations" : "terrain", id: "map-mode") {
+                model.setMapPolitical($0 == "nations")
             }
-            .pickerStyle(.segmented).accessibilityIdentifier("map-mode")
             if model.mapPolitical {
                 Text(L("半透明国色＝实际控制方；实线＝法定国界；斜纹＝被他国占领；公海保持蓝色。", "Tint: who holds it · line: the border by right · hatch: held by another nation · open sea stays blue."))
                     .font(.system(size: 10, design: .rounded)).opacity(0.7).fixedSize(horizontal: false, vertical: true)
