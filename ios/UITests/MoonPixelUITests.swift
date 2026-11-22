@@ -117,7 +117,10 @@ final class MoonPixelUITests: XCTestCase {
             for _ in 0..<3 where !go.isHittable { app.scrollViews.element(boundBy: app.scrollViews.count - 1).swipeUp(); sleep(1) }
             go.tap(); sleep(2)
         } else {
-            XCTAssertTrue(text(app, containing: "Teleported").waitForExistence(timeout: 3), "a place was picked on the map, or a name tapped went there")
+            // the "Teleported" toast can already have given way to the next one (people courting...): going there
+            // also closes the map
+            let went = text(app, containing: "Teleported").waitForExistence(timeout: 3) || !text(app, containing: "chunks mapped").exists
+            XCTAssertTrue(went, "a place was picked on the map, or a name tapped went there")
         }
         XCTAssertFalse(text(app, containing: "chunks mapped").exists, "teleporting closes the map")
         if text(app, containing: "chunks mapped").exists { map.tap(); sleep(1) }        // whatever happened, the map is closed before going on
