@@ -11,8 +11,29 @@ final class WorldHandle {
 
 final class MeshHandle {
     let mesh: Mesh3D
-    init(_ m: Mesh3D) { mesh = m }
+    /// RGBA a vertex: each quad's colour read from the picture its texture coordinates point into, at the
+    /// quad's middle (a front end without the core's materials draws with these).
+    let colors: [UInt8]
+    init(_ m: Mesh3D, picture: Bitmap?) {
+        mesh = m
+        var c = [UInt8](repeating: 255, count: m.positions.count * 4)
+        if let b = picture {
+            var q = 0
+            while q + 3 < m.uvs.count {
+                let uv = (m.uvs[q] + m.uvs[q + 1] + m.uvs[q + 2] + m.uvs[q + 3]) * 0.25
+                let px = b.get(min(b.w - 1, max(0, Int(uv.x * Float(b.w)))), min(b.h - 1, max(0, Int(uv.y * Float(b.h)))))
+                for v in q..<(q + 4) { c[v * 4] = px.r; c[v * 4 + 1] = px.g; c[v * 4 + 2] = px.b; c[v * 4 + 3] = px.a }
+                q += 4
+            }
+        }
+        colors = c
+    }
 }
+
+/// The palette the standing parts and people are coloured from.
+let palette = Palette3D.bitmap.animeGraded()
+/// People's rigs by look (built once each: a few milliseconds).
+nonisolated(unsafe) var rigCache: [String: Rig] = [:]
 
 /// The C layout of `MPPerson` (moonpixel.h); kept in step by `mp_abi` and the bridge's own test.
 struct MPPerson {
@@ -80,6 +101,11 @@ func read<T>(_ field: T) -> String {
 @_cdecl("mp_world_time") public func mp_world_time(_ p: OpaquePointer?) -> Double { world(p)?.society.world.time ?? 0 }
 @_cdecl("mp_world_population") public func mp_world_population(_ p: OpaquePointer?) -> Int32 { Int32(world(p)?.society.agents.count ?? 0) }
 
+@_cdecl("mp_ground_y") public func mp_ground_y(_ p: OpaquePointer?, _ x: Float, _ z: Float) -> Float {
+    guard let h = world(p) else { return 0 }
+    return Terrain3D.groundY(world: h.society.world, at: Vec2(Double(x) * 16, Double(z) * 16))
+}
+
 @_cdecl("mp_people_near") public func mp_people_near(_ p: OpaquePointer?, _ x: Float, _ z: Float, _ hw: Float, _ hh: Float,
                                                     _ out: UnsafeMutableRawPointer?, _ max: Int32) -> Int32 {
     guard let h = world(p), let out = out, max > 0 else { return 0 }
@@ -117,8 +143,9 @@ func read<T>(_ field: T) -> String {
     let m = part == 0 ? cm.ground : (part == 1 ? cm.solid : cm.sprites)
     guard !m.isEmpty else { return nil }
     var flipped = m
-    if Mesher3D.flipV { flipped.uvs = m.uvs.map { SIMD2($0.x, 1 - $0.y) } }      // v from the top, whatever the phone uses
-    return OpaquePointer(Unmanaged.passRetained(MeshHandle(flipped)).toOpaque())
+    if Mesher3D.flipV && part != 1 { flipped.uvs = m.uvs.map { SIMD2($0.x, 1 - $0.y) } }   // v from the top (the palette reads the same both ways)
+    let picture: Bitmap? = part == 0 ? AnimeArt.bakeGround(layers: input.layers, relief: cm.relief) : (part == 1 ? palette : AnimeArt.atlas)
+    return OpaquePointer(Unmanaged.passRetained(MeshHandle(flipped, picture: picture)).toOpaque())
 }
 
 @_cdecl("mp_chunk_ground_rgba") public func mp_chunk_ground_rgba(_ p: OpaquePointer?, _ cx: Int32, _ cy: Int32, _ out: UnsafeMutablePointer<UInt8>?, _ cap: Int32) -> Int32 {
@@ -146,6 +173,11 @@ func read<T>(_ field: T) -> String {
     if let idx = idx { m.indices.withUnsafeBufferPointer { idx.update(from: $0.baseAddress!, count: m.indices.count) } }
 }
 
+@_cdecl("mp_mesh_colors") public func mp_mesh_colors(_ p: OpaquePointer?, _ out: UnsafeMutablePointer<UInt8>?) {
+    guard let h = meshOf(p), let out = out else { return }
+    h.colors.withUnsafeBufferPointer { out.update(from: $0.baseAddress!, count: h.colors.count) }
+}
+
 @_cdecl("mp_mesh_free") public func mp_mesh_free(_ p: OpaquePointer?) {
     guard let p = p else { return }
     Unmanaged<MeshHandle>.fromOpaque(UnsafeRawPointer(p)).release()
@@ -157,16 +189,42 @@ func read<T>(_ field: T) -> String {
     return Int32(b.w * 65536 + b.h)
 }
 
-@_cdecl("mp_person_glb") public func mp_person_glb(_ p: UnsafeRawPointer?, _ out: UnsafeMutablePointer<UInt8>?, _ cap: Int32) -> Int32 {
-    guard let p = p else { return 0 }
-    let r = p.load(as: MPPerson.self)
+func lookOf(_ r: MPPerson) -> Look {
     var l = Look()
     l.skin = hexString(r.skin); l.hair = hexString(r.hair); l.shirt = hexString(r.shirt); l.pants = hexString(r.pants); l.shoes = hexString(r.shoes)
     l.style = Int(r.style)
     let model = read(r.model)
     l.model = model.isEmpty ? nil : model
+    return l
+}
+
+/// A person's rig (cached by look); a character model not rigged yet is drawn as the everyday figure.
+func rigOf(_ r: MPPerson, lite: Bool) -> Rig? {
+    var l = lookOf(r)
     let child = r.flags & MP_CHILD != 0, female = r.flags & MP_FEMALE != 0
-    guard let rig = Figure3D.animeRig(l, held: read(r.held), child: child, female: female, kind: .moe) else { return 0 }
+    let held = read(r.held)
+    let key = "\(l.skin)\(l.hair)\(l.shirt)\(l.pants)\(l.shoes)\(l.style)\(l.model ?? "")\(held)\(child)\(female)\(lite)"
+    if let c = rigCache[key] { return c }
+    if Figure3D.animeRig(l, held: held, child: child, female: female, kind: .moe, lite: lite) == nil { l.model = nil }
+    guard let rig = Figure3D.animeRig(l, held: held, child: child, female: female, kind: .moe, lite: lite) else { return nil }
+    if rigCache.count > 4000 { rigCache = [:] }
+    rigCache[key] = rig
+    return rig
+}
+
+@_cdecl("mp_person_mesh") public func mp_person_mesh(_ p: UnsafeRawPointer?, _ clip: UnsafePointer<CChar>?, _ t: Float, _ lite: Int32) -> OpaquePointer? {
+    guard let p = p else { return nil }
+    let r = p.load(as: MPPerson.self)
+    guard let rig = rigOf(r, lite: lite != 0) else { return nil }
+    let name = clip.map { String(cString: $0) } ?? "idle"
+    let m = rig.posed(rig.clip(name) == nil ? "idle" : name, at: t)
+    return OpaquePointer(Unmanaged.passRetained(MeshHandle(m, picture: palette)).toOpaque())
+}
+
+@_cdecl("mp_person_glb") public func mp_person_glb(_ p: UnsafeRawPointer?, _ out: UnsafeMutablePointer<UInt8>?, _ cap: Int32) -> Int32 {
+    guard let p = p else { return 0 }
+    let r = p.load(as: MPPerson.self)
+    guard let rig = rigOf(r, lite: false) else { return 0 }
     let d = GLTF.glb(rig, name: "person_\(r.id)")
     if let out = out, Int(cap) >= d.count { d.copyBytes(to: out, count: d.count) }
     return Int32(d.count)

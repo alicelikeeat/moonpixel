@@ -33,6 +33,9 @@ void mp_world_tick(MPWorld *w, double seconds);
 double mp_world_time(const MPWorld *w);
 int32_t mp_world_population(const MPWorld *w);
 
+/* The top of the ground at (x, z) (tiles): where people stand. */
+float mp_ground_y(MPWorld *w, float x, float z);
+
 /* A person to draw. Colours are 0xRRGGBB. Positions in tiles. */
 typedef struct MPPerson {
     int32_t id;
@@ -59,15 +62,23 @@ int32_t mp_chunk_ground_rgba(MPWorld *w, int32_t cx, int32_t cy, uint8_t *out, i
 /* Counts, then copies: positions and normals 3 floats a vertex, uvs 2. */
 void mp_mesh_counts(const MPMesh *m, int32_t *vertices, int32_t *indices);
 void mp_mesh_copy(const MPMesh *m, float *positions, float *normals, float *uvs, uint32_t *indices);
+/* RGBA a vertex (4 bytes): each face's colour already read from its picture, for a front end drawing with
+ * vertex colours (no textures needed). */
+void mp_mesh_colors(const MPMesh *m, uint8_t *rgba);
 void mp_mesh_free(MPMesh *m);
 
 /* The palette picture the standing parts are coloured from: writes width * height * 4 bytes when `out` is
  * big enough; returns width * 65536 + height. */
 int32_t mp_palette_rgba(uint8_t *out, int32_t cap);
 
+/* A person's model posed at time `t` (seconds) of a clip ("idle", "walk", "run", "work", "strike", "wave",
+ * "sit"), feet at the origin, facing +z (turn it to the person's facing). `lite`: the lighter crowd model.
+ * Free with mp_mesh_free. */
+MPMesh *mp_person_mesh(const MPPerson *p, const char *clip, float t, int32_t lite);
+
 /* A person's model as a glTF 2.0 binary (skeleton named as Unreal's mannequin, clips idle, walk, run, work,
- * strike, wave, sit; metres): returns its size, writing it to `out` when `cap` is big enough. 0 for a
- * character model not rigged yet. */
+ * strike, wave, sit; metres): returns its size, writing it to `out` when `cap` is big enough. (A character
+ * model not rigged yet comes as the everyday figure.) */
 int32_t mp_person_glb(const MPPerson *p, uint8_t *out, int32_t cap);
 
 #ifdef __cplusplus

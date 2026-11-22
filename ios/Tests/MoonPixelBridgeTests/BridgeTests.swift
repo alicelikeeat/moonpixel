@@ -49,6 +49,17 @@ final class BridgeTests: XCTestCase {
             _ = withUnsafeBytes(of: &people[0]) { mp_person_glb($0.baseAddress, &glb, size) }
             XCTAssertEqual(Array(glb[0..<4]), Array("glTF".utf8))
         }
+        // a person posed in a clip, coloured; the ground under them
+        let pm = withUnsafeBytes(of: &people[0]) { mp_person_mesh($0.baseAddress, "walk", 0.25, 1) }
+        XCTAssertNotNil(pm, "every person can be drawn (a character model not rigged yet as the everyday figure)")
+        var pv: Int32 = 0, pi: Int32 = 0
+        mp_mesh_counts(pm, &pv, &pi)
+        var cols = [UInt8](repeating: 0, count: Int(pv) * 4)
+        mp_mesh_colors(pm, &cols)
+        XCTAssertGreaterThan(Set(stride(from: 0, to: cols.count, by: 4).map { Int(cols[$0]) << 16 | Int(cols[$0 + 1]) << 8 | Int(cols[$0 + 2]) }).count, 8, "in many colours")
+        mp_mesh_free(pm)
+        let gy = mp_ground_y(w, p.x, p.z)
+        XCTAssertTrue(gy.isFinite)
         let pal = mp_palette_rgba(nil, 0)
         XCTAssertEqual(pal >> 16, 1024); XCTAssertEqual(pal & 0xFFFF, 64)
     }

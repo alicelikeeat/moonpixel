@@ -1,0 +1,17 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.6",
+	"Category": "",
+	"Description": "MoonPixel for PC: the game's core (MoonPixelBridge.dll) drawn by Unreal.",
+	"Modules": [
+		{
+			"Name": "MoonPixel",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [ "Engine" ]
+		}
+	],
+	"Plugins": [
+		{ "Name": "ProceduralMeshComponent", "Enabled": true }
+	]
+}

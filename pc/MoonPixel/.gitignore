@@ -1,0 +1,9 @@
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.sln
+ThirdParty/MoonPixelCore/bin/
+ThirdParty/MoonPixelCore/lib/
+ThirdParty/MoonPixelCore/include/

@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
   push:
     branches: ["claude/keen-maxwell-yxqpz9", "main"]
-    paths: ["ios/Sources/**", "ios/Package.swift", "bridge/**", ".github/workflows/windows.yml"]
+    paths: ["ios/Sources/**", "ios/Package.swift", "bridge/**", "pc/**", ".github/workflows/windows.yml"]
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: windows-core-${{ github.ref }}
   cancel-in-progress: true
@@ -58,6 +58,24 @@ jobs:
         with:
           name: moonpixel-core-windows
           path: moonpixel-core-windows
+      - name: PC package (the Unreal project with the core in place)
+        shell: pwsh
+        run: |
+          $pkg = "MoonPixel-PC"
+          Copy-Item -Recurse pc\MoonPixel $pkg
+          Copy-Item -Recurse -Force moonpixel-core-windows\* "$pkg\ThirdParty\MoonPixelCore\"
+          Copy-Item pc\README.md "$pkg\README.md"
+          Compress-Archive -Path $pkg -DestinationPath MoonPixel-PC.zip
+      - name: Publish the PC package (pre-release pc-latest, replaced on every build)
+        if: github.ref == 'refs/heads/claude/keen-maxwell-yxqpz9' || github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete pc-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create pc-latest MoonPixel-PC.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "MoonPixel PC (Unreal project, latest build)" \
+            --notes "The Unreal project for Windows with the game's core built in. How to open it: README.md inside (Chinese). Built from ${GITHUB_SHA::7}."
       - uses: actions/upload-artifact@v4
         if: always()
         with:
