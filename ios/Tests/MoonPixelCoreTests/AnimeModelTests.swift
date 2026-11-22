@@ -70,3 +70,23 @@ extension Anime3DPreviewTests {
         try d.write(to: URL(fileURLWithPath: dir).appendingPathComponent("anime3d.rgba"))
     }
 }
+
+extension AnimeModelTests {
+    /// A crowd's figures fit the app's mesh cache (96 MB) with every step of their walk: a figure in the crowd
+    /// is a light model, and even the traveller's full one stays small.
+    func testCrowdFiguresAreLightEnoughToCache() {
+        func bytes(_ m: Mesh3D) -> Int { m.positions.count * 32 + m.indices.count * 4 + 256 }
+        var worst = (lite: 0, full: 0)
+        for (i, l) in AnimeModelTests.looks().enumerated() {
+            for kind in [AnimeArt.Figure.moe, .angel, .hero] {
+                let lite = Figure3D.anime(l, frame: 1, held: "sword", child: false, female: i % 2 == 0, kind: kind, lite: true).inked(width: 0.025)
+                let full = Figure3D.anime(l, frame: 1, held: "sword", child: false, female: i % 2 == 0, kind: kind).inked(width: 0.025)
+                worst = (max(worst.lite, bytes(lite)), max(worst.full, bytes(full)))
+                XCTAssertLessThan(lite.positions.count, full.positions.count * 6 / 10, "the crowd's figure is lighter")
+            }
+        }
+        print("ANIME worst bytes lite \(worst.lite) full \(worst.full)")
+        XCTAssertLessThan(worst.lite * 80 * 3, 96 << 20, "eighty people in three steps each fit the cache")
+        XCTAssertLessThan(worst.full, 900_000)
+    }
+}

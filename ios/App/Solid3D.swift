@@ -86,7 +86,14 @@ final class SolidRenderer {
 
     // figures
     /// Figure meshes, bounded by an estimate of their bytes; the least used go first.
-    private let meshes = ByteLRU<String, MeshResource>(budget: 24 << 20)
+    private let meshes = ByteLRU<String, MeshResource>(budget: 96 << 20)
+    /// Figure meshes built this frame: past `buildsPerFrame` a figure keeps the mesh it has (its next step of
+    /// the walk is built on a later frame), so a crowd coming into view never stalls a frame.
+    private var builtThisFrame = 0
+    private static let buildsPerFrame = 4
+    /// The mesh key each figure wears now: a figure whose look and step have not changed is left alone
+    /// (setting a model component again costs RealityKit a fresh render state).
+    private var wearing: [ObjectIdentifier: String] = [:]
     private var agents: [Int: ModelEntity] = [:]
     private var soldiers: [Int: ModelEntity] = [:]
     private var shownSoldiers: Set<Int> = []
@@ -218,12 +225,14 @@ final class SolidRenderer {
     }
 
     /// A cached model of a flat-coloured mesh (figures, roofs, markers).
-    private func model3D(key k: String, _ make: () -> Mesh3D) -> ModelComponent? {
+    private func model3D(key k: String, spare: Bool = false, _ make: () -> Mesh3D) -> ModelComponent? {
         // the anime look draws every model with an ink outline (cached apart from the plain one)
         let anime = Bitmap.animeStyle
         // the modelling detail is part of the key: a new setting builds new models, the old ones age out
         let key = (anime ? "ink:" : "") + "d\(Figure3D.detail):" + k
         if let r = meshes.get(key) { return ModelComponent(mesh: r, materials: [solidMaterial]) }
+        if spare && builtThisFrame >= Self.buildsPerFrame { return nil }
+        builtThisFrame += 1
         let m = anime ? make().inked(width: 0.025) : make()
         guard let r = resource(m) else { return nil }
         meshes.put(key, r, bytes: m.positions.count * 32 + m.indices.count * 4 + 256)
@@ -299,6 +308,7 @@ final class SolidRenderer {
     private func frame(_ dt: Float) {
         guard let model = model, model.render3D, let scene = model.scene, model.world != nil, let society = model.society else { return }
         let t0 = CACurrentMediaTime()
+        builtThisFrame = 0
         let world = model.activeWorld
         if shownStyle != model.styleEpoch { shownStyle = model.styleEpoch; makePalette(); shownWorld = -1 }
         if shownWorld != model.epoch || shownEpoch != world.mapEpoch {
@@ -419,6 +429,7 @@ final class SolidRenderer {
         chunks = [:]; billboards = []; queue.dropAll()
         resetLayers()
         for d in [agents, soldiers, animals, standards] { for e in d.values { e.removeFromParent() } }
+        wearing = [:]
         for v in liftEntities.values { v.car.removeFromParent(); for r in v.rails { r.removeFromParent() } }
         liftEntities = [:]
         for e in vehicleEntities.values { e.removeFromParent() }
@@ -442,6 +453,7 @@ final class SolidRenderer {
     /// as soon as its new mesh is made); the people, vehicles and roofs of the old layer go.
     private func layerChanged() {
         for d in [agents, soldiers, animals, standards] { for e in d.values { e.removeFromParent() } }
+        wearing = [:]
         agents = [:]; soldiers = [:]; animals = [:]; standards = [:]; shownSoldiers = []
         for e in vehicleEntities.values { e.removeFromParent() }
         vehicleEntities = [:]
@@ -832,27 +844,41 @@ final class SolidRenderer {
 
     private func give(_ e: ModelEntity) {
         e.removeFromParent()
+        e.model = nil
+        wearing[ObjectIdentifier(e)] = nil
         for c in e.children.map({ $0 }) { c.removeFromParent() }
         if pool.count < 480 { pool.append(e) }
     }
 
-    private func human(_ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int) -> ModelComponent? {
-        let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
-        let key = "h\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
-        return model3D(key: key) { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }
+    /// A plain person in the current look, shown for the frame or two before a new figure's own model is built.
+    private func standIn() -> ModelComponent? {
+        let look = Look()
+        if Bitmap.animeStyle {
+            let kind = AnimeArt.figure
+            return model3D(key: "standin-a\(kind.rawValue)") { Figure3D.anime(look, frame: 0, held: "", child: false, female: false, kind: kind, lite: true) }
+        }
+        return model3D(key: "standin-h") { Figure3D.human(look, frame: 0, held: "", child: false, female: false, face: nil) }
     }
 
     /// A person in the current look: a cel-shaded figure, or (anime) the anime figure modelled in 3D (big eyes,
     /// pointed locks, frills; outlined in ink): a real model seen from every side, not a picture on a card.
-    private func dress(_ e: ModelEntity, _ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int, facing f: Vec2, lying: Bool = false) {
+    private func dress(_ e: ModelEntity, _ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int, facing f: Vec2, lying: Bool = false, lite: Bool = true) {
         e.name = ""
         if Bitmap.animeStyle {
             let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
             let kind = AnimeArt.figure
-            let key = "a\(kind.rawValue)\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
-            e.model = model3D(key: key) { Figure3D.anime(look, frame: frame, held: held, child: child, female: female, kind: kind) }
+            let key = "d\(Figure3D.detail)\(lite ? "l" : "")a\(kind.rawValue)\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
+            if wearing[ObjectIdentifier(e)] != key {
+                if let m = model3D(key: key, spare: true, { Figure3D.anime(look, frame: frame, held: held, child: child, female: female, kind: kind, lite: lite) }) { e.model = m; wearing[ObjectIdentifier(e)] = key }
+                else if e.model == nil { e.model = standIn() }
+            }
         } else {
-            e.model = human(look, moving: moving, acting: acting, held: held, child: child, female: female, phase: phase)
+            let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
+            let key = "d\(Figure3D.detail)h\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
+            if wearing[ObjectIdentifier(e)] != key {
+                if let m = model3D(key: key, spare: true, { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }) { e.model = m; wearing[ObjectIdentifier(e)] = key }
+                else if e.model == nil { e.model = standIn() }
+            }
         }
         turn(e, facing: f, lying: lying)
     }
@@ -923,7 +949,7 @@ final class SolidRenderer {
 
         // the traveller
         let held = GameModel.weapons[model.weaponIndex]
-        dress(player, model.playerLook, moving: scene.moving, acting: scene.striking, held: held, child: false, female: false, phase: phase, facing: scene.facing)
+        dress(player, model.playerLook, moving: scene.moving, acting: scene.striking, held: held, child: false, female: false, phase: phase, facing: scene.facing, lite: false)
         let feetAt = place(scene.player, world)
         let bodyZ = society.realm.player.body.map { Float($0.z) } ?? feetAt.y
         settle(player, at: SIMD3(feetAt.x, bodyZ, feetAt.z), dt: dt, fresh: abs(player.position.x - Float(scene.player.x / 16)) > 6 || abs(player.position.y - bodyZ) > 1.5)
