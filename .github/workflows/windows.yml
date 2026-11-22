@@ -1,0 +1,64 @@
+name: Windows core library
+# The game's core as a Windows DLL for the PC front end (Unreal): MoonPixelBridge.dll, its import library,
+# the C header and the Swift runtime DLLs it needs, checked by a C program that calls it as Unreal's plugin
+# does (bridge/smoke/smoke.c). Uploaded as the artifact "moonpixel-core-windows".
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/keen-maxwell-yxqpz9", "main"]
+    paths: ["ios/Sources/**", "ios/Package.swift", "bridge/**", ".github/workflows/windows.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: windows-core-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dll:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-6.0.3-release
+          tag: 6.0.3-RELEASE
+      - name: Build the DLL
+        working-directory: ios
+        shell: pwsh
+        run: |
+          swift --version
+          swift build -c release --product MoonPixelBridge 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem .build\release -Filter "MoonPixelBridge*"
+      - name: Call it from C
+        shell: pwsh
+        run: |
+          $rel = "ios\.build\release"
+          clang -I bridge\include bridge\smoke\smoke.c "$rel\MoonPixelBridge.lib" -o smoke.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $env:PATH = "$((Resolve-Path $rel).Path);$env:PATH"
+          .\smoke.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "moonpixel-core-windows"
+          New-Item -ItemType Directory -Force $out, "$out\include", "$out\bin", "$out\lib" | Out-Null
+          Copy-Item ios\.build\release\MoonPixelBridge.dll "$out\bin\"
+          Copy-Item ios\.build\release\MoonPixelBridge.lib "$out\lib\"
+          Copy-Item bridge\include\moonpixel.h "$out\include\"
+          # the Swift runtime the DLL links against (shipped beside it in the game)
+          $core = (Get-Command swiftCore.dll -ErrorAction SilentlyContinue).Source
+          if (-not $core) { $core = (Get-ChildItem -Recurse "$env:LOCALAPPDATA\Programs\Swift" -Filter swiftCore.dll | Select-Object -First 1).FullName }
+          $rt = Split-Path $core
+          Get-ChildItem $rt -Filter *.dll | Copy-Item -Destination "$out\bin\"
+          Get-ChildItem "$out\bin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonpixel-core-windows
+          path: moonpixel-core-windows
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-build-log
+          path: ios/build.log
