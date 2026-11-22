@@ -1,7 +1,8 @@
 name: Windows core library
 # The game's core as a Windows DLL for the PC front end (Unreal): MoonPixelBridge.dll, its import library,
 # the C header and the Swift runtime DLLs it needs, checked by a C program that calls it as Unreal's plugin
-# does (bridge/smoke/smoke.c). Uploaded as the artifact "moonpixel-core-windows".
+# does (bridge/smoke/smoke.c). Uploaded as the artifact "moonpixel-core-windows". Runs on a push that touches
+# the core or the bridge (workflow_dispatch needs the file on the default branch).
 on:
   workflow_dispatch:
   push:
