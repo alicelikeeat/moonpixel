@@ -44,6 +44,7 @@ extension Mesh3D {
         // four corners always (the ink outline works on quads), triangles only where they have area
         let i = UInt32(positions.count)
         positions.append(a); positions.append(b); positions.append(c); positions.append(d)
+        if bones != nil { for _ in 0..<4 { bones!.append(bone) } }
         for _ in 0..<4 { normals.append(n); uvs.append(t) }
         if k1 { indices.append(i); indices.append(i + 1); indices.append(i + 2) }
         if k2 { indices.append(i); indices.append(i + 2); indices.append(i + 3) }

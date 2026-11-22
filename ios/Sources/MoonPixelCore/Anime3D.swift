@@ -26,7 +26,7 @@ extension Figure3D {
 
     /// A person in the anime look, modelled. frame: 0 standing, 1 and 2 the steps of a walk, 3 working or
     /// striking. A character model (a knight, a merfolk...) keeps its own figure, cel shaded.
-    public static func anime(_ look: Look, frame: Int, held: String, child: Bool, female: Bool, kind: AnimeArt.Figure = AnimeArt.figure, lite: Bool = false, book: SwatchBook? = nil) -> Mesh3D {
+    public static func anime(_ look: Look, frame: Int, held: String, child: Bool, female: Bool, kind: AnimeArt.Figure = AnimeArt.figure, lite: Bool = false, book: SwatchBook? = nil, rigged: Bool = false) -> Mesh3D {
         if let cm = CharacterModels.of(look.model) {
             var m = cm.round ? roundling(cm, frame: frame, child: child) : human(look, frame: frame, held: held, child: child, female: female)
             m.cel = true
@@ -35,6 +35,7 @@ extension Figure3D {
         var m = Mesh3D(detail: Figure3D.detail)
         m.cel = true
         m.book = book
+        if rigged { m.bones = [] }
         /// Sides and bands of a curved part: about half as many for a figure in the crowd (`lite`).
         func S(_ n: Int) -> Int { lite ? max(n <= 4 ? 3 : 4, n * 3 / 5) : n }
         let angel = kind == .angel && !child
@@ -56,17 +57,25 @@ extension Figure3D {
 
         // legs: slim, a knee bent in a step; knee socks for a girl in the moe look, shoes rounded at the toe
         for (x, swing) in [(-b.legX, sw), (b.legX, -sw)] {
+            let L = x > 0                                          // the figure's left is +x
+            m.bone = HumanBone.thigh(L)
             let hip = P(x, b.hipY, 0), knee = P(x * 1.05, b.kneeY, swing * 0.55 + 0.3), ankle = P(x * 1.05, 1.3, swing)
             let sock = female && kind != .hero ? RGBA(250, 250, 252) : lower
             m.frustum(hip, knee, 1.35 * u, 1.05 * u, female && kind != .hero ? skin : lower, seg: S(8))
+            m.bone = HumanBone.calf(L)
             m.frustum(knee, ankle, 1.05 * u, 0.8 * u, sock, seg: S(8))
             if female && kind != .hero { m.frustum(knee + P(0, 0.9, 0), knee - P(0, 0.2, 0), 1.12 * u, 1.1 * u, sock, seg: S(8)) }   // the sock's top
+            m.bone = HumanBone.foot(L)
             m.ellipsoid(P(x * 1.05, 0.85, swing + 0.55), R(1.2, 0.85, 2.0), shoes, seg: S(8), rings: S(4))
         }
         // the body: hips, a slim waist, the chest; a skirt with a frilled hem for a girl, a jacket hem for a boy
+        m.bind(.pelvis)
         m.ellipsoid(P(0, b.hipY + 0.4, 0), R(b.chestR.x * 0.95, 1.6, b.chestR.z * 0.95), lower, seg: S(12), rings: S(5))
+        m.bind(.spine_02)
         m.frustum(P(0, b.hipY + 0.6, 0), P(0, b.chestY - 0.6, 0), b.chestR.x * 0.78 * u, b.chestR.x * 0.95 * u, cloth, seg: S(12), caps: false)
+        m.bind(.spine_03)
         m.ellipsoid(P(0, b.chestY, 0), b.chestR * u, cloth, seg: S(12), rings: S(6))
+        m.bind(.pelvis)
         if female || angel {
             let hemY = max(2.6, b.hipY - (kind == .hero ? 3.4 : 2.8) - (angel ? 2.6 : 0))
             let top = b.waistY + 0.3, rTop = b.chestR.x * 0.82, rHem = b.chestR.x * (angel ? 1.45 : 1.6)
@@ -82,7 +91,9 @@ extension Figure3D {
             m.frustum(P(0, b.waistY + 0.2, 0), P(0, b.hipY - 0.6, 0), b.chestR.x * 0.85 * u, b.chestR.x * 1.08 * u, cloth.darkened(0.06), seg: S(12))
         }
         // the collar and its bow (a gold clasp for an angel)
+        m.bind(.neck_01)
         m.frustum(P(0, b.neckY - 0.2, 0), P(0, b.neckY + 1.2, 0), 1.0 * u, 0.95 * u, skin, seg: S(8))
+        m.bind(.spine_03)
         m.ellipsoid(P(0, b.shoulderY + 0.4, 0.2), R(b.chestR.x * 0.95, 0.7, b.chestR.z * 0.95), angel ? gold : RGBA(252, 250, 246), seg: S(12), rings: S(3))
         let bowAt = P(0, b.shoulderY - 0.2, b.chestR.z + 0.2)
         for s: Float in [-1, 1] { m.ellipsoid(bowAt + P(s * 1.0, 0.1, 0), R(1.0, 0.65, 0.4), accent, seg: S(8), rings: S(4)) }
@@ -95,13 +106,17 @@ extension Figure3D {
             let shoulder = P(side * b.shoulderX, b.shoulderY, 0)
             let elbow = raised ? P(side * (b.shoulderX + 1.0), b.shoulderY + 3.0, 0.5) : P(side * (b.shoulderX + 0.5), b.shoulderY - 3.2, swing * 0.45)
             let hand = raised ? P(side * (b.shoulderX + 0.8), b.shoulderY + 6.2, 0.5) : P(side * (b.shoulderX + 0.7), b.shoulderY - 6.2, swing)
+            m.bone = HumanBone.upperarm(side > 0)
             m.ellipsoid(shoulder, R(1.55, 1.45, 1.55), cloth.lightened(0.04), seg: S(8), rings: S(4))
             m.frustum(shoulder, elbow, 0.85 * u, 0.72 * u, kind == .hero ? cloth : skin, seg: S(8))
+            m.bone = HumanBone.lowerarm(side > 0)
             m.frustum(elbow, hand, 0.72 * u, 0.6 * u, kind == .hero ? cloth.darkened(0.05) : skin, seg: S(8))
+            m.bone = HumanBone.hand(side > 0)
             m.ellipsoid(hand, R(0.75, 0.85, 0.75), skin, seg: S(8), rings: S(4))
         }
         // the angel's wings (feathers fanned out behind the shoulders) and her halo
         if angel {
+            m.bind(.spine_03)
             for side: Float in [-1, 1] {
                 for f in 0..<5 {
                     let t = Float(f) / 4
@@ -110,6 +125,7 @@ extension Figure3D {
                     m.ellipsoid((root + tip) * 0.5, R(abs(tip.x - root.x) / u * 0.55 + 0.9, 1.0, 0.45), RGBA(252, 252, 255).darkened(Double(t) * 0.06), seg: S(8), rings: S(4))
                 }
             }
+            m.bind(.head)
             for i in 0..<12 {
                 let a = Float(i) / 12 * 2 * .pi
                 m.ellipsoid(P(sin(a) * 3.2, b.headY + b.headR.y + 3.6, cos(a) * 3.2 - 0.6), R(0.55, 0.32, 0.55), gold, seg: S(6), rings: S(3))
@@ -119,6 +135,7 @@ extension Figure3D {
         // the head: a round skull, a pointed chin, small ears hidden in the hair
         let hy = b.headY, hr = b.headR
         let hc = P(0, hy, 0)
+        m.bind(.head)
         // (the face in its own clear colour, as an anime face is painted: the outline gives it its shape)
         m.unshaded = true
         m.ellipsoid(hc, hr * u, skin.lightened(0.05), seg: S(14), rings: S(8))
@@ -173,7 +190,9 @@ extension Figure3D {
             m.ellipsoid(P(0, hy + hr.y * 0.75, -hr.z * 0.65), R(1.9, 1.7, 1.9), hair, seg: S(10), rings: S(5))
         }
         // what the right hand holds
+        m.bone = HumanBone.hand(true)
         holdItem(&m, held: held, acting: acting, sw: sw, k: k, handY: b.shoulderY - 13.6)
+        m.bind(.head)
 
         // the face, painted on: no outlines from here on
         m.inkEnd = m.positions.count

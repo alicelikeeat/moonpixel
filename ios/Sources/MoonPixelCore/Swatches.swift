@@ -41,7 +41,9 @@ public final class SwatchBook {
         if let j = index[k] { i = j }
         else if bases.count < SwatchBook.width { i = bases.count; bases.append(base); index[k] = i }
         else { overflow = true; i = 0 }
-        return SIMD2((Float(i) + 0.5) / Float(SwatchBook.width), (Float(Swift.max(0, Swift.min(SwatchBook.tones - 1, tone))) + 0.5) / Float(SwatchBook.tones))
+        // the strip is mirrored top to bottom (tone t in row t and in the row as far from the bottom), so it
+        // reads the same whichever way a renderer turns its pictures' v
+        return SIMD2((Float(i) + 0.5) / Float(SwatchBook.width), (Float(Swift.max(0, Swift.min(SwatchBook.tones - 1, tone))) + 0.5) / Float(2 * SwatchBook.tones))
     }
 
     /// The tone row of a cel-shaded face with this shade (0 is "as painted", for unshaded faces).
@@ -59,8 +61,11 @@ public final class SwatchBook {
 
     /// The strip of swatches for base colours by column (columns past them in `fill`).
     public static func strip(_ colors: [RGBA], fill: RGBA = Mesh3D.ink) -> Bitmap {
-        var b = Bitmap(width, tones)
-        for x in 0..<width { for t in 0..<tones { b.set(x, t, toned(x < colors.count ? colors[x] : fill, t)) } }
+        var b = Bitmap(width, 2 * tones)
+        for x in 0..<width { for t in 0..<tones {
+            let c = toned(x < colors.count ? colors[x] : fill, t)
+            b.set(x, t, c); b.set(x, 2 * tones - 1 - t, c)
+        } }
         return b
     }
 }

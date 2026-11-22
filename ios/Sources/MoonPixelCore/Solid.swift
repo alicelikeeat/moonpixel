@@ -26,6 +26,9 @@ public struct Mesh3D {
     public var inkEnd: Int?
     /// Faces point into this book's swatches instead of the palette (figures that share their models: Swatches.swift).
     public var book: SwatchBook?
+    /// Rigging: the bone the faces made now are bound to, and (when rigging) each vertex's bone.
+    public var bone: UInt8 = 0
+    public var bones: [UInt8]?
     public init() {}
     public init(detail: Int) { self.detail = Swift.max(1, Swift.min(4, detail)) }
     public var isEmpty: Bool { indices.isEmpty }
@@ -49,6 +52,7 @@ public struct Mesh3D {
                               uv: (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>)) {
         let i = UInt32(positions.count)
         positions.append(a); positions.append(b); positions.append(c); positions.append(d)
+        if bones != nil { for _ in 0..<4 { bones!.append(bone) } }
         for _ in 0..<4 { normals.append(n) }
         uvs.append(uv.0); uvs.append(uv.1); uvs.append(uv.2); uvs.append(uv.3)
         indices.append(i); indices.append(i + 1); indices.append(i + 2)
@@ -110,7 +114,8 @@ public struct Mesh3D {
                 let grow = len > 1e-6 ? r / len * width * 1.4 : SIMD3<Float>(0, 0, 0)
                 shell.append(v + n * width + grow)
             }
-            // wound the other way round, facing in
+            // wound the other way round, facing in (on the bone of the face it outlines)
+            if let b = bones { out.bone = b[q] }
             out.quad(shell[3], shell[2], shell[1], shell[0], normal: -n, uv: (uv, uv, uv, uv))
             q += 4
         }
