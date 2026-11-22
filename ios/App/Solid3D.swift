@@ -86,7 +86,19 @@ final class SolidRenderer {
 
     // figures
     /// Figure meshes, bounded by an estimate of their bytes; the least used go first.
-    private let meshes = ByteLRU<String, MeshResource>(budget: 96 << 20)
+    /// (sized to the phone: a sixteenth of its memory, 96 to 384 MB)
+    private let meshes = ByteLRU<String, MeshResource>(budget: SolidRenderer.meshBudget)
+    static let meshBudget: Int = {
+        let phys = Int(min(ProcessInfo.processInfo.physicalMemory, UInt64(Int.max)))
+        return max(96 << 20, min(384 << 20, phys / 16))
+    }()
+    /// Anime people share their models by shape (AnimeRigs, Swatches.swift): one model for everyone of a shape,
+    /// a strip of colours for each person (a texture of a few hundred bytes, and its material in today's light).
+    private let rigs = AnimeRigs()
+    private var swatchTextures: [String: TextureResource] = [:]
+    private var swatchMaterials: [String: UnlitMaterial] = [:]
+    /// Looks that cannot share (their colours would clash in the shared model): they get models of their own.
+    private var unshareable: Set<String> = []
     /// Figure meshes built this frame: past `buildsPerFrame` a figure keeps the mesh it has (its next step of
     /// the walk is built on a later frame), so a crowd coming into view never stalls a frame.
     private var builtThisFrame = 0
@@ -118,6 +130,7 @@ final class SolidRenderer {
         // the anime atlas (the same pictures the 2D view draws), only in the anime look
         atlasTexture = Bitmap.animeStyle ? AnimeArt.atlas.cgImage.flatMap { try? TextureResource.generate(from: $0, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)) } : nil
         cardTextures = [:]; cardModels = [:]
+        swatchTextures = [:]; swatchMaterials = [:]; unshareable = []
         light = -1
     }
 
@@ -279,12 +292,15 @@ final class SolidRenderer {
         for e in chunks.values { e.entity.model?.materials = materials(for: e) }
         func paint(_ e: Entity) {
             // chunks and the other layers have a ground picture and a palette part each: they are redone below
-            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.name != "card", m.name != "glass", m.model != nil { m.model?.materials = [solidMaterial] }
+            if let m = e as? ModelEntity, m.name != "chunk", m.name != "layer", m.name != "sprite", m.name != "card", m.name != "glass", m.name != "rig", m.model != nil { m.model?.materials = [solidMaterial] }
             for c in e.children { paint(c) }
         }
         for c in root.children where c.name != "chunk" && c.name != "layer" { paint(c) }
         for (lk, l) in layerChunks where l.entity.model != nil { l.entity.model?.materials = layerMaterials(lk, ground: l.ground, sprites: l.sprites) }
         for e in pool where e.name != "card" { e.model?.materials = [solidMaterial] }
+        // people in their own colours: the same strips in the new light (each figure is dressed again)
+        swatchMaterials = [:]
+        for (id, w) in wearing where w.hasPrefix("rig:") { wearing[id] = "relight" }
     }
 
     private func materials(for e: ChunkEntry) -> [any RealityKit.Material] {
@@ -863,24 +879,76 @@ final class SolidRenderer {
     /// A person in the current look: a cel-shaded figure, or (anime) the anime figure modelled in 3D (big eyes,
     /// pointed locks, frills; outlined in ink): a real model seen from every side, not a picture on a card.
     private func dress(_ e: ModelEntity, _ look: Look, moving: Bool, acting: Bool, held: String, child: Bool, female: Bool, phase: Int, facing f: Vec2, lying: Bool = false, lite: Bool = true) {
-        e.name = ""
+        let id = ObjectIdentifier(e)
+        let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
         if Bitmap.animeStyle {
-            let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
             let kind = AnimeArt.figure
+            if wearRig(e, look, frame: frame, held: held, child: child, female: female, kind: kind, lite: lite) { turn(e, facing: f, lying: lying); return }
             let key = "d\(Figure3D.detail)\(lite ? "l" : "")a\(kind.rawValue)\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
-            if wearing[ObjectIdentifier(e)] != key {
-                if let m = model3D(key: key, spare: true, { Figure3D.anime(look, frame: frame, held: held, child: child, female: female, kind: kind, lite: lite) }) { e.model = m; wearing[ObjectIdentifier(e)] = key }
-                else if e.model == nil { e.model = standIn() }
+            if wearing[id] != key {
+                if let m = model3D(key: key, spare: true, { Figure3D.anime(look, frame: frame, held: held, child: child, female: female, kind: kind, lite: lite) }) { e.model = m; e.name = ""; wearing[id] = key }
+                else if e.model == nil { e.model = standIn(); e.name = "" }
             }
         } else {
-            let frame = acting ? (phase % 2 == 0 ? 3 : 0) : (moving ? 1 + phase % 2 : 0)
             let key = "d\(Figure3D.detail)h\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.face)\(look.style)\(look.model ?? "")\(frame)\(held)\(child)\(female)"
-            if wearing[ObjectIdentifier(e)] != key {
-                if let m = model3D(key: key, spare: true, { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }) { e.model = m; wearing[ObjectIdentifier(e)] = key }
-                else if e.model == nil { e.model = standIn() }
+            if wearing[id] != key {
+                if let m = model3D(key: key, spare: true, { Figure3D.human(look, frame: frame, held: held, child: child, female: female, face: look.face.isEmpty ? nil : PixelArt.faces[look.face]) }) { e.model = m; e.name = ""; wearing[id] = key }
+                else if e.model == nil { e.model = standIn(); e.name = "" }
             }
         }
         turn(e, facing: f, lying: lying)
+    }
+
+    /// A figure whose model is not built yet keeps the one it has (or a plain stand-in) for a frame or two.
+    private func waitTurn(_ e: ModelEntity) {
+        if e.model == nil { e.model = standIn(); e.name = "" }
+    }
+
+    /// Dress an anime person in the shared model of their shape and their own strip of colours. False when the
+    /// person cannot share (a character model, colours that would clash): they are dressed in a model of their own.
+    private func wearRig(_ e: ModelEntity, _ look: Look, frame: Int, held: String, child: Bool, female: Bool, kind: AnimeArt.Figure, lite: Bool) -> Bool {
+        guard let fam = AnimeRigs.family(look, child: child, female: female, kind: kind, lite: lite) else { return false }
+        let colours = "\(fam)|\(look.skin)\(look.hair)\(look.shirt)\(look.pants)\(look.shoes)\(look.style)"
+        if unshareable.contains(colours) { return false }
+        let id = ObjectIdentifier(e)
+        guard let shape = rigs.shape(look, frame: frame, held: held, child: child, female: female, kind: kind, lite: lite, ink: nil, build: false) else { return false }
+        let wear = shape.key + "|" + colours
+        if wearing[id] == wear { return true }
+        // the shape (shared by everyone of it): built once, kept while anyone wears it
+        let mesh: MeshResource
+        if let r = meshes.get(shape.key) { mesh = r }
+        else {
+            if builtThisFrame >= Self.buildsPerFrame { waitTurn(e); return true }     // next frame
+            builtThisFrame += 1
+            guard let m = rigs.shape(look, frame: frame, held: held, child: child, female: female, kind: kind, lite: lite, ink: 0.025)?.mesh,
+                  let r = resource(m) else { return false }
+            meshes.put(shape.key, r, bytes: m.positions.count * 32 + m.indices.count * 4 + 256)
+            mesh = r
+        }
+        // the person's colours (remade when a new tool or step has brought the family a new colour)
+        let tk = colours + "|\(rigs.columns(look, child: child, female: female, kind: kind, lite: lite))"
+        let material: UnlitMaterial
+        if let m = swatchMaterials[tk] { material = m }
+        else {
+            let tex: TextureResource
+            if let t = swatchTextures[tk] { tex = t }
+            else {
+                if builtThisFrame >= Self.buildsPerFrame { waitTurn(e); return true }
+                builtThisFrame += 1
+                guard let sw = rigs.swatches(look, child: child, female: female, kind: kind, lite: lite) else { unshareable.insert(colours); return false }
+                guard let cg = SwatchBook.strip(sw.colors).gradedCG,
+                      let t = try? TextureResource.generate(from: cg, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)) else { return false }
+                if swatchTextures.count > 2000 { swatchTextures = [:]; swatchMaterials = [:] }
+                swatchTextures[tk] = t
+                tex = t
+            }
+            material = self.material(tex)
+            swatchMaterials[tk] = material
+        }
+        e.model = ModelComponent(mesh: mesh, materials: [material])
+        e.name = "rig"
+        wearing[id] = wear
+        return true
     }
 
     /// A rider drawn on a card turns to the camera; the horse under it keeps to the way it goes.
@@ -1529,7 +1597,7 @@ final class SolidRenderer {
     var chunkKeys: Set<Int64> { Set(chunks.keys) }
 
     /// Memory is short: forget every cached figure mesh and spare entity (they are rebuilt when needed).
-    func trim() { meshes.trim(to: 0); pool.removeAll() }
+    func trim() { meshes.trim(to: 0); pool.removeAll(); swatchTextures = [:]; swatchMaterials = [:] }
 
     var report: String {
         String(format: "3D: %d chunks (%d behind, oldest %.1f s; %d urgent sent, %d stale dropped), %d figures, %d particles, meshes %.1f MB (%d evicted)",

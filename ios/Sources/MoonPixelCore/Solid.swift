@@ -24,6 +24,8 @@ public struct Mesh3D {
     public var detail = 1
     /// Quads from this vertex on get no ink outline (a face's eyes and mouth, painted on).
     public var inkEnd: Int?
+    /// Faces point into this book's swatches instead of the palette (figures that share their models: Swatches.swift).
+    public var book: SwatchBook?
     public init() {}
     public init(detail: Int) { self.detail = Swift.max(1, Swift.min(4, detail)) }
     public var isEmpty: Bool { indices.isEmpty }
@@ -54,7 +56,8 @@ public struct Mesh3D {
     }
 
     mutating func flat(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>, _ color: RGBA, shade: Double) {
-        let t = Palette3D.uv(unshaded ? color : (cel ? Mesh3D.celColor(color, shade: shade) : color.darkened(shade)))
+        let t = book.map { $0.uv(color, tone: unshaded ? 0 : SwatchBook.tone(shade: shade)) }
+            ?? Palette3D.uv(unshaded ? color : (cel ? Mesh3D.celColor(color, shade: shade) : color.darkened(shade)))
         quad(a, b, c, d, normal: n, uv: (t, t, t, t))
     }
 
@@ -91,7 +94,7 @@ public struct Mesh3D {
     /// and along its edges: a drawn line about `width` tiles wide. (Every quad of the mesh is four vertices.)
     public func inked(width: Float = 0.035) -> Mesh3D {
         var out = self
-        let uv = Palette3D.uv(Mesh3D.ink)
+        let uv = book.map { $0.uv(Mesh3D.ink, tone: 0) } ?? Palette3D.uv(Mesh3D.ink)
         var q = 0
         let end = inkEnd ?? positions.count
         while q + 3 < end {

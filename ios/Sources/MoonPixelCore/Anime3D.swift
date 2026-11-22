@@ -26,7 +26,7 @@ extension Figure3D {
 
     /// A person in the anime look, modelled. frame: 0 standing, 1 and 2 the steps of a walk, 3 working or
     /// striking. A character model (a knight, a merfolk...) keeps its own figure, cel shaded.
-    public static func anime(_ look: Look, frame: Int, held: String, child: Bool, female: Bool, kind: AnimeArt.Figure = AnimeArt.figure, lite: Bool = false) -> Mesh3D {
+    public static func anime(_ look: Look, frame: Int, held: String, child: Bool, female: Bool, kind: AnimeArt.Figure = AnimeArt.figure, lite: Bool = false, book: SwatchBook? = nil) -> Mesh3D {
         if let cm = CharacterModels.of(look.model) {
             var m = cm.round ? roundling(cm, frame: frame, child: child) : human(look, frame: frame, held: held, child: child, female: female)
             m.cel = true
@@ -34,6 +34,7 @@ extension Figure3D {
         }
         var m = Mesh3D(detail: Figure3D.detail)
         m.cel = true
+        m.book = book
         /// Sides and bands of a curved part: about half as many for a figure in the crowd (`lite`).
         func S(_ n: Int) -> Int { lite ? max(n <= 4 ? 3 : 4, n * 3 / 5) : n }
         let angel = kind == .angel && !child
