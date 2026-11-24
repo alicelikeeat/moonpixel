@@ -40,6 +40,12 @@ final class GameModel: ObservableObject {
     @Published var toastID = 0
     @Published var speedIndex = 1
     @Published var selected: Society.TalkInfo?
+    /// What the chosen villager said in the on-device model's words (nil: their written line), and whether it
+    /// is being written now (VillagerVoice).
+    @Published var aiLine: String?
+    @Published var aiBusy = false
+    let voice = VillagerVoice()
+    private var aiTopic = 0
     @Published var selectedID = 0
     @Published var following = false
     @Published var showDetails = false
@@ -827,14 +833,36 @@ final class GameModel: ObservableObject {
     }
 
     func select(_ id: Int) {
+        let other = id != selectedID
         selectedID = id
         following = false
         selected = society.talk(id, speak: true)
         selectedPortrait = society.agents[id]?.look.portrait.flatMap { portraits[$0] }
+        if other { aiTopic = 0; voice.prewarm() }
+        speakAI()
     }
 
-    func deselect() { selectedID = 0; selected = nil; following = false; selectedPortrait = nil }
-    func talk() { if selectedID != 0 { selected = society.talk(selectedID, speak: true) } }
+    func deselect() { selectedID = 0; selected = nil; following = false; selectedPortrait = nil; voice.cancel(); aiLine = nil; aiBusy = false }
+    func talk() {
+        guard selectedID != 0 else { return }
+        selected = society.talk(selectedID, speak: true)
+        aiTopic += 1                                     // talking again turns to the next topic
+        speakAI()
+    }
+
+    /// The chosen villager's words from the on-device model: the written line shows until they come.
+    func speakAI() {
+        aiLine = nil
+        guard selectedID != 0, VillagerVoice.available, let p = society.persona(selectedID) else { aiBusy = false; return }
+        let id = selectedID
+        let topic = VillagerPersona.topics[aiTopic % VillagerPersona.topics.count]
+        aiBusy = true
+        voice.say(p, topic: topic) { [weak self] line in
+            guard let self = self, self.selectedID == id else { return }
+            self.aiBusy = false
+            self.aiLine = line
+        }
+    }
     func feed() { if selectedID != 0 { society.giftFood(selectedID); talk() } }
     func cycleWeapon() { weaponIndex = (weaponIndex + 1) % GameModel.weapons.count; activePower = "" }
 

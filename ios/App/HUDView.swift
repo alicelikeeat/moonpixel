@@ -365,8 +365,21 @@ struct HUDView: View {
                 meter(L("饥饿", "Hunger"), info.hunger, .orange)
                 meter(L("精力", "Energy"), info.energy, .cyan)
             }
-            Text("「\(info.line)」").font(.system(size: 13, weight: .medium, design: .rounded)).padding(.vertical, 2)
+            Text("「\(model.aiLine ?? info.line)」").font(.system(size: 13, weight: .medium, design: .rounded)).padding(.vertical, 2)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("villager-line")
+            // where the words come from: the on-device model, being written, or the written line (and why)
+            Group {
+                if model.aiBusy {
+                    Label(L("正在想怎么说…", "Thinking what to say…"), systemImage: "ellipsis.bubble")
+                } else if model.aiLine != nil {
+                    Label(L("端侧 AI 生成", "On-device AI"), systemImage: "sparkles")
+                } else if let why = VillagerVoice.unavailableReason(zh: GameModel.zh) {
+                    Label(L("模板台词（", "Written line (") + why + L("）", ")"), systemImage: "text.bubble")
+                }
+            }
+            .font(.system(size: 10, design: .rounded)).opacity(0.65)
+            .accessibilityIdentifier("villager-voice")
             ForEach(info.family.prefix(3), id: \.self) { Text($0).font(.system(size: 11, design: .rounded)) }
             if info.pregnant { Text(L("怀孕中", "Expecting")).font(.system(size: 11, design: .rounded)).foregroundStyle(.pink) }
             ForEach(info.thoughts, id: \.self) { Text("· " + $0).font(.system(size: 11, design: .rounded)).opacity(0.8) }
